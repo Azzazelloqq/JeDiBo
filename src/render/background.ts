@@ -1,4 +1,5 @@
 // Фон: закрученный «дым над бетоном» во фрагментном шейдере, рендер в низком разрешении.
+// Цвета — из палитры «Дневной бетон»: средний бетон, дым оранжевый/янтарный, без «крови».
 import { onFrame } from './tween';
 
 const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -28,10 +29,10 @@ void main(){
   float w = 0.5 + 0.5*sin(length(q)*1.6 - t*2.0);
   vec3 col = mix(colA, colB, smoothstep(0.25, 0.85, v));
   col = mix(col, colC, smoothstep(0.62, 0.98, w*v) * (0.35 + heat*0.65));
-  // зерно и виньетка
+  // зерно и мягкая виньетка
   float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)) + time) * 43758.5453);
   col += (grain - 0.5) * 0.035;
-  col *= 1.0 - smoothstep(0.45, 1.25, r);
+  col *= 1.0 - 0.55 * smoothstep(0.6, 1.5, r);
   // постеризация — «пиксельная» палитра
   col = floor(col * 18.0) / 18.0;
   gl_FragColor = vec4(col, 1.0);
@@ -42,22 +43,60 @@ const hex = (h: string) => {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 };
 
+// a — тени, b — основной тон, c — «дым». Значения совпадают с цветами палитры (PAL) или лежат между ними.
 const MOODS = {
-  menu: { a: '#121214', b: '#2a2a2f', c: '#7a1515', heat: 0.35, spin: 0.9 },
-  game: { a: '#0d0d0f', b: '#1f1f23', c: '#4a0d0d', heat: 0.1, spin: 0.5 },
-  karma: { a: '#150606', b: '#2b1010', c: '#d4862a', heat: 1, spin: 1.6 },
-  win: { a: '#141210', b: '#3a3226', c: '#d4862a', heat: 0.7, spin: 1.1 },
-  lose: { a: '#0a0a0b', b: '#18181b', c: '#2a0707', heat: 0.2, spin: 0.3 },
+  menu: { a: '#3b3935', b: '#6e6a63', c: '#ff5a1f', heat: 0.25, spin: 0.9 },
+  game: { a: '#46433f', b: '#6a6762', c: '#a9a499', heat: 0.08, spin: 0.4 },
+  karma: { a: '#4f4a44', b: '#8a8378', c: '#f0b45a', heat: 0.9, spin: 1.4 },
+  win: { a: '#5c5248', b: '#938e84', c: '#f0b45a', heat: 0.6, spin: 1.0 },
+  lose: { a: '#3d3f42', b: '#5d6164', c: '#8a9196', heat: 0.15, spin: 0.25 },
 };
 export type Mood = keyof typeof MOODS;
+type Colors = { a: string; b: string; c: string };
 
 let target: Mood = 'menu';
-export const setMood = (m: Mood) => (target = m);
+/** Своя палитра фона поверх настроения (вариант «а» меню). null — вернуть цвета настроения. */
+let custom: Colors | null = null;
+/** Плавный цикл цветов: список троек [a, b, c], переход между соседними, полный круг за period мс. */
+let cycle: { colors: string[][]; period: number } | null = null;
+
+export const setMood = (m: Mood) => {
+  target = m;
+  custom = null;
+  cycle = null;
+};
+
+/** Задать цвета фона вручную; с `cycle` — цвета плавно перетекают по кругу (период 30–60 с). */
+export function setBackgroundPalette(p: Partial<Colors> & { cycle?: string[][]; period?: number } | null) {
+  if (!p) {
+    custom = null;
+    cycle = null;
+    return;
+  }
+  const m = MOODS[target];
+  custom = { a: p.a ?? m.a, b: p.b ?? m.b, c: p.c ?? m.c };
+  cycle = p.cycle?.length ? { colors: p.cycle, period: p.period ?? 45000 } : null;
+}
+
+function targetColors(now: number): number[][] {
+  if (cycle) {
+    const n = cycle.colors.length;
+    const f = ((now % cycle.period) / cycle.period) * n;
+    const i = Math.floor(f);
+    const t = f - i;
+    const s = t * t * (3 - 2 * t);
+    const A = cycle.colors[i].map(hex);
+    const B = cycle.colors[(i + 1) % n].map(hex);
+    return A.map((c, k) => c.map((v, j) => v + (B[k][j] - v) * s));
+  }
+  const src = custom ?? MOODS[target];
+  return [hex(src.a), hex(src.b), hex(src.c)];
+}
 
 export function startBackground(canvas: HTMLCanvasElement) {
   const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false });
   if (!gl) {
-    canvas.style.background = '#121214';
+    canvas.style.background = MOODS.menu.b;
     return;
   }
   const sh = (type: number, src: string) => {
@@ -82,7 +121,7 @@ export function startBackground(canvas: HTMLCanvasElement) {
   const uA = u('colA'), uB = u('colB'), uC = u('colC');
 
   // текущие (сглаженные) значения
-  const cur = { a: hex(MOODS.menu.a), b: hex(MOODS.menu.b), c: hex(MOODS.menu.c), heat: 0.35, spin: 0.9 };
+  const cur = { a: hex(MOODS.menu.a), b: hex(MOODS.menu.b), c: hex(MOODS.menu.c), heat: MOODS.menu.heat, spin: MOODS.menu.spin };
   const PIX = 5; // размер «пикселя» фона
 
   const resize = () => {
@@ -97,9 +136,10 @@ export function startBackground(canvas: HTMLCanvasElement) {
     const m = MOODS[target];
     const k = 1 - Math.pow(0.02, dt / 1000);
     const mix = (arr: number[], to: number[]) => arr.forEach((v, i) => (arr[i] = v + (to[i] - v) * k));
-    mix(cur.a, hex(m.a));
-    mix(cur.b, hex(m.b));
-    mix(cur.c, hex(m.c));
+    const [ta, tb, tc] = targetColors(now);
+    mix(cur.a, ta);
+    mix(cur.b, tb);
+    mix(cur.c, tc);
     cur.heat += (m.heat - cur.heat) * k;
     cur.spin += (m.spin - cur.spin) * k;
     gl.uniform2f(uRes, canvas.width, canvas.height);
