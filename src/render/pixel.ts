@@ -149,3 +149,9 @@ export const hexToRgb = (hex: string): [number, number, number] => {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
+
+/** Цвет палитры с прозрачностью — для подсветок поверх пикселей. */
+export const withAlpha = (hex: string, a: number) => {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${+a.toFixed(3)})`;
+};
