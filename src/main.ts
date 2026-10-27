@@ -1,0 +1,30 @@
+import './styles/main.css';
+import { applyCssPalette, PAL } from './render/palette';
+import { startBackground } from './render/background';
+import { concreteCss } from './render/sprites';
+import { go } from './ui/app';
+import { menuScreen } from './ui/screens/menu';
+import { applySettings } from './ui/screens/settings';
+
+async function boot() {
+  applyCssPalette();
+  // бетонные фактуры для CSS-панелей генерируются один раз при старте
+  const root = document.documentElement.style;
+  root.setProperty('--tex-slab', `url(${concreteCss(PAL.slab900, 3)})`);
+  root.setProperty('--tex-slab-light', `url(${concreteCss(PAL.slab700, 5)})`);
+  root.setProperty('--tex-concrete', `url(${concreteCss(PAL.concrete300, 9)})`);
+  startBackground(document.getElementById('bg') as HTMLCanvasElement);
+  applySettings();
+  // пиксельный шрифт нужен до генерации логотипа
+  try {
+    await Promise.race([
+      Promise.all([document.fonts.load('700 24px "Pixelify Sans"'), document.fonts.load('24px "Tiny5"')]),
+      new Promise((r) => setTimeout(r, 1500)),
+    ]);
+  } catch {
+    /* офлайн — останется моноширинный запасной */
+  }
+  go(menuScreen);
+}
+
+void boot();

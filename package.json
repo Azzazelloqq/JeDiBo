@@ -1,0 +1,17 @@
+{
+  "name": "jedibo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "sim": "esbuild scripts/sim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/sim.mjs --log-level=warning && node node_modules/.sim/sim.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}
