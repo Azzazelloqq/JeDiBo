@@ -604,3 +604,37 @@ body.no-crt #crt { display: none; }
   .mode-row { bottom: 96px; }
   .mode-tile .tile-art { display: none; }
 }
+
+/* ── пробные варианты камня UI (?stone=1..3), выбор владельца — после выбора оставить один ───────── */
+/* 1 — серый литой бетон с заполнителем; 2 — бетон из дощатой опалубки; 3 — тёмный литой бетон */
+body.stone-1, body.stone-2 { --panel-muted: var(--slab-800); }
+body.stone-1 .slab, body.stone-2 .slab { background: var(--tex-concrete), var(--concrete-400); }
+body.stone-2 .slab {
+  box-shadow:
+    inset 0 4px 0 color-mix(in srgb, var(--bone) 45%, transparent),
+    inset 4px 0 0 color-mix(in srgb, var(--bone) 20%, transparent),
+    inset 0 -6px 0 color-mix(in srgb, var(--void) 28%, transparent),
+    inset -4px 0 0 color-mix(in srgb, var(--void) 14%, transparent),
+    0 6px 0 var(--slab-700), 0 9px 0 var(--shade);
+}
+body.stone-3 { --panel-text: var(--bone); --panel-muted: var(--concrete-200); }
+body.stone-3 .slab {
+  background: var(--tex-concrete), var(--slab-600);
+  box-shadow:
+    inset 0 3px 0 color-mix(in srgb, var(--bone) 22%, transparent),
+    inset 0 -4px 0 color-mix(in srgb, var(--void) 35%, transparent),
+    var(--edge);
+}
+body.stone-3 .slab::before, body.stone-3 .slab::after { background: var(--void); box-shadow: 0 2px 0 var(--slab-500); }
+body.stone-3 .page-head h1 { text-shadow: 3px 3px 0 var(--void); }
+body.stone-3 .ph-count b, body.stone-3 .rating { color: var(--bone); }
+body.stone-3 .rank-title { color: var(--amber-300); }
+body.stone-3 .prompt-hot, body.stone-3 .kt-label.now, body.stone-3 .mode-tile:hover:not(.locked) .tile-title { color: var(--brand-400); }
+/* каменные кнопки получают ту же фактуру */
+body[class*='stone-'] .btn-stone {
+  background: linear-gradient(var(--c-hi) 0 3px, transparent 3px), var(--tex-btn), var(--c);
+}
+body.stone-1 .btn-stone, body.stone-2 .btn-stone { --c: var(--concrete-300); --c-hi: var(--concrete-200); --c-edge: var(--concrete-600); }
+body.stone-3 .btn-stone { --c: var(--concrete-400); --c-hi: var(--concrete-300); --c-edge: var(--slab-700); }
+body.stone-1 .rank-pick, body.stone-2 .rank-pick, body.stone-3 .rank-pick { background: var(--tex-concrete-light), var(--concrete-300); }
+body[class*='stone-'] .rank-pick.active { background: linear-gradient(var(--brand-400) 0 3px, var(--brand-500) 3px); }

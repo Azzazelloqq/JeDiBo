@@ -257,6 +257,49 @@ export function tint(src: Canvas, color: string): Canvas {
   return c;
 }
 
+/** Плитка «камня» UI для пробных вариантов (выбор владельца):
+ *  'cast' — литой бетон с заполнителем (щебень, поры, раковины); 'board' — бетон, отлитый в дощатой опалубке. */
+export function stoneTile(kind: 'cast' | 'board', hex: string, seed: number, w = 96, h = 96): Canvas {
+  const base = hexToRgb(hex);
+  const c = concreteTile(w, h, base, seed, { pores: kind === 'cast' ? 140 : 90, amp: kind === 'cast' ? 14 : 9 });
+  const g = c.getContext('2d')!;
+  const rnd = seeded(seed * 7 + 1);
+  const shade = (k: number) => `rgb(${base.map((v) => Math.max(0, Math.min(255, Math.round(v + k)))).join(',')})`;
+  if (kind === 'board') {
+    // доски по 8 px: свой тон у каждой, волокна дерева, шов между досками
+    for (let y = 0; y < h; y += 8) {
+      const tone = Math.round((rnd() - 0.5) * 14);
+      g.fillStyle = tone > 0 ? `rgba(255,255,255,${tone / 120})` : `rgba(0,0,0,${-tone / 90})`;
+      g.fillRect(0, y, w, 8);
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.fillRect(0, y + 7, w, 1);
+      g.fillStyle = 'rgba(255,255,255,0.10)';
+      g.fillRect(0, y, w, 1);
+      for (let i = 0; i < 7; i++) {
+        const gx = Math.floor(rnd() * w), gy = y + 1 + Math.floor(rnd() * 6), gl = 4 + Math.floor(rnd() * 14);
+        g.fillStyle = 'rgba(0,0,0,0.10)';
+        g.fillRect(gx, gy, gl, 1);
+      }
+    }
+  } else {
+    // заполнитель: светлые и тёмные камешки 1–2 px
+    for (let i = 0; i < (w * h) / 40; i++) {
+      const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h), big = rnd() < 0.35;
+      g.fillStyle = rnd() < 0.5 ? shade(-28 - rnd() * 16) : shade(18 + rnd() * 14);
+      g.fillRect(x, y, big ? 2 : 1, big && rnd() < 0.5 ? 2 : 1);
+    }
+    // раковины: тёмная точка с подсветкой снизу
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(rnd() * (w - 3)), y = Math.floor(rnd() * (h - 3));
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.fillRect(x, y, 2, 2);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(x, y + 2, 2, 1);
+    }
+  }
+  return c;
+}
+
 /** Плитка бетона для CSS-фона панелей (data URL). */
 export function concreteCss(hex: string, seed: number, w = 96, h = 96): string {
   return concreteTile(w, h, hexToRgb(hex), seed, { pores: 70, seams: true, amp: 7 }).toDataURL();
