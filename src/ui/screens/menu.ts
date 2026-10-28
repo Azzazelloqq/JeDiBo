@@ -16,8 +16,7 @@ export const VERSION = '0.1.0-PROTO';
 const LEVEL_NOTE: Record<LevelId, string> = {
   novice: 'часто ошибается',
   amateur: 'не зевает простое',
-  master: 'считает ответ соперника',
-  grandmaster: 'думает дольше',
+  master: 'считает на ход вперёд',
 };
 
 /** Выбор уровня Странника перед партией; выбранный уровень запоминается в профиле. */

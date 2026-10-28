@@ -1,13 +1,14 @@
 // Уровни сложности. Слабость задаётся не только глубиной расчёта, но и тем, что бот «не видит»
 // (атаки сквозь фигуры, ответ соперника), случайностью выбора среди хороших планов и редкими зевками —
 // так слабый бот ошибается похоже на человека.
-// Рейтинги — по арене (600 партий на пару, с Кармой): Новичок закреплён на 800, остальные — по разнице Эло
-// с соседним уровнем (71.3%, 65.1%, 53.7%). Наверху разрыв мал: удача с картами Кармы решает ~11% партий,
-// без Кармы Гроссмейстер выигрывает у Мастера ~62%.
+// Рейтинги — по арене (600–800 партий на пару, с Кармой): Новичок закреплён на 800, остальные — по разнице Эло
+// с соседним уровнем (Любитель — Новичок 71.8%, Мастер — Любитель 69.1%).
+// Четвёртого уровня нет: более глубокий расчёт почти не прибавлял силы (~54% против уровня ниже) —
+// удача с картами Кармы решает ~11% партий.
 import type { AgentConfig } from './agent';
 import { DEFAULT_WEIGHTS } from './eval';
 
-export type LevelId = 'novice' | 'amateur' | 'master' | 'grandmaster';
+export type LevelId = 'novice' | 'amateur' | 'master';
 
 export interface Level {
   id: LevelId;
@@ -47,20 +48,7 @@ export const LEVELS: Level[] = [
   {
     id: 'master',
     name: 'Мастер',
-    rating: 1070,
-    config: {
-      weights: DEFAULT_WEIGHTS,
-      turn: { width: 8, lookahead: 1 },
-      search: { candidates: 6, reply: { width: 2, lookahead: 1 } },
-      temperature: 0.05,
-      blunder: 0,
-      budgetMs: 400,
-    },
-  },
-  {
-    id: 'grandmaster',
-    name: 'Гроссмейстер',
-    rating: 1095,
+    rating: 1100,
     config: {
       weights: DEFAULT_WEIGHTS,
       turn: { width: 8, lookahead: 1 },
@@ -75,4 +63,6 @@ export const LEVELS: Level[] = [
 
 export const DEFAULT_LEVEL: LevelId = 'amateur';
 
-export const levelById = (id: string | undefined): Level => LEVELS.find((l) => l.id === id) ?? LEVELS.find((l) => l.id === DEFAULT_LEVEL)!;
+/** Уровень по id; бывший четвёртый уровень (Гроссмейстер) из старых профилей — это нынешний Мастер. */
+export const levelById = (id: string | undefined): Level =>
+  LEVELS.find((l) => l.id === (id === 'grandmaster' ? 'master' : id)) ?? LEVELS.find((l) => l.id === DEFAULT_LEVEL)!;
