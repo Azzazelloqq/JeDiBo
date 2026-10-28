@@ -44,6 +44,7 @@ export class FastBoard {
 
   current: PlayerId = 0;
   ap = 0;
+  apMax = 5;
   actedThisTurn = 0;
   /** направление «вперёд» по y для игрока */
   readonly fwd = new Int8Array(2);
@@ -84,6 +85,7 @@ export class FastBoard {
       this.cell[pc.y * n + pc.x] = i + 1;
     }
     this.current = s.current;
+    this.apMax = s.mode.ap;
     this.ap = s.phase === 'play' && !s.pending ? s.ap : 0;
     this.actedThisTurn = s.actedThisTurn ? 1 : 0;
     for (const p of [0, 1] as PlayerId[]) {
@@ -326,6 +328,33 @@ export class FastBoard {
     this.blitzDone[p] = u.blitzDone;
     this.actedThisTurn = u.actedThisTurn;
   }
+}
+
+export interface TurnSave {
+  current: PlayerId;
+  ap: number;
+  actedThisTurn: number;
+  acted: Uint8Array;
+  blitz: number;
+}
+
+/** Передать ход сопернику (для расчёта его ответа). Эффекты не истекают, повышения не выполняются. */
+export function passTurn(b: FastBoard): TurnSave {
+  const save: TurnSave = { current: b.current, ap: b.ap, actedThisTurn: b.actedThisTurn, acted: b.acted.slice(0, b.count), blitz: b.blitz[b.current] };
+  b.blitz[b.current] = 0; // Блицкриг действует только в ход владельца
+  b.current = (1 - b.current) as PlayerId;
+  b.ap = b.apMax;
+  b.actedThisTurn = 0;
+  b.acted.fill(0, 0, b.count);
+  return save;
+}
+
+export function restoreTurn(b: FastBoard, save: TurnSave) {
+  b.current = save.current;
+  b.blitz[save.current] = save.blitz;
+  b.ap = save.ap;
+  b.actedThisTurn = save.actedThisTurn;
+  b.acted.set(save.acted);
 }
 
 export const newUndo = (): Undo => ({ pi: 0, from: 0, to: 0, victim: -1, ap: 0, acted: 0, jumper: 0, blitzPiece: -1, blitzDone: 0, actedThisTurn: 0 });
