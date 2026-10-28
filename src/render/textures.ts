@@ -3,9 +3,28 @@
 import { PAL, THEME } from './palette';
 import { concreteTile, hexToRgb, makeCanvas, scaleCanvas, seeded, type Canvas } from './pixel';
 
-export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo';
-export const TEX_CONCEPTS: TexConcept[] = ['concrete', 'cool', 'smooth', 'dither', 'terrazzo'];
+// пятна: s1–s3 — сила пятен, «d» — с деталями (зерно, поры, крупинки), g — серая основа
+const BLOTS = {
+  s1: { amp: 6, details: false, gray: false },
+  s2: { amp: 11, details: false, gray: false },
+  s3: { amp: 16, details: false, gray: false },
+  s2d: { amp: 11, details: true, gray: false },
+  s3d: { amp: 16, details: true, gray: false },
+  g2: { amp: 11, details: false, gray: true },
+  g2d: { amp: 11, details: true, gray: true },
+} as const;
+type Blot = keyof typeof BLOTS;
+
+export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot;
+export const TEX_CONCEPTS: TexConcept[] = ['concrete', 's1', 's2', 's3', 's2d', 's3d', 'g2', 'g2d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
+  s1: 'Пятна 1',
+  s2: 'Пятна 2',
+  s3: 'Пятна 3',
+  s2d: 'Пятна 2 + детали',
+  s3d: 'Пятна 3 + детали',
+  g2: 'Серые пятна 2',
+  g2d: 'Серые пятна 2 + детали',
   concrete: 'Бетон',
   cool: 'Серый бетон',
   smooth: 'Гладкий',
@@ -68,6 +87,51 @@ function smoothTile(w: number, h: number, base: RGB, seed: number): Canvas {
       img.data[i + 3] = 255;
     }
   g.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Пятна, как у тёмного бетона: крупные мягкие пятна схватывания ступенями, рисунок по сиду.
+ *  amp — сила пятен; details — мелкое зерно, поры и светлые крупинки поверх. */
+function blotTile(w: number, h: number, base: RGB, seed: number, amp: number, details: boolean): Canvas {
+  const [c, g] = makeCanvas(w, h);
+  const rnd = seeded(seed);
+  const gw = Math.max(1, Math.round(w / 12));
+  const gh = Math.max(1, Math.round(h / 12));
+  const grid = Array.from({ length: gw * gh }, () => rnd() - 0.5);
+  const at = (i: number, j: number) => grid[((j + gh) % gh) * gw + ((i + gw) % gw)];
+  const sm = (t: number) => t * t * (3 - 2 * t);
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const fx = (x / w) * gw;
+      const fy = (y / h) * gh;
+      const i0 = Math.floor(fx);
+      const j0 = Math.floor(fy);
+      const tx = sm(fx - i0);
+      const ty = sm(fy - j0);
+      const v = (at(i0, j0) * (1 - tx) + at(i0 + 1, j0) * tx) * (1 - ty) + (at(i0, j0 + 1) * (1 - tx) + at(i0 + 1, j0 + 1) * tx) * ty;
+      let n = (Math.round(v * 4) / 4) * amp * 1.8;
+      if (details) n += (rnd() - 0.5) * 5;
+      const i = (y * w + x) * 4;
+      img.data[i] = base[0] + n;
+      img.data[i + 1] = base[1] + n;
+      img.data[i + 2] = base[2] + n * 0.9;
+      img.data[i + 3] = 255;
+    }
+  g.putImageData(img, 0, 0);
+  if (details) {
+    const pores = Math.floor((w * h) / 150);
+    for (let k = 0; k < pores; k++) {
+      const x = Math.floor(rnd() * w);
+      const y = Math.floor(rnd() * h);
+      g.fillStyle = `rgba(0,0,0,${0.1 + rnd() * 0.12})`;
+      g.fillRect(x, y, rnd() < 0.2 ? 2 : 1, 1);
+      if (rnd() < 0.35) {
+        g.fillStyle = 'rgba(255,255,255,0.12)';
+        g.fillRect(x, (y + 1) % h, 1, 1);
+      }
+    }
+  }
   return c;
 }
 
@@ -142,6 +206,10 @@ type Opts = { pores?: number; cracks?: boolean; amp?: number };
 export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB): Canvas {
   const concept = texConcept();
   const dark = darker ?? ([base[0] - 14, base[1] - 14, base[2] - 14] as RGB);
+  if (concept in BLOTS) {
+    const b = BLOTS[concept as Blot];
+    return blotTile(w, h, b.gray ? neutral(base) : base, seed, b.amp, b.details);
+  }
   switch (concept) {
     case 'cool':
       return concreteTile(w, h, neutral(base), seed, opts);
