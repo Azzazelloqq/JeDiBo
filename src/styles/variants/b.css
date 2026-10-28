@@ -354,3 +354,21 @@ body.ui-b .vx-spacer { flex: 1; }
 
 body.ui-b .vx-text { grid-column: 1 / -1; }
 body.ui-b .vx-info { align-self: end; }
+
+/* ── Правила ────────────────────────────────────────────────────────────── */
+body.ui-b .v-rules { height: 100%; width: min(1400px, 100%); }
+body.ui-b .vr-head { margin-bottom: 16px; }
+body.ui-b .vr-body-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px 1fr; gap: 24px; }
+body.ui-b .vr-nav { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding: 4px 4px 10px; }
+body.ui-b .vr-nav .btn { text-align: left; font-size: 12px; padding: 10px 14px 9px; }
+body.ui-b .vr-nav .btn.v-tab-on { --c: var(--b-accent); --c-hi: var(--b-play-hi); --c-edge: var(--b-accent-edge); color: #fff; text-shadow: 0 2px 0 var(--b-accent-edge); }
+body.ui-b .vr-content { overflow-y: auto; padding: 0 10px 40vh 2px; scroll-behavior: smooth; }
+body.ui-b .vr-sec { margin-bottom: 30px; }
+body.ui-b .vr-h2 { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font: 700 18px var(--b-f-text); letter-spacing: 0.22em; }
+body.ui-b .vr-h2::before { content: ''; width: 10px; height: 10px; background: var(--b-accent); flex: none; }
+body.ui-b .vr-h2::after { content: ''; flex: 1; border-bottom: 3px dotted var(--b-dots); transform: translateY(4px); }
+body.ui-b .vr-card { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; padding: 18px; margin-bottom: 14px; background: var(--b-inset); border-radius: var(--b-r); box-shadow: 0 4px 0 var(--b-panel-edge); }
+body.ui-b .vr-card.no-fig { grid-template-columns: 1fr; }
+body.ui-b .vr-fig { line-height: 0; padding: 6px; background: var(--b-track); border-radius: 6px; }
+body.ui-b .vr-big { font-family: var(--b-f-head); font-size: 16px; line-height: 1.55; }
+body.ui-b .vr-text { margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: var(--b-muted); }
