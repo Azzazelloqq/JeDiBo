@@ -1,5 +1,5 @@
 // Мутирующие операции над состоянием. Каждая пишет событие для слоя представления.
-import { isAttacked, lastRow, periodIndex, sideOf, spawnCells } from './rules';
+import { isAttacked, lastRow, sideOf, spawnCells } from './rules';
 import { Rank, key, other, type GameEvent, type GameState, type Pending, type Piece, type PlayerId, type Pos } from './types';
 
 export interface Ctx {
@@ -17,7 +17,7 @@ export function log(c: Ctx, text: string, player?: PlayerId) {
 export function destroy(c: Ctx, pc: Piece, cause: string) {
   const s = c.s;
   s.pieces = s.pieces.filter((q) => q.id !== pc.id);
-  s.players[pc.owner].graveyard.push({ uid: s.nextId++, rank: pc.rank, period: periodIndex(s, pc.owner) });
+  s.players[pc.owner].graveyard.push({ uid: s.nextId++, rank: pc.rank, turn: s.turn });
   c.ev.push({ type: 'destroy', victim: { ...pc }, cause });
 }
 

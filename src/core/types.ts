@@ -32,8 +32,9 @@ export interface Piece {
 export interface GraveEntry {
   uid: number;
   rank: Rank;
-  /** номер Периода Кармы владельца в момент гибели (floor(ownTurns / 7)) */
-  period: number;
+  /** общий номер хода (s.turn), в который фигура погибла. Общий, а не ход владельца: после «Смены поля»
+   *  кладбище достаётся другому игроку, и сравнивать нужно с началом уже его Периода */
+  turn: number;
 }
 
 export type CardId =
@@ -55,6 +56,8 @@ export interface PlayerState {
   color: 'red' | 'black';
   side: Side;
   ownTurns: number;
+  /** общий номер хода, с которого идёт текущий Период Кармы игрока (0 — до первой карты) */
+  periodStart: number;
   graveyard: GraveEntry[];
   held: HeldCard | null;
   placed: boolean;

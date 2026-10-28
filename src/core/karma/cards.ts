@@ -2,7 +2,7 @@
 // Чтобы добавить карту: id в CardId (types.ts), запись здесь, иконку в render/cardArt.ts.
 import { RANK_NAME_ACC, ask, askSpawn, cellOptions, checkPromotion, destroy, log, setRank, type Ctx } from '../ops';
 import { randInt } from '../rng';
-import { forward, inBoard, isFree, periodEnd, periodIndex, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
+import { forward, inBoard, isFree, periodEnd, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
 import { Rank, other, unkey, type CardId, type GameState, type Pending, type PlayerId, type Pos } from '../types';
 
 export type Timing = 'onReceive' | 'period';
@@ -124,9 +124,9 @@ const defs: CardDef[] = [
     text: 'Восстановите любую свою фигуру, уничтоженную в текущем Периоде Кармы.',
     rule: 'Вернуть одну свою фигуру, уничтоженную в текущем Периоде Кармы, в стартовую зону (или 4-й ряд). Возвращённая фигура может действовать в тот же ход.',
     canPlay: (s, p) =>
-      s.players[p].graveyard.some((g) => g.period === periodIndex(s, p)) && spawnCells(s, p).length > 0,
+      s.players[p].graveyard.some((g) => g.turn >= s.players[p].periodStart) && spawnCells(s, p).length > 0,
     play(c, p) {
-      const opts = c.s.players[p].graveyard.filter((g) => g.period === periodIndex(c.s, p));
+      const opts = c.s.players[p].graveyard.filter((g) => g.turn >= c.s.players[p].periodStart);
       if (!opts.length || !spawnCells(c.s, p).length) return false;
       askGrave(c, 'immortal', p, opts.map((g) => g.uid));
       return true;
@@ -465,6 +465,9 @@ const defs: CardDef[] = [
         pc.owner = other(pc.owner);
         pc.acted = false;
       }
+      // повышение, ждущее выбора клетки, уходит вместе с фигурой к новому владельцу
+      for (const q of [c.s.pending, ...c.s.queue])
+        if (q?.source === 'promotion') q.chooser = q.beneficiary = other(q.beneficiary);
       c.ev.push({ type: 'sidesSwap' });
       return true;
     },

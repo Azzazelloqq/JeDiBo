@@ -8,6 +8,7 @@ import { searchTurn } from '../src/ai/search';
 import { clocksAfter, expiredClock, newClocks, spendTime, type Clocks } from '../src/core/clocks';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
+import { homeRows, legalTargets } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
@@ -422,6 +423,60 @@ test('таймаут выбора: принимается только от вы
   assert(piecesNamed(s, 0).join() === before, `фигуры сдвинулись: ${piecesNamed(s, 0).join(' ')}`);
   assert(s.current === 1 && !s.pending, 'ход не перешёл к сопернику');
   assert(!dispatch(s, { type: 'timeout', by: 0, total: false, choice: true }).ok, 'таймаут выбора без вопроса принят');
+});
+
+/** Сделать ходящим любое допустимое перемещение (без атаки) и, если ход не кончился сам, завершить его. */
+function anyMoveAndEnd(s: GameState) {
+  const p = s.current;
+  const mv = s.pieces
+    .filter((q) => q.owner === p)
+    .flatMap((q) => legalTargets(s, q).filter((t) => !t.attack).map((t) => ({ q, t })))[0];
+  assert(mv, `у игрока ${p} нет перемещения`);
+  assert(dispatch(s, { type: 'move', by: p, pieceId: mv.q.id, to: mv.t.to }).ok, 'перемещение отклонено');
+  if (s.current === p && !s.pending) assert(dispatch(s, { type: 'endTurn', by: p }).ok, 'завершение хода отклонено');
+}
+
+test('Смена поля: Бессмертие видит фигуры, уничтоженные в текущем Периоде, по новому кладбищу', () => {
+  // игрок 0 на 7-м ходу получает Бессмертие и берёт треугольник F8; соперник на своём 7-м ходу тянет Смену поля —
+  // кладбище с этим треугольником переходит к игроку 0. Фигура уничтожена в его текущем Периоде — её можно вернуть,
+  // а квадрат, уничтоженный в начале партии, — нельзя.
+  const s = position([[0, Rank.Circle, 'F6'], [0, Rank.Triangle, 'A2'], [1, Rank.Triangle, 'F8'], [1, Rank.Triangle, 'A10'], [1, Rank.Square, 'K11']], 1);
+  s.players[0].ownTurns = 6;
+  s.players[1].ownTurns = 6;
+  s.players[1].graveyard = [{ uid: 900, rank: Rank.Square, turn: 0 }];
+  s.actedThisTurn = true;
+  s.deck = ['immortal'];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  assert(s.players[0].held?.card === 'immortal', 'игрок 0 не получил Бессмертие');
+  s.deck = ['sideChange'];
+  const circle = s.pieces.find((q) => q.owner === 0 && q.rank === Rank.Circle)!;
+  assert(dispatch(s, { type: 'move', by: 0, pieceId: circle.id, to: at('F8') }).ok, 'взятие F8 отклонено');
+  assert(s.current === 1 && s.players[1].ownTurns === 7, 'ход не перешёл к сопернику');
+  assert(s.players[0].graveyard.length === 2, 'Смена поля не поменяла кладбища');
+  anyMoveAndEnd(s);
+  assert(s.current === 0 && s.players[0].held?.card === 'immortal', 'Бессмертие должно остаться у игрока 0');
+  assert(dispatch(s, { type: 'playCard', by: 0 }).ok, 'Бессмертие не разыгрывается');
+  assert(s.pending?.kind === 'grave', `ожидался выбор с кладбища, вопрос: ${s.pending?.source}`);
+  const opts = s.pending.options.map((o) => s.players[0].graveyard.find((g) => String(g.uid) === o)?.rank);
+  assert(opts.length === 1 && opts[0] === Rank.Triangle, `ожидался только взятый треугольник, варианты: ${JSON.stringify(opts)}`);
+});
+
+test('Смена поля: повышение, ждущее выбора клетки, переходит к новому владельцу фигуры', () => {
+  // треугольник игрока 0 пережил ход соперника на последнем ряду; в начале хода игрока 0 — повышение и Смена поля
+  const s = position([[0, Rank.Triangle, 'L12'], [0, Rank.Triangle, 'A2'], [1, Rank.Triangle, 'A10'], [1, Rank.Triangle, 'C10']], 1);
+  s.pieces.find((q) => cellName(q.y * 12 + q.x) === 'L12')!.promoteNextTurn = true;
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = ['sideChange'];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  assert(s.played.includes('sideChange'), 'Смена поля не сыграна');
+  assert(s.pending?.source === 'promotion', `ожидалось повышение, вопрос: ${s.pending?.source}`);
+  assert(s.pending.chooser === 1 && s.pending.beneficiary === 1, `повышение должно перейти к игроку 1: ${JSON.stringify(s.pending)}`);
+  const home = homeRows(s, s.players[1].side);
+  assert(s.pending.options.every((o) => home.includes(Number(o.split(',')[1]))), `клетки не в стартовой зоне нового владельца: ${optionNames(s).join(' ')}`);
+  assert(dispatch(s, { type: 'choose', by: 1, option: s.pending.options[0] }).ok, 'выбор клетки отклонён');
+  assert(!piecesNamed(s, 1).includes('TL12'), `треугольник остался на последнем ряду: ${piecesNamed(s, 1).join(' ')}`);
+  assert(piecesNamed(s, 1).some((n) => n.startsWith('S')), `у нового владельца нет квадрата: ${piecesNamed(s, 1).join(' ')}`);
 });
 
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {

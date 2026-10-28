@@ -19,6 +19,7 @@ const newPlayer = (id: PlayerId, name: string): GameState['players'][number] => 
   color: 'red',
   side: id,
   ownTurns: 0,
+  periodStart: 0,
   graveyard: [],
   held: null,
   placed: false,
@@ -173,7 +174,8 @@ function startTurn(c: Ctx, p: PlayerId) {
     } else pc.promoteNextTurn = false;
   }
 
-  // Карма: в начале последнего хода каждого цикла
+  // Карма: в начале последнего хода каждого цикла; с него же идёт новый Период
+  if (pl.ownTurns % s.mode.karmaEvery === 0) pl.periodStart = s.turn;
   if (pl.ownTurns % s.mode.karmaEvery === 0 && s.deck.length) {
     const card = s.deck.splice(randInt(s, s.deck.length), 1)[0];
     c.ev.push({ type: 'cardDrawn', player: p, card });
