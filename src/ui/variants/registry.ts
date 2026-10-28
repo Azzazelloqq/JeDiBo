@@ -11,6 +11,7 @@ import { rulesScreen } from '../screens/rules';
 import { settingsScreen } from '../screens/settings';
 import { chronicleV } from './chronicle/v';
 import { codexV } from './codex/v';
+import { layoutA } from './game/a';
 import { menuV } from './menu/v';
 import { rulesV } from './rules/v';
 import { modeSelectV } from './modeSelect/v';
@@ -43,7 +44,7 @@ const IMPL: Partial<Record<ScreenId, Partial<Record<VariantId, Impl>>>> = {
   codex: { a: (r) => codexV(r, 'a'), b: (r) => codexV(r, 'b'), c: codexScreen },
   rules: { a: (r) => rulesV(r, 'a'), b: (r) => rulesV(r, 'b'), c: rulesScreen },
   settings: { a: (r) => settingsV(r, 'a'), b: (r) => settingsV(r, 'b'), c: settingsScreen },
-  game: { c: (r, kind) => gameScreen(r, (kind as GameKind) ?? 'bot') },
+  game: { a: (r, kind) => gameScreen(r, (kind as GameKind) ?? 'bot', layoutA), c: (r, kind) => gameScreen(r, (kind as GameKind) ?? 'bot') },
 };
 
 interface Stored {

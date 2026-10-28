@@ -36,7 +36,58 @@ const fmt = (ms: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-export function gameScreen(root: HTMLElement, kind: Kind) {
+/** Части экрана партии, которые строит раскладка варианта. */
+export interface GameParts { left: Node[]; right: Node[]; top: Node[]; bottom: Node[] }
+/** Раскладка партии варианта (B7): строит только DOM из контекста; контроллер (Match, клики, оверлеи, итог) — один. */
+export interface GameLayout {
+  cls: string;
+  placement(ctx: GameCtx): GameParts;
+  play(ctx: GameCtx): GameParts;
+}
+/** Всё, что раскладке нужно знать и уметь: состояние, данные расстановки, действия и общие блоки HUD. */
+export interface GameCtx {
+  s: GameState;
+  match: Match;
+  kind: Kind;
+  /** чья сторона показывается как «ваша»: в бою с ботом — 0, в хотсите — тот, кто действует */
+  me: PlayerId;
+  placingFor: PlayerId;
+  placeRank: Rank;
+  counts: () => number[];
+  inRow: (y: number) => number;
+  LIMIT: number[];
+  selected: number | null;
+  prompt: () => { text: string; hot: boolean };
+  canEnd: () => boolean;
+  canSkip: () => boolean;
+  act: {
+    pickRank(r: Rank): void;
+    preset(id: string): void;
+    clear(): void;
+    ready(): void;
+    leave(): void;
+    resign(): void;
+    endTurn(): void;
+    skip(): void;
+    deselect(): void;
+    playCard(p: PlayerId): void;
+  };
+  ui: {
+    legendRow: (r: Rank, color: 'red' | 'black', up: boolean, name: string, d: string) => HTMLElement;
+    playerPanel: (p: PlayerId) => HTMLElement;
+    effectsPanel: () => HTMLElement;
+    deckPanel: () => HTMLElement;
+    logPanel: () => HTMLElement;
+    apPips: HTMLElement;
+    apNum: HTMLElement;
+    turnClock: HTMLElement;
+    turnBar: HTMLElement;
+    totals: HTMLElement;
+    avatarSeed: (p: PlayerId) => string;
+  };
+}
+
+export function gameScreen(root: HTMLElement, kind: Kind, look: GameLayout | null = null) {
   setMood('game');
   const prof = getProfile();
   const names: [string, string] = kind === 'bot' ? [prof.name, 'Странник'] : [prof.name, 'Гость'];
@@ -52,7 +103,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   const bottom = h('div', { class: 'bottombar slab' });
   const boardSlot = h('div', { class: 'board-slot' }, board.el);
   const center = h('main', { class: 'center' }, top, boardSlot, bottom);
-  const layout = h('div', { class: 'game' }, left, center, right);
+  const layout = h('div', { class: `game ${look?.cls ?? ''}` }, left, center, right);
   root.append(layout);
 
   const fit = () => {
@@ -148,6 +199,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   }
 
   function renderPlacement() {
+    if (look) return applyParts(look.placement(ctx()));
     const c = counts();
     const total = c[0] + c[1] + c[2];
     const color = s.players[placingFor].color;
@@ -367,10 +419,16 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   function refresh() {
     if (s.phase === 'placement') return;
     refreshBoard();
-    renderTop();
-    renderBottom();
-    left.replaceChildren(playerPanel(0), effectsPanel(), controls());
-    right.replaceChildren(playerPanel(1), deckPanel(), logPanel());
+    if (look) {
+      updatePips();
+      applyParts(look.play(ctx()));
+      tickClocks();
+    } else {
+      renderTop();
+      renderBottom();
+      left.replaceChildren(playerPanel(0), effectsPanel(), controls());
+      right.replaceChildren(playerPanel(1), deckPanel(), logPanel());
+    }
     if (s.pending?.kind === 'grave' && match.isHuman(s.pending.chooser) && !overlayOpen) void gravePicker();
   }
 
@@ -380,12 +438,15 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   const turnBar = h('div', { class: 'clock-bar' }, h('div', { class: 'clock-fill' }));
   const totals = h('div', { class: 'tb-totals' });
 
-  function renderTop() {
-    const cur = s.players[s.current];
+  function updatePips() {
     apPips.replaceChildren(...Array.from({ length: s.mode.ap }, (_, i) => h('div', { class: `pip ${i < s.ap ? 'on' : ''}` })));
     apNum.textContent = `${s.ap}/${s.mode.ap}`;
     if (s.ap !== lastAp) pop(apNum);
     lastAp = s.ap;
+  }
+  function renderTop() {
+    const cur = s.players[s.current];
+    updatePips();
     top.replaceChildren(
       h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${cur.color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
       h('div', { class: 'tb-ap' }, h('span', { class: 'h-label' }, 'Очки действий'), apPips, apNum),
@@ -403,7 +464,23 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   }
   const clockTimer = setInterval(tickClocks, 250);
 
+  function promptOf() {
+    const p = match.actor();
+    const human = match.isHuman(p);
+    if (s.phase === 'over') return { text: s.endReason ?? '', hot: false };
+    if (s.pending) {
+      const src = s.pending.source === 'promotion' ? 'Повышение' : CARDS[s.pending.source].name;
+      return { text: human ? `${src}: ${s.pending.prompt}` : `${s.players[p].name} выбирает (${src})…`, hot: human };
+    }
+    if (human) return { text: selected !== null ? 'Выберите клетку: точка — ход, рамка — атака' : s.actedThisTurn ? 'Ещё действие или завершите ход' : 'Выберите фигуру', hot: false };
+    return { text: `${s.players[p].name} думает…`, hot: false };
+  }
+  const canEndNow = () => {
+    const p = match.actor();
+    return match.isHuman(p) && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play';
+  };
   function renderBottom() {
+    if (look) return applyParts(look.play(ctx()), ['bottom', 'right']);
     const p = match.actor();
     const human = match.isHuman(p);
     let prompt = '';
@@ -758,6 +835,37 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
 
   // отладка из консоли: __match.state, __match.submit(...)
   if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }) });
+
+  function applyParts(parts: GameParts, only: (keyof GameParts)[] = ['left', 'right', 'top', 'bottom']) {
+    if (only.includes('left')) left.replaceChildren(...parts.left);
+    if (only.includes('right')) right.replaceChildren(...parts.right);
+    if (only.includes('top')) top.replaceChildren(...parts.top);
+    if (only.includes('bottom')) bottom.replaceChildren(...parts.bottom);
+  }
+  function ctx(): GameCtx {
+    return {
+      s, match, kind,
+      me: kind === 'bot' ? 0 : s.phase === 'placement' ? placingFor : match.actor(),
+      placingFor, placeRank, counts, LIMIT, selected,
+      inRow: (y) => [...layoutMap.keys()].filter((k) => unkey(k).y === y).length,
+      prompt: promptOf,
+      canEnd: canEndNow,
+      canSkip: () => !!s.pending && s.pending.canSkip && match.isHuman(match.actor()),
+      act: {
+        pickRank: (r) => ((placeRank = r), sfx.select(), renderPlacement()),
+        preset: applyPreset,
+        clear: () => (layoutMap.clear(), board.sync(viewState()), renderPlacement()),
+        ready: () => void ready(),
+        leave,
+        resign: () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', () => match.submit({ type: 'resign', by: kind === 'bot' ? 0 : s.current })),
+        endTurn: () => match.submit({ type: 'endTurn', by: s.current }),
+        skip: () => match.submit({ type: 'skip', by: match.actor() }),
+        deselect: () => ((selected = null), refreshBoard(), renderBottom()),
+        playCard: (p) => match.submit({ type: 'playCard', by: p }),
+      },
+      ui: { legendRow, playerPanel, effectsPanel, deckPanel, logPanel, apPips, apNum, turnClock, turnBar, totals, avatarSeed },
+    };
+  }
 
   startPlacement(0);
   match.start();
