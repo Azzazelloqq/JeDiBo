@@ -3,7 +3,7 @@
    Новые компоненты (логотип, слайдер, блик карты) — в конце файла. */
 
 :root {
-  --f-pix: 'Tiny5', 'Courier New', monospace;
+  --f-pix: 'JeDiBo Digits', 'Tiny5', 'Courier New', monospace;
   --f-mono: 'IBM Plex Mono', 'Consolas', monospace;
   --edge: 0 5px 0 rgba(0, 0, 0, 0.55);
   --bounce: cubic-bezier(0.2, 1.6, 0.4, 1);
@@ -17,8 +17,8 @@ html, body {
   overflow: hidden;
   background: var(--void);
   color: var(--bone);
-  font-family: var(--f-mono);
-  font-size: 14px;
+  font-family: var(--f-pix); /* пиксельный везде; моноширинный — только Хроника партии (.log-list) */
+  font-size: 16px;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
@@ -308,7 +308,7 @@ body.no-crt #crt { display: none; }
 .deck-n { font-family: var(--f-pix); font-size: 16px; }
 .deck-n b { font-size: 40px; line-height: 1; }
 .log { flex: 1; min-height: 140px; display: flex; flex-direction: column; }
-.log-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 32vh; scrollbar-width: thin; scrollbar-color: var(--slab-600) transparent; }
+.log-list { font-family: var(--f-mono); flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 32vh; scrollbar-width: thin; scrollbar-color: var(--slab-600) transparent; }
 .log-row { padding: 2px 6px; border-left: 3px solid transparent; color: var(--concrete-300); }
 .log-row:first-child { color: var(--bone); background: rgba(255, 255, 255, 0.04); }
 .lr-red { border-color: var(--granite-500); }

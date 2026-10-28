@@ -104,42 +104,71 @@ export function tinyText(g: C2D, text: string, x: number, y: number, color: stri
 }
 export const tinyWidth = (text: string) => text.length * 4 - 1;
 
-/** Бетонная текстура: шум, поры, следы опалубки. Используется и в канвасе, и как CSS-фон. */
-export function concreteTile(w: number, h: number, base: [number, number, number], seed: number, opts: { pores?: number; seams?: boolean; amp?: number } = {}): Canvas {
+/** Бетонная текстура: мелкое зерно, пятна схватывания, поры, редкие волосяные трещины.
+ *  Без направленных полос (ими бетон превращался в доски) и без резких перепадов — текст поверх должен читаться.
+ *  Плитка бесшовная: пятна считаются по решётке с переносом через край. Используется и в канвасе, и как CSS-фон. */
+export function concreteTile(w: number, h: number, base: [number, number, number], seed: number, opts: { pores?: number; cracks?: boolean; amp?: number } = {}): Canvas {
   const [c, g] = makeCanvas(w, h);
   const rnd = seeded(seed);
   const img = g.createImageData(w, h);
   const amp = opts.amp ?? 10;
+  // пятна: решётка случайных уровней с шагом ~12 px, билинейно и ступенями (пиксель-арт, не градиент)
+  const cell = 12;
+  const gw = Math.max(1, Math.round(w / cell));
+  const gh = Math.max(1, Math.round(h / cell));
+  const grid = Array.from({ length: gw * gh }, () => rnd() - 0.5);
+  const at = (i: number, j: number) => grid[((j + gh) % gh) * gw + ((i + gw) % gw)];
+  const smooth = (t: number) => t * t * (3 - 2 * t);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
+      const fx = (x / w) * gw;
+      const fy = (y / h) * gh;
+      const i0 = Math.floor(fx);
+      const j0 = Math.floor(fy);
+      const tx = smooth(fx - i0);
+      const ty = smooth(fy - j0);
+      const top = at(i0, j0) * (1 - tx) + at(i0 + 1, j0) * tx;
+      const bot = at(i0, j0 + 1) * (1 - tx) + at(i0 + 1, j0 + 1) * tx;
+      const blot = Math.round((top * (1 - ty) + bot * ty) * 4) / 4; // ступени
+      const n = blot * amp * 1.8 + (rnd() - 0.5) * amp * 0.6;
       const i = (y * w + x) * 4;
-      // низкочастотная «облачность» + мелкий шум
-      const cloud = Math.sin(x * 0.11 + seed) * Math.cos(y * 0.07 - seed * 0.3) * amp * 0.5;
-      const n = (rnd() - 0.5) * amp + cloud;
       img.data[i] = base[0] + n;
       img.data[i + 1] = base[1] + n;
       img.data[i + 2] = base[2] + n * 0.9;
       img.data[i + 3] = 255;
     }
   g.putImageData(img, 0, 0);
+  // поры: тёмная точка, у части — светлая кромка снизу (свет сверху), изредка пора 2×1
   const pores = opts.pores ?? Math.floor((w * h) / 90);
   for (let i = 0; i < pores; i++) {
     const x = Math.floor(rnd() * w);
     const y = Math.floor(rnd() * h);
-    g.fillStyle = `rgba(0,0,0,${0.25 + rnd() * 0.3})`;
-    g.fillRect(x, y, 1, 1);
-    if (rnd() < 0.3) {
-      g.fillStyle = 'rgba(255,255,255,0.12)';
-      g.fillRect(x, y + 1, 1, 1);
+    g.fillStyle = `rgba(0,0,0,${0.12 + rnd() * 0.2})`;
+    g.fillRect(x, y, rnd() < 0.2 ? 2 : 1, 1);
+    if (rnd() < 0.35) {
+      g.fillStyle = 'rgba(255,255,255,0.10)';
+      g.fillRect(x, (y + 1) % h, 1, 1);
     }
   }
-  if (opts.seams) {
-    // горизонтальные швы опалубки
-    for (let y = 8 + Math.floor(rnd() * 6); y < h; y += 14 + Math.floor(rnd() * 8)) {
-      g.fillStyle = 'rgba(0,0,0,0.18)';
-      g.fillRect(0, y, w, 1);
-      g.fillStyle = 'rgba(255,255,255,0.05)';
-      g.fillRect(0, y + 1, w, 1);
+  // заполнитель: редкие светлые крупинки
+  for (let i = 0; i < pores / 3; i++) {
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    g.fillRect(Math.floor(rnd() * w), Math.floor(rnd() * h), 1, 1);
+  }
+  if (opts.cracks) {
+    // 1–2 коротких волосяных трещины: случайное блуждание, в основном по диагонали
+    const n = 1 + Math.floor(rnd() * 2);
+    for (let k = 0; k < n; k++) {
+      let x = Math.floor(rnd() * w);
+      let y = Math.floor(rnd() * h);
+      const dx = rnd() < 0.5 ? 1 : -1;
+      const len = 6 + Math.floor(rnd() * 8);
+      for (let s = 0; s < len; s++) {
+        g.fillStyle = 'rgba(0,0,0,0.14)';
+        g.fillRect((x + w) % w, (y + h) % h, 1, 1);
+        if (rnd() < 0.6) x += dx;
+        if (rnd() < 0.7) y += 1;
+      }
     }
   }
   return c;

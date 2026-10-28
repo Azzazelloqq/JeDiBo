@@ -487,6 +487,8 @@ export class BoardView {
     // тени и фигуры (сортировка по y для перекрытия)
     const list = [...this.vis.values()].sort((a, b) => a.y - b.y || a.z - b.z);
     for (const v of list) {
+      // у треугольника тень на земле торчит из-под острия грязной полосой — только в прыжке
+      if (v.rank === Rank.Triangle && v.z < 1) continue;
       const bx = M + v.x * CELL;
       const by = M + v.y * CELL;
       const shrink = Math.max(0.4, 1 - v.z / 30);
