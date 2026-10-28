@@ -10,6 +10,8 @@ export interface SearchOpts {
   candidates: number;
   /** планировщик ответа соперника; null — без проверки */
   reply: TurnOpts | null;
+  /** свой следующий ход после ответа соперника (третий полуход); не задан — оценка после ответа */
+  followup?: TurnOpts;
 }
 
 export interface Scored {
@@ -23,8 +25,8 @@ export interface SearchResult {
   nodes: number;
 }
 
-const mine = Array.from({ length: 8 }, newUndo);
-const theirs = Array.from({ length: 8 }, newUndo);
+const mine = Array.from({ length: 10 }, newUndo);
+const theirs = Array.from({ length: 10 }, newUndo);
 
 /** deadline — момент (performance.now), после которого новые планы ответом не проверяются. */
 export function searchTurn(b: FastBoard, me: PlayerId, w: Weights, turn: TurnOpts, so: SearchOpts, deadline?: number): SearchResult {
@@ -43,7 +45,14 @@ export function searchTurn(b: FastBoard, me: PlayerId, w: Weights, turn: TurnOpt
       const r = planTurn(b, opp, w, { ...so.reply, deadline });
       nodes += r.nodes;
       r.steps.forEach((st, k) => b.make(st.pi, st.t, theirs[k]));
-      sc = evaluate(b, me, me, w);
+      if (so.followup && r.score < WIN) {
+        // и мой следующий ход: видно, что ответ соперника оставил мне (или что я не успею защитить)
+        const save2 = passTurn(b);
+        const f = planTurn(b, me, w, { ...so.followup, deadline });
+        nodes += f.nodes;
+        sc = f.score;
+        restoreTurn(b, save2);
+      } else sc = evaluate(b, me, me, w);
       for (let k = r.steps.length - 1; k >= 0; k--) b.unmake(theirs[k]);
       restoreTurn(b, save);
     }

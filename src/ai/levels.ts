@@ -21,7 +21,7 @@ export const LEVELS: Level[] = [
     rating: 800,
     config: {
       weights: { ...DEFAULT_WEIGHTS, xray: false, threat: 0.6 },
-      turn: { width: 2, lookahead: 0.3 },
+      turn: { width: 2, lookahead: 0 },
       search: { candidates: 1, reply: null },
       temperature: 1.0,
       blunder: 0.15,
@@ -34,8 +34,8 @@ export const LEVELS: Level[] = [
     rating: 1000,
     config: {
       weights: DEFAULT_WEIGHTS,
-      turn: { width: 4, lookahead: 0.6 },
-      search: { candidates: 3, reply: { width: 1, lookahead: 0.6 } },
+      turn: { width: 4, lookahead: 1 },
+      search: { candidates: 3, reply: { width: 1, lookahead: 1 } },
       temperature: 0.4,
       blunder: 0.05,
       budgetMs: 150,
@@ -47,8 +47,8 @@ export const LEVELS: Level[] = [
     rating: 1200,
     config: {
       weights: DEFAULT_WEIGHTS,
-      turn: { width: 8, lookahead: 0.6 },
-      search: { candidates: 6, reply: { width: 2, lookahead: 0.6 } },
+      turn: { width: 8, lookahead: 1 },
+      search: { candidates: 6, reply: { width: 2, lookahead: 1 } },
       temperature: 0.1,
       blunder: 0,
       budgetMs: 400,
@@ -60,11 +60,12 @@ export const LEVELS: Level[] = [
     rating: 1400,
     config: {
       weights: DEFAULT_WEIGHTS,
-      turn: { width: 8, lookahead: 0.6 },
-      search: { candidates: 12, reply: { width: 4, lookahead: 0.6 } },
+      turn: { width: 8, lookahead: 1 },
+      // три полухода: свой ход, ответ соперника, свой следующий ход
+      search: { candidates: 10, reply: { width: 3, lookahead: 1 }, followup: { width: 2, lookahead: 1 } },
       temperature: 0,
       blunder: 0,
-      budgetMs: 900,
+      budgetMs: 1500,
     },
   },
 ];

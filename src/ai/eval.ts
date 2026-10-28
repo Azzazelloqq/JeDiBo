@@ -19,12 +19,13 @@ export interface Weights {
   xray: boolean;
 }
 
+// подобраны SPSA на арене (npm run tune), начиная с ручных 1/3/5, 0.8, 0.9, 0.3, 0.05
 export const DEFAULT_WEIGHTS: Weights = {
-  val: [1, 3, 5],
-  advance: 0.8,
-  threat: 0.9,
-  myThreat: 0.3,
-  chase: 0.05,
+  val: [1, 2.75, 3.5],
+  advance: 0.65,
+  threat: 0.66,
+  myThreat: 0.11,
+  chase: 0.093,
   xray: true,
 };
 

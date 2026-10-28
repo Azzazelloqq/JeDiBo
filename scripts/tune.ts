@@ -1,8 +1,8 @@
 // Подстройка весов оценки методом SPSA: на каждом шаге веса сдвигаются случайно в обе стороны (θ+ и θ−),
 // две версии играют между собой, и веса смещаются в сторону победившей.
-// npm run tune -- [шагов] [партий на шаг] [файл журнала]
+// npm run tune -- [шагов] [партий на шаг] [файл журнала] [журнал прошлого прогона — продолжить с его весов]
 // Партии на шаге — парами с одинаковым seed и сменой мест, чтобы расстановка и карты не давали перекоса.
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { DEFAULT_CONFIG, createAgent, type AgentConfig } from '../src/ai/agent';
@@ -19,7 +19,7 @@ const PARAMS = [
   { name: 'threat', init: DEFAULT_WEIGHTS.threat, c: 0.12, min: 0.2, max: 1.5 },
   { name: 'myThreat', init: DEFAULT_WEIGHTS.myThreat, c: 0.08, min: 0, max: 1 },
   { name: 'chase', init: DEFAULT_WEIGHTS.chase, c: 0.02, min: 0, max: 0.3 },
-  { name: 'lookahead', init: DEFAULT_CONFIG.turn.lookahead, c: 0.15, min: 0, max: 1.5 },
+  { name: 'lookahead', init: DEFAULT_CONFIG.turn.lookahead, c: 0.1, min: 0, max: 1 },
 ] as const;
 
 type Theta = number[];
@@ -36,7 +36,7 @@ export function configOf(t: Theta, base: AgentConfig = DEFAULT_CONFIG): AgentCon
 }
 
 /** Конфигурация для подстройки: как Мастер, но дешевле. */
-const TUNE_BASE: AgentConfig = { ...DEFAULT_CONFIG, search: { candidates: 4, reply: { width: 2, lookahead: 0.6 } } };
+const TUNE_BASE: AgentConfig = { ...DEFAULT_CONFIG, search: { candidates: 4, reply: { width: 2, lookahead: 1 } } };
 
 interface Job { a: Theta; b: Theta; seeds: number[]; limit: number }
 
@@ -52,7 +52,12 @@ function play(job: Job): number {
         const who: PlayerId = s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current;
         const a = bots[who](s, who);
         if (!a) break;
-        dispatch(s, a);
+        // вопрос движка с устаревшими вариантами может уронить dispatch — партия считается незаконченной (пол-очка)
+        try {
+          dispatch(s, a);
+        } catch {
+          break;
+        }
       }
       if (s.phase !== 'over' || s.winner === 'draw') score += 0.5;
       else if (s.winner === aSeat) score += 1;
@@ -63,12 +68,16 @@ function play(job: Job): number {
 if (!isMainThread) {
   parentPort!.postMessage(play(workerData as Job));
 } else {
-  const [stepsArg = '150', gamesArg = '88', logArg = 'tune-log.tsv'] = process.argv.slice(2);
+  const [stepsArg = '150', gamesArg = '88', logArg = 'tune-log.tsv', fromArg] = process.argv.slice(2);
   const STEPS = Number(stepsArg);
   const PAIRS = Math.max(1, Math.round(Number(gamesArg) / 2));
   const jobs = Math.max(1, availableParallelism() - 2);
   const R = 2.0; // скорость: сдвиг на шаге ≈ R · c · (разница очков)
   let theta: Theta = PARAMS.map((p) => p.init);
+  if (fromArg) {
+    const last = readFileSync(fromArg, 'utf8').trim().split('\n').pop()!.split('\t');
+    theta = last.slice(2).map(Number);
+  }
   writeFileSync(logArg, ['step', 'score+', ...PARAMS.map((p) => p.name)].join('\t') + '\n');
 
   const runPair = (a: Theta, b: Theta, seeds: number[]) => {

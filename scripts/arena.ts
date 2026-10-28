@@ -23,17 +23,30 @@ const BOTS: Record<string, (seed: number) => BotFn> = {
 for (const l of LEVELS) {
   BOTS[l.id] = (seed) => createAgent({ ...l.config, budgetMs: undefined }, seed);
   BOTS[`${l.id}@time`] = (seed) => createAgent(l.config, seed);
+  BOTS[`${l.id}@randcards`] = (seed) => createAgent({ ...l.config, budgetMs: undefined, randomChoices: true }, seed);
 }
 
-// planner:w=8,c=12,r=4,la=0.6 — планировщик с параметрами (w — луч, c — кандидатов, r — луч ответа, 0 — без ответа)
+// planner:w=8,c=12,r=4,f=2,la=1 — планировщик с параметрами (w — луч, c — кандидатов, r — луч ответа, 0 — без ответа,
+// f — луч своего следующего хода после ответа, 0 — без него)
 function botFactory(name: string): ((seed: number) => BotFn) | undefined {
   if (BOTS[name]) return BOTS[name];
   if (!name.startsWith('planner:')) return undefined;
   const o = Object.fromEntries(name.slice(8).split(',').map((kv) => kv.split('=')));
   const turn = { width: Number(o.w ?? DEFAULT_CONFIG.turn.width), lookahead: Number(o.la ?? DEFAULT_CONFIG.turn.lookahead) };
   const r = Number(o.r ?? DEFAULT_CONFIG.search.reply?.width ?? 0);
-  const search = { candidates: Number(o.c ?? DEFAULT_CONFIG.search.candidates), reply: r > 0 ? { width: r, lookahead: turn.lookahead } : null };
-  return (seed) => createAgent({ ...DEFAULT_CONFIG, turn, search }, seed);
+  const f = Number(o.f ?? 0);
+  const search = { candidates: Number(o.c ?? DEFAULT_CONFIG.search.candidates), reply: r > 0 ? { width: r, lookahead: turn.lookahead } : null, followup: f > 0 ? { width: f, lookahead: turn.lookahead } : undefined };
+  // веса оценки: v1, v2 — ценность квадрата и круга, adv, th, my, ch — advance, threat, myThreat, chase
+  const dw = DEFAULT_CONFIG.weights;
+  const weights = {
+    ...dw,
+    val: [1, Number(o.v1 ?? dw.val[1]), Number(o.v2 ?? dw.val[2])] as [number, number, number],
+    advance: Number(o.adv ?? dw.advance),
+    threat: Number(o.th ?? dw.threat),
+    myThreat: Number(o.my ?? dw.myThreat),
+    chase: Number(o.ch ?? dw.chase),
+  };
+  return (seed) => createAgent({ ...DEFAULT_CONFIG, weights, turn, search }, seed);
 }
 
 interface Job { nameA: string; nameB: string; games: number[]; limit: number }
@@ -46,6 +59,8 @@ function runGames(job: Job): Res {
     const seatOf: [number, number] = g % 2 === 0 ? [0, 1] : [1, 0];
     const fns = [botFactory(job.nameA)!(g * 2 + 1), botFactory(job.nameB)!(g * 2 + 2)];
     const s = createGame(CLASSIC, (g * 2654435761 + 17) | 0, ['A', 'B']);
+    // NOKARMA=1 — партия без карт Кармы: сколько результата решает удача с картами
+    if (process.env.NOKARMA) s.deck = [];
     let steps = 0;
     while (s.phase !== 'over' && s.turn <= job.limit && steps++ < job.limit * 40) {
       const who: PlayerId = s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current;

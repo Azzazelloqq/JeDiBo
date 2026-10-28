@@ -22,12 +22,14 @@ export interface AgentConfig {
   blunder: number;
   /** бюджет на расчёт хода, мс; не задан — расчёт ограничен только шириной поиска (для арены) */
   budgetMs?: number;
+  /** только для арены: отвечать на вопросы карт случайно — проверка, что перебор вариантов что-то даёт */
+  randomChoices?: boolean;
 }
 
 export const DEFAULT_CONFIG: AgentConfig = {
   weights: DEFAULT_WEIGHTS,
-  turn: { width: 8, lookahead: 0.6 },
-  search: { candidates: 6, reply: { width: 2, lookahead: 0.6 } },
+  turn: { width: 8, lookahead: 1 },
+  search: { candidates: 6, reply: { width: 2, lookahead: 1 } },
   temperature: 0,
   blunder: 0,
 };
@@ -57,7 +59,14 @@ export function createAgent(cfg: AgentConfig = DEFAULT_CONFIG, seed = (Math.rand
     if (s.phase !== 'play') return null;
     if (s.pending) {
       plan = null;
-      return s.pending.chooser === me ? choosePending(s, me, cfg.weights) : null;
+      if (s.pending.chooser !== me) return null;
+      if (cfg.randomChoices) {
+        const p = s.pending;
+        const opts: Action[] = p.options.map((o) => ({ type: 'choose', by: me, option: o }));
+        if (p.canSkip) opts.push({ type: 'skip', by: me });
+        return opts[Math.floor(rnd() * opts.length)] ?? null;
+      }
+      return choosePending(s, me, cfg.weights);
     }
     if (s.current !== me) return null;
 
@@ -124,7 +133,8 @@ function choosePending(s: GameState, me: PlayerId, w: Weights): Action | null {
   if (p.canSkip) candidates.push({ type: 'skip', by: me });
   if (candidates.length <= 1) return candidates[0] ?? null;
   const b = new FastBoard(s.mode.size);
-  let best = candidates[0];
+  // null — все варианты сломаны (устаревший вопрос движка): отвечать нечем
+  let best: Action | null = null;
   let bestSc = -Infinity;
   for (const a of candidates) {
     const c = clone(s);
