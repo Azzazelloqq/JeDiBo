@@ -1,0 +1,124 @@
+/* Вариант «а» — «Референс · наш стиль»: раскладки референса (те же классы v-*, что у «б»),
+   но токены, фактуры, кнопки, шрифты и фон — из задачи A (палитра palette.ts, плиты .slab, кнопки .btn).
+   Цвета только из CSS-переменных палитры — обе темы получаются сами. Всё скоуплено под body.ui-a. */
+
+body.ui-a {
+  /* цикл фона меню: 4 приглушённые фазы (setBackgroundPalette cycle), логотип #FF3600 всегда доминирует */
+  --v-frame: var(--concrete-400);
+}
+/* тёмная: тёмный бетон, приглушённые патина / янтарь / сумерки, без кроваво-красного */
+body.ui-a.theme-dark {
+  --a-cycle-1-a: #1c1b19; --a-cycle-1-b: #33312d; --a-cycle-1-c: #6e5a3e;
+  --a-cycle-2-a: #141c1b; --a-cycle-2-b: #24302e; --a-cycle-2-c: #3f6660;
+  --a-cycle-3-a: #1e1810; --a-cycle-3-b: #352a1c; --a-cycle-3-c: #8a6a35;
+  --a-cycle-4-a: #18171d; --a-cycle-4-b: #2a2833; --a-cycle-4-c: #6b4a3d;
+}
+/* светлая — набор из задачи: утро бетона, патина, янтарь Кармы, сумерки */
+body.ui-a.theme-light {
+  --a-cycle-1-a: #4a4740; --a-cycle-1-b: #7d786f; --a-cycle-1-c: #d9a066;
+  --a-cycle-2-a: #2f4441; --a-cycle-2-b: #4f6f69; --a-cycle-2-c: #8cc4b9;
+  --a-cycle-3-a: #4a3a26; --a-cycle-3-b: #7a5a35; --a-cycle-3-c: #f0b45a;
+  --a-cycle-4-a: #2e2d3a; --a-cycle-4-b: #4b4860; --a-cycle-4-c: #ff7a45;
+  --v-frame: var(--concrete-200);
+}
+
+/* ── страница и панель ──────────────────────────────────────────────────── */
+body.ui-a .v-page { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 30px; }
+body.ui-a .v-panel { width: min(1280px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 26px 34px 24px; }
+body.ui-a .v-head.page-head { flex-direction: column; align-items: flex-start; gap: 8px; padding-bottom: 14px; margin-bottom: 18px; border-bottom: 3px dashed color-mix(in srgb, var(--void) 25%, transparent); }
+body.ui-a .v-head.page-head h1 { font-size: 40px; }
+body.ui-a .v-sub { font-family: var(--f-pix); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+body.ui-a .v-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; flex: 1; min-height: 0; }
+body.ui-a .v-col { display: flex; flex-direction: column; gap: 18px; }
+body.ui-a .v-foot { display: flex; gap: 14px; margin-top: 22px; }
+body.ui-a .v-foot-center { justify-content: center; }
+body.ui-a .v-seg { display: flex; gap: 10px; }
+body.ui-a .v-seg-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 6px 10px; }
+body.ui-a .btn.v-sel { --c: var(--brand-700); --c-hi: var(--brand-400); --c-edge: var(--brand-800); color: var(--bone); text-shadow: 2px 2px 0 var(--brand-800); }
+body.ui-a .btn.v-wide { min-width: 340px; }
+
+/* секции: «утопленная» ниша в плите, заголовок — как .h-label */
+body.ui-a .vsec { padding: 12px 12px 8px; border: 2px solid var(--void); background: color-mix(in srgb, var(--void) 9%, transparent); box-shadow: inset 0 3px 0 color-mix(in srgb, var(--void) 18%, transparent); }
+body.ui-a .vsec-head { display: flex; align-items: center; gap: 10px; margin: 0 6px 8px; font-family: var(--f-pix); font-size: 15px; letter-spacing: 0.16em; color: var(--muted); }
+body.ui-a .vsec-head::before { content: ''; width: 10px; height: 10px; background: var(--brand-500); flex: none; }
+body.ui-a .vsec-head::after { content: ''; flex: 1; border-bottom: 3px dotted color-mix(in srgb, var(--void) 30%, transparent); transform: translateY(3px); }
+body.ui-a .vrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 8px; min-height: 52px; }
+body.ui-a .vrow + .vrow { border-top: 2px solid color-mix(in srgb, var(--void) 14%, transparent); }
+body.ui-a .vrow-label { font-family: var(--f-pix); font-size: 18px; }
+body.ui-a .vrow-note { margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+/* тумблер-плита: паз из базальта, ползунок — бетонный камень; «вкл.» — патина */
+body.ui-a .vtoggle {
+  flex: none; position: relative; width: 66px; height: 32px; cursor: pointer;
+  border: 3px solid var(--void); background: var(--slab-700); box-shadow: inset 0 3px 0 color-mix(in srgb, var(--void) 45%, transparent);
+}
+body.ui-a .vtoggle.on { background: var(--patina-500); }
+body.ui-a .vtoggle-thumb {
+  position: absolute; top: 2px; left: 3px; width: 22px; height: 22px;
+  background: linear-gradient(var(--concrete-100) 0 3px, var(--concrete-300) 3px calc(100% - 3px), var(--concrete-600) calc(100% - 3px));
+  border: 2px solid var(--void); transition: left 0.12s steps(3);
+}
+body.ui-a .vtoggle.on .vtoggle-thumb { left: 35px; }
+body.ui-a .vtoggle:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 3px; }
+
+/* ── меню ───────────────────────────────────────────────────────────────── */
+body.ui-a .v-menu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; }
+body.ui-a .vframe-host { position: absolute; inset: 0; pointer-events: none; }
+body.ui-a .vframe { position: absolute; background-repeat: repeat; image-rendering: pixelated; opacity: 0.55; }
+body.ui-a .vframe-top { top: 6px; left: 6px; right: 6px; height: var(--fs); }
+body.ui-a .vframe-bottom { bottom: 6px; left: 6px; right: 6px; height: var(--fs); }
+body.ui-a .vframe-left { left: 6px; top: calc(6px + var(--fs)); bottom: calc(6px + var(--fs)); width: var(--fs); }
+body.ui-a .vframe-right { right: 6px; top: calc(6px + var(--fs)); bottom: calc(6px + var(--fs)); width: var(--fs); }
+body.ui-a .vm-version { position: absolute; top: 40px; right: 58px; font-family: var(--f-pix); font-size: 18px; color: var(--bone); text-shadow: 2px 2px 0 var(--void); }
+body.ui-a .vm-logo { margin-top: 7vh; animation: logoBob 4.5s ease-in-out infinite; }
+body.ui-a .vm-panel { margin: auto 0; width: fit-content; display: flex; flex-direction: column; gap: 18px; padding: 18px; }
+body.ui-a .vm-bar { display: grid; grid-template-columns: repeat(4, 136px); gap: 12px; }
+body.ui-a .vm-icon {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 10px 6px 8px;
+  font-family: var(--f-pix); font-size: 16px; text-transform: uppercase; color: var(--bone); text-shadow: 2px 2px 0 var(--void);
+  background: linear-gradient(var(--slab-500) 0 3px, var(--slab-700) 3px); border: 3px solid var(--void);
+  box-shadow: 0 5px 0 var(--void), 0 8px 0 color-mix(in srgb, var(--void) 40%, transparent);
+  transition: transform 0.12s var(--bounce), filter 0.12s;
+}
+body.ui-a .vm-icon:hover, body.ui-a .vm-icon:focus-visible { transform: translateY(-3px) rotate(-1deg); filter: brightness(1.12); outline: none; }
+body.ui-a .vm-icon:focus-visible { box-shadow: 0 0 0 3px var(--brand-500), 0 5px 0 var(--void); }
+
+/* кнопка «Играть» в стиле A: плита бренда с фактурой бетона и стяжками */
+body.ui-a .vm-play {
+  position: relative; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 26px; height: 116px;
+  border: 3px solid var(--void);
+  background: linear-gradient(var(--brand-400) 0 5px, transparent 5px), var(--tex-slab), var(--brand-700);
+  background-blend-mode: normal, soft-light, normal;
+  box-shadow: inset 0 -6px 0 var(--brand-800), 0 6px 0 var(--void), 0 10px 0 color-mix(in srgb, var(--void) 40%, transparent);
+  transition: transform 0.12s var(--bounce), filter 0.12s;
+}
+body.ui-a .vm-play:hover { transform: translateY(-3px) rotate(-0.5deg); filter: brightness(1.08); }
+body.ui-a .vm-play:active { transform: translateY(5px); box-shadow: inset 0 -6px 0 var(--brand-800), 0 1px 0 var(--void); }
+body.ui-a .vm-play:focus-visible { outline: 3px solid var(--amber-300); outline-offset: 4px; }
+body.ui-a .vm-play-text { position: relative; margin-top: -6px; font-family: var(--f-pix); font-weight: 700; font-size: 56px; letter-spacing: 0.08em; color: var(--bone); text-shadow: 4px 4px 0 var(--void); }
+body.ui-a .vm-play-piece { position: relative; width: 80px; height: 80px; margin-top: -10px; filter: drop-shadow(0 4px 0 color-mix(in srgb, var(--void) 60%, transparent)); }
+body.ui-a .vm-play-tri { display: block; }
+body.ui-a .vm-play:hover .vm-play-piece { animation: playHop 0.5s steps(4) infinite; }
+body.ui-a .vm-play-sheen {
+  position: absolute; top: 0; bottom: 0; left: -30%; width: 22%; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0 25%, color-mix(in srgb, var(--bone) 22%, transparent) 25% 55%, transparent 55%);
+  transform: skewX(-20deg); animation: playSheen 4.5s steps(18) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.ui-a .vm-play-sheen, body.ui-a .vm-play:hover .vm-play-piece { animation: none; }
+}
+
+/* выбор режима: плитки меню A (.mode-tile.slab) в сетке из трёх */
+body.ui-a .vms-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; padding: 8px 0; }
+body.ui-a .vm-tile.mode-tile { width: auto; animation: none; }
+body.ui-a .vm-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; position: relative; }
+body.ui-a .vm-tile .vm-tile-art canvas { width: 100% !important; height: auto !important; border: 3px solid var(--void); display: block; }
+body.ui-a .vm-tile-art { width: 100%; }
+body.ui-a .vm-tile-title { font-family: var(--f-pix); font-weight: 700; font-size: 22px; text-transform: uppercase; margin-top: 4px; }
+body.ui-a .vm-tile-sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+body.ui-a .vm-lock {
+  position: absolute; top: 12px; right: -8px; transform: rotate(6deg); padding: 3px 10px;
+  font-family: var(--f-pix); font-size: 14px; text-transform: uppercase;
+  background: var(--amber-500); color: var(--void); border: 2px solid var(--void);
+}

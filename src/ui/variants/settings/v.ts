@@ -1,13 +1,12 @@
-// Настройки, вариант «б»: панель референса, две колонки секций, изменения сохраняются сразу.
+// Настройки, варианты «а» и «б»: панель референса, две колонки секций, изменения сохраняются сразу.
 import { setVolume } from '../../../audio/sfx';
 import { getSettings, saveSettings, type Settings } from '../../../profile/profile';
-import { setMood } from '../../../render/background';
 import { THEME } from '../../../render/palette';
 import { btn, h } from '../../dom';
 import { applySettings } from '../../screens/settings';
 import { pixelSlider } from '../../widgets';
 import { open } from '../registry';
-import { arrowNav, section, setRow, swirlBackground, toggleEl } from '../shared';
+import { A, arrowNav, section, setRow, toggleEl, variantBackground, type Look } from '../shared';
 
 const SPEEDS = [1, 1.5, 2];
 
@@ -38,28 +37,27 @@ export function settingsModel(rerender: () => void) {
   return { set, setTheme, volume, speed };
 }
 
-export function settingsB(root: HTMLElement) {
-  setMood('menu');
-  swirlBackground('inner');
+export function settingsV(root: HTMLElement, v: Look) {
+  variantBackground(v, 'inner');
   let off: (() => void) | undefined;
   const render = () => {
     const s = getSettings();
     const m = settingsModel(render);
-    const themeBtn = (t: 'dark' | 'light', l: string) => btn(l, () => m.setTheme(t), THEME.scheme === t ? 'b-sel' : '');
+    const themeBtn = (t: 'dark' | 'light', l: string) => btn(l, () => m.setTheme(t), THEME.scheme === t ? 'v-sel' : '');
     root.replaceChildren(
       h(
         'div',
-        { class: 'b-page' },
+        { class: 'v-page' },
         h(
           'div',
-          { class: 'b-panel b-settings' },
-          h('div', { class: 'b-head' }, h('h1', { class: 'b-title' }, 'НАСТРОЙКИ'), h('div', { class: 'b-sub' }, 'ИЗМЕНЕНИЯ СОХРАНЯЮТСЯ СРАЗУ')),
+          { class: `v-panel v-settings${A(v, 'slab')}` },
+          h('div', { class: `v-head${A(v, 'page-head')}` }, h('h1', { class: 'v-title' }, 'НАСТРОЙКИ'), h('div', { class: 'v-sub' }, 'ИЗМЕНЕНИЯ СОХРАНЯЮТСЯ СРАЗУ')),
           h(
             'div',
-            { class: 'b-cols' },
+            { class: 'v-cols' },
             h(
               'div',
-              { class: 'b-col' },
+              { class: 'v-col' },
               section('ЗВУК', setRow('Общая громкость', m.volume())),
               section(
                 'КАРТИНКА',
@@ -69,13 +67,13 @@ export function settingsB(root: HTMLElement) {
             ),
             h(
               'div',
-              { class: 'b-col' },
+              { class: 'v-col' },
               section('ДОСТУПНОСТЬ', setRow('Тряска экрана', toggleEl(s.shake, (v) => m.set({ shake: v }), 'Тряска экрана'), 'Экран вздрагивает при взятиях и ударах Кармы.')),
               // тема — как «ПАЛИТРА» на референсе: две большие кнопки, выбранная синяя
-              section('ТЕМА', h('div', { class: 'b-seg-wide' }, themeBtn('dark', 'ТЁМНАЯ'), themeBtn('light', 'СВЕТЛАЯ'))),
+              section('ТЕМА', h('div', { class: 'v-seg-wide' }, themeBtn('dark', 'ТЁМНАЯ'), themeBtn('light', 'СВЕТЛАЯ'))),
             ),
           ),
-          h('div', { class: 'b-foot b-foot-center' }, btn('НАЗАД', () => open('menu'), 'b-wide')),
+          h('div', { class: 'v-foot v-foot-center' }, btn('НАЗАД', () => open('menu'), 'v-wide')),
         ),
       ),
     );

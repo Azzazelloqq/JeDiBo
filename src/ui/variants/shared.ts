@@ -1,7 +1,7 @@
 // Общие виджеты вариантов «а» и «б»: тумблер, секции настроек, пиксельные иконки кнопок меню,
 // иллюстрация плитки «Классика», рамка из фигур ○□△•, навигация стрелками.
 import { Rank } from '../../core/types';
-import { setBackgroundPalette, setBackgroundStyle } from '../../render/background';
+import { setBackgroundPalette, setBackgroundStyle, setMood } from '../../render/background';
 import { cardFace } from '../../render/cardArt';
 import { PAL } from '../../render/palette';
 import { fromAscii, makeCanvas, outline, type Canvas } from '../../render/pixel';
@@ -125,12 +125,25 @@ export function shapeFrame(color: string, scale = 3) {
   return h('div', { class: 'vframe-host' }, st('top', hz), st('bottom', hz), st('left', vt), st('right', vt));
 }
 
-/** Пиксельный вихрь варианта «б»: цвета берутся из CSS-переменных темы (--b-bg-<kind>-a/b/c). */
-export function swirlBackground(kind: 'menu' | 'inner') {
+/** Вид варианта: «а» — раскладка референса в стиле A, «б» — референс 1:1. */
+export type Look = 'a' | 'b';
+/** Классы компонентов A, которые добавляются к разметке только в варианте «а» (плита, базальт, плитка меню…). */
+export const A = (v: Look, cls: string) => (v === 'a' ? ` ${cls}` : '');
+
+/** Фон экрана варианта. «б» — пиксельный вихрь, цвета из CSS-переменных темы (--b-bg-<kind>-a/b/c).
+ *  «а» — дым A; в меню — медленный цикл приглушённых палитр (--a-cycle-<1..4>-a/b/c в a.css), логотип доминирует. */
+export function variantBackground(v: Look, kind: 'menu' | 'inner') {
+  setMood('menu');
   const cs = getComputedStyle(document.body);
-  const v = (k: string) => cs.getPropertyValue(`--b-bg-${kind}-${k}`).trim();
-  setBackgroundStyle('swirl');
-  setBackgroundPalette({ a: v('a'), b: v('b'), c: v('c') });
+  const val = (n: string) => cs.getPropertyValue(n).trim();
+  if (v === 'b') {
+    setBackgroundStyle('swirl');
+    setBackgroundPalette({ a: val(`--b-bg-${kind}-a`), b: val(`--b-bg-${kind}-b`), c: val(`--b-bg-${kind}-c`) });
+  } else if (kind === 'menu') {
+    const cycle = [1, 2, 3, 4].map((i) => ['a', 'b', 'c'].map((k) => val(`--a-cycle-${i}-${k}`)));
+    // по 30–45 с на фазу: полный круг из 4 фаз — 160 с
+    if (cycle.every((c) => c.every(Boolean))) setBackgroundPalette({ cycle, period: 160000 });
+  }
 }
 export const cssVar = (name: string) => getComputedStyle(document.body).getPropertyValue(name).trim();
 

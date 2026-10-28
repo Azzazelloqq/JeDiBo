@@ -9,9 +9,9 @@ import { menuScreen } from '../screens/menu';
 import { profileScreen } from '../screens/profile';
 import { rulesScreen } from '../screens/rules';
 import { settingsScreen } from '../screens/settings';
-import { menuB } from './menu/b';
-import { modeSelectB } from './modeSelect/b';
-import { settingsB } from './settings/b';
+import { menuV } from './menu/v';
+import { modeSelectV } from './modeSelect/v';
+import { settingsV } from './settings/v';
 
 /** а — «Референс · наш стиль», б — «Референс 1:1», в — «Текущий» (утверждённый дизайн A). */
 export type VariantId = 'a' | 'b' | 'c';
@@ -34,12 +34,12 @@ export const AVAILABLE: Record<ScreenId, VariantId[]> = {
 type Impl = (root: HTMLElement, arg?: unknown) => (() => void) | void;
 /** Реализации, которые уже есть. Если варианта ещё нет — откат на «в» (или первый существующий). */
 const IMPL: Partial<Record<ScreenId, Partial<Record<VariantId, Impl>>>> = {
-  menu: { b: menuB, c: menuScreen },
-  modeSelect: { b: modeSelectB },
+  menu: { a: (r) => menuV(r, 'a'), b: (r) => menuV(r, 'b'), c: menuScreen },
+  modeSelect: { a: (r) => modeSelectV(r, 'a'), b: (r) => modeSelectV(r, 'b') },
   chronicle: { c: profileScreen },
   codex: { c: codexScreen },
   rules: { c: rulesScreen },
-  settings: { b: settingsB, c: settingsScreen },
+  settings: { a: (r) => settingsV(r, 'a'), b: (r) => settingsV(r, 'b'), c: settingsScreen },
   game: { c: (r, kind) => gameScreen(r, (kind as GameKind) ?? 'bot') },
 };
 

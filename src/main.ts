@@ -8,6 +8,7 @@ import { go } from './ui/app';
 import { initialScreen, screen } from './ui/variants/registry';
 import { mountSwitcher } from './ui/variants/switcher';
 import './styles/variants/switcher.css';
+import './styles/variants/a.css';
 import './styles/variants/b.css';
 import './styles/variants/cards.css';
 import { preloadIllustrations } from './render/cardArt';

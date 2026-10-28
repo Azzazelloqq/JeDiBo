@@ -5,7 +5,8 @@ import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
 import { anyLegalAction, canAct, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
 import { Rank, key, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
-import { getProfile, recordMatch } from '../../profile/profile';
+import { getProfile, recordMatch, type MatchRecord } from '../../profile/profile';
+import { checkEmblems } from '../../profile/emblems';
 import { setMood } from '../../render/background';
 import { PAL } from '../../render/palette';
 import { BoardView } from '../../render/board';
@@ -686,10 +687,21 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     setMood(winner === 'draw' ? 'game' : kind === 'bot' && !meWon ? 'lose' : 'win');
     (winner === 'draw' || (kind === 'bot' && !meWon) ? sfx.lose : sfx.win)();
     const result = winner === 'draw' ? 'draw' : meWon ? 'win' : 'loss';
-    const delta = recordMatch(
-      { opponent: names[1], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
-      { captures: match.stats.captures[0], cards: match.stats.cards[0] },
-    );
+    const st = match.stats;
+    const rec = {
+      opponent: names[1], kind, result: (kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result) as MatchRecord['result'], turns: s.turn,
+      // расширенная история для Летописи
+      mode: 'classic' as const, ownTurns: s.players[0].ownTurns, karmaReceived: st.karma[0], piecesLost: st.lost[0], piecesTotal: 21,
+      promotions: st.promotions[0], cardsPlayed: st.cards[0],
+    };
+    const delta = recordMatch(rec, { captures: st.captures[0], cards: st.cards[0] });
+    const fresh = checkEmblems({
+      rec: { ...rec, delta, at: Date.now() },
+      piecesLeft: s.pieces.filter((pc) => pc.owner === 0).length,
+      fatalPlayed: st.fatal[0],
+      squarePromotions: st.squarePromotions[0],
+    });
+    fresh.forEach((em, i) => setTimeout(() => toast(`Новая эмблема: ${em.name}`, 'amber'), 900 + i * 700));
     const deltaEl = h('div', { class: `delta ${delta >= 0 ? 'good' : 'bad'}` }, '0');
     const ov = h(
       'div',
