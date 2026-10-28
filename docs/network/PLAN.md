@@ -42,13 +42,14 @@
 
 ## Этап 2. `Match` в сетевом режиме (≈1 день)
 
-- [ ] `MatchConfig.net = { transport, seat }`; контроллер соперника — `'remote'`.
-- [ ] `Match.fromLog(seed, names, log)` — восстановление без событий для UI.
-- [ ] Локальный `submit` → `transport.send`, флаг `awaitingServer`; входящие `action` → очередь → `dispatch` →
+- [x] `MatchConfig.net = roomClient`; контроллер соперника — `'remote'`.
+- [x] Восстановление: `RoomClient` собирает состояние из `start` (seed + лог), `Match` копирует его на месте
+      и зовёт `onReset` (вместо отдельного `Match.fromLog`).
+- [x] Локальный `submit` → `roomClient.submit` / `place`, `isBusy` учитывает ожидание ответа комнаты; входящие `action` → очередь → `dispatch` →
       `onEvents`; сверка хэша; `reject` → `onError`; `resync` при рассинхроне; недопустимое действие от
       комнаты → ошибка `cheat`.
-- [ ] Часы из `ClockSnap` с интерполяцией; в сети `tick()` не шлёт `timeout`, `setPaused` не трогает часы.
-- [ ] `netsim` переводится на настоящий `Match` (без DOM: `onEvents` — no-op).
+- [x] Часы из `ClockSnap` с интерполяцией; в сети `tick()` не шлёт `timeout`, `setPaused` не трогает часы.
+- [x] `netsim` переводится на настоящий `Match` (без DOM: `onEvents` — no-op).
 
 **Готово, когда:** `netsim` проходит через `Match`; бот и хотсит в браузере работают как раньше.
 

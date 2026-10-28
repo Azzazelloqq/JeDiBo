@@ -39,7 +39,7 @@ export class RoomClient {
   private clocksAt = 0;
   /** комната прислала недопустимое — дальше не применяем ничего */
   broken = false;
-  on: RoomClientEvents = {};
+  private listeners: RoomClientEvents[] = [];
 
   private t!: Transport<ClientMsg, ServerMsg>;
   private chain: Promise<void> = Promise.resolve();
@@ -63,11 +63,23 @@ export class RoomClient {
     this.attach(transport);
   }
 
+  /** Подписка на события; возвращает отписку. Слушателей может быть несколько (Match, экран). */
+  listen(l: RoomClientEvents): () => void {
+    this.listeners.push(l);
+    return () => {
+      this.listeners = this.listeners.filter((x) => x !== l);
+    };
+  }
+
+  private emit<K extends keyof RoomClientEvents>(k: K, ...args: Parameters<NonNullable<RoomClientEvents[K]>>) {
+    for (const l of [...this.listeners]) (l[k] as ((...a: unknown[]) => void) | undefined)?.(...args);
+  }
+
   /** Подключить новый транспорт (переподключение) и представиться заново. */
   attach(transport: Transport<ClientMsg, ServerMsg>) {
     this.t = transport;
     transport.onMessage((m) => {
-      this.chain = this.chain.then(() => this.handle(m)).catch((e) => this.on.error?.('badMsg', String(e)));
+      this.chain = this.chain.then(() => this.handle(m)).catch((e) => this.emit('error', 'badMsg', String(e)));
     });
   }
 
@@ -147,7 +159,7 @@ export class RoomClient {
 
   private cheat(text: string) {
     this.broken = true;
-    this.on.error?.('cheat', text);
+    this.emit('error', 'cheat', text);
   }
 
   private setClocks(c: ClockSnap) {
@@ -164,12 +176,12 @@ export class RoomClient {
         this.seat = m.seat;
         this.status = m.status;
         this.opponent = m.opponent;
-        this.on.welcome?.(m.seat, m.status);
+        this.emit('welcome', m.seat, m.status);
         return;
       case 'opponent':
         this.opponent = m.info;
         this.opponentConnected = m.connected;
-        this.on.opponent?.(m.info, m.connected);
+        this.emit('opponent', m.info, m.connected);
         return;
       case 'seedCommit':
         this.seedHash = m.hash;
@@ -186,7 +198,7 @@ export class RoomClient {
       case 'start':
         return this.start(m);
       case 'placeCommitted':
-        this.on.placeCommitted?.(m.seat);
+        this.emit('placeCommitted', m.seat);
         return;
       case 'placeCommits':
         this.commits = [m.hashes[0], m.hashes[1]];
@@ -201,20 +213,20 @@ export class RoomClient {
         return this.action(m);
       case 'reject':
         if (m.cseq === this.inflight) this.inflight = null;
-        this.on.reject?.(m.error, m.cseq);
+        this.emit('reject', m.error, m.cseq);
         return;
       case 'rematch':
-        this.on.rematch?.(m.seat);
+        this.emit('rematch', m.seat);
         return;
       case 'abandoned':
         this.status = 'abandoned';
-        this.on.abandoned?.();
+        this.emit('abandoned');
         return;
       case 'error':
-        this.on.error?.(m.code, m.text);
+        this.emit('error', m.code, m.text);
         return;
       case 'pong':
-        this.on.pong?.(Date.now() - m.at);
+        this.emit('pong', Date.now() - m.at);
         return;
     }
   }
@@ -244,7 +256,7 @@ export class RoomClient {
     this.inflight = null;
     this.status = s.phase === 'placement' ? 'placement' : s.phase === 'play' ? 'play' : 'over';
     this.setClocks(m.clocks);
-    this.on.start?.(s);
+    this.emit('start', s);
   }
 
   private async action(m: Extract<ServerMsg, { t: 'action' }>) {
@@ -268,9 +280,9 @@ export class RoomClient {
     this.setClocks(m.clocks);
     this.status = s.phase === 'over' ? 'over' : s.phase === 'play' ? 'play' : this.status;
     if (stateHash(s) !== m.hash) {
-      this.on.error?.('desync', 'Рассинхрон состояния — восстанавливаемся');
+      this.emit('error', 'desync', 'Рассинхрон состояния — восстанавливаемся');
       return this.resync();
     }
-    this.on.action?.(a, r.events, s);
+    this.emit('action', a, r.events, s);
   }
 }

@@ -130,7 +130,13 @@ interface RoomData {
 
 ## 6. Клиент: `Match` в сетевом режиме
 
-- `MatchConfig.net = { transport, seat }`. Контроллеры: `[seat] = 'human'`, другое — `'remote'`.
+- `MatchConfig.net = roomClient` (уже получивший `start`). Контроллеры: `[seat] = 'human'` (или `'bot'` в тестах),
+  другое — `'remote'`. `Match` держит **свою копию** `GameState` и применяет подтверждённые действия из
+  `RoomClient` по одному, дожидаясь анимаций, — как офлайн. Состояние клиента идёт впереди, `Match` — за анимацией.
+- Переподключение / resync / реванш: `Match` заменяет **содержимое** своего `state` на месте (объект тот же —
+  экран держит ссылку) и вызывает `onReset(state)`: перерисовать без анимаций.
+- У `RoomClient` несколько слушателей (`listen()`): `Match` подписан на `start/action/reject`, экран — на
+  `opponent/error/rematch/abandoned`.
 - Локальный `submit(a)` не применяется, а уходит в `transport.send({ t: 'submit', action: a, cseq })`;
   ввод блокируется до ответа (`awaitingServer`, как `isBusy`).
 - Входящий `action` → та же очередь → `dispatch` → `onEvents`: анимации работают как есть.
@@ -138,7 +144,6 @@ interface RoomData {
   состояние, перерисовать доску без анимаций.
 - Часы — из снимков `ClockSnap`, `tick()` только интерполирует. `setPaused` на часы в сети не влияет.
 - `reject` → `onError(msg)` (тот же тост).
-- `Match.fromLog(seed, names, log)` — восстановление при старте и переподключении.
 - Бот и хотсит не меняются: сетевой путь включается только при наличии `cfg.net`.
 
 ## 7. Протокол

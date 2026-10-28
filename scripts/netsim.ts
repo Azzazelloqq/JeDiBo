@@ -10,8 +10,9 @@ import { RoomClient } from '../src/net/client';
 import { commit, commitHash, randomSalt } from '../src/net/commit';
 import { stateHash } from '../src/net/hash';
 import { LoopbackTransport } from '../src/net/loopback';
-import { decodeServerMsg, PROTOCOL_VERSION, type ClientMsg, type ClockSnap, type Layout, type ServerMsg } from '../src/net/protocol';
+import { decodeServerMsg, PROTOCOL_VERSION, type ClientMsg, type ClockSnap, type ServerMsg } from '../src/net/protocol';
 import { RoomHost } from '../src/net/roomHost';
+import { Match } from '../src/session/match';
 import type { Transport } from '../src/net/transport';
 
 const N = Number(process.argv[2] ?? 30);
@@ -152,7 +153,7 @@ async function clientChecks() {
     const t = new FakeTransport();
     const c = new RoomClient(t, me('client-seed-test'));
     const errors: string[] = [];
-    c.on.error = (code) => errors.push(code);
+    c.listen({ error: (code) => errors.push(code) });
     t.push({ t: 'welcome', seat: 1, code: 'X', status: 'waiting', opponent: null });
     const salt = randomSalt();
     t.push({ t: 'seedCommit', hash: await commitHash(5, salt) });
@@ -166,7 +167,7 @@ async function clientChecks() {
     const t = new FakeTransport();
     const c = new RoomClient(t, me('client-seed-test2'));
     const errors: string[] = [];
-    c.on.error = (code) => errors.push(code);
+    c.listen({ error: (code) => errors.push(code) });
     t.push({ t: 'welcome', seat: 1, code: 'X', status: 'waiting', opponent: null });
     const salt = randomSalt();
     t.push({ t: 'seedCommit', hash: await commitHash(5, salt) });
@@ -181,7 +182,7 @@ async function clientChecks() {
     const t = new FakeTransport();
     const c = new RoomClient(t, me('client-move-test'));
     const errors: string[] = [];
-    c.on.error = (code) => errors.push(code);
+    c.listen({ error: (code) => errors.push(code) });
     t.push({ t: 'welcome', seat: 0, code: 'X', status: 'placement', opponent: null });
     t.push({ t: 'start', mode: CLASSIC, seed: 7, names: ['A', 'B'], log: [], clocks: CLK });
     t.push({ t: 'action', seq: 1, action: { type: 'endTurn', by: 1 }, hash: 0, clocks: CLK });
@@ -192,7 +193,7 @@ async function clientChecks() {
     const t = new FakeTransport();
     const c = new RoomClient(t, me('client-place-test'));
     const errors: string[] = [];
-    c.on.error = (code) => errors.push(code);
+    c.listen({ error: (code) => errors.push(code) });
     t.push({ t: 'welcome', seat: 0, code: 'X', status: 'placement', opponent: null });
     t.push({ t: 'start', mode: CLASSIC, seed: 9, names: ['A', 'B'], log: [], clocks: CLK });
     await sleep(5);
@@ -223,6 +224,8 @@ const SCENARIOS: Scenario[] = process.env.SC ? (process.env.SC.split(',') as Sce
 
 interface Bot {
   c: RoomClient;
+  /** настоящая сессия партии поверх клиента: бот ходит через неё, как ходил бы UI */
+  m: Match | null;
   t: LoopbackTransport;
   alive: boolean;
   errors: string[];
@@ -238,44 +241,35 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
   const delay = sc === 'plain' ? undefined : () => (Math.random() < 0.3 ? Math.random() * 4 : 0);
   const bots: Bot[] = [];
 
-  const kick = (b: Bot) => setTimeout(() => step(b), 0);
-  const wire = (b: Bot) => {
-    b.c.on = {
-      start: () => kick(b),
-      action: () => kick(b),
-      reject: (e) => {
-        b.rejects.push(e);
-        kick(b);
-      },
-      error: (code, text) => b.errors.push(`${code}: ${text}`),
-    };
+  const botAct = (s: GameState, p: PlayerId): Action | null => {
+    if (s.phase === 'play') {
+      if (sc === 'timeout' && Math.random() < 0.2) return null; // «задумался»: пусть сработают часы комнаты
+      // боты играют долго (в среднем ~600 ходов) — для проверки сети хватит 300
+      if (s.turn > 300) return { type: 'resign', by: p };
+    }
+    return botAction(s, p);
   };
   for (const i of [0, 1]) {
     const t = new LoopbackTransport(host, { delay });
-    const b: Bot = { c: new RoomClient(t, me(`token-${g}-${i}-xxxx`)), t, alive: true, errors: [], rejects: [] };
-    wire(b);
+    const b: Bot = { c: new RoomClient(t, me(`token-${g}-${i}-xxxx`)), m: null, t, alive: true, errors: [], rejects: [] };
+    b.c.listen({
+      // Match создаётся по первому start, как это будет делать экран партии
+      start: (st) => {
+        if (b.m || b.c.seat === null) return;
+        const seat = b.c.seat;
+        b.m = new Match({
+          names: [st.players[0].name, st.players[1].name],
+          controllers: seat === 0 ? ['bot', 'remote'] : ['remote', 'bot'],
+          net: b.c,
+          botDelay: 0,
+          botAct,
+        });
+        b.m.start();
+      },
+      reject: (e) => b.rejects.push(e),
+      error: (code, text) => b.errors.push(`${code}: ${text}`),
+    });
     bots.push(b);
-  }
-
-  function step(b: Bot) {
-    const c = b.c;
-    const s = c.state;
-    if (!b.alive || !s || c.seat === null || c.broken) return;
-    if (s.phase === 'placement') {
-      if (!s.players[c.seat].placed && !c.placeCommitted) void c.place((botPlacement(s, c.seat) as Extract<Action, { type: 'place' }>).layout as Layout);
-      return;
-    }
-    if (s.phase !== 'play' || c.awaiting) return;
-    const actor = s.pending ? s.pending.chooser : s.current;
-    if (actor !== c.seat) return;
-    if (sc === 'timeout' && Math.random() < 0.2) return; // «задумался»: пусть сработают часы комнаты
-    // боты играют долго (в среднем ~600 ходов) — для проверки сети хватит 300
-    if (s.turn > 300) {
-      c.submit({ type: 'resign', by: c.seat });
-      return;
-    }
-    const a = botAction(s, c.seat);
-    if (a) c.submit(a);
   }
 
   // «гость» — тот, кто сел на место 1 (при задержках hello бота 1 может прийти первым)
@@ -320,6 +314,7 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
       if (s.phase !== 'play' || s.turn < leaveAt) return void setTimeout(disrupt, 5);
       guest.t.drop();
       guest.alive = false;
+      guest.m?.stop();
       disruptions++;
     }
   };
@@ -337,13 +332,13 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
     if (st === 'over' && rs) {
       const h = stateHash(rs);
       const live = bots.filter((b) => b.alive);
-      if (live.every((b) => b.c.state && stateHash(b.c.state) === h)) break;
+      if (live.every((b) => b.m && !b.m.isBusy && stateHash(b.m.state) === h && b.c.state && stateHash(b.c.state) === h)) break;
     }
     if (st === 'abandoned') break;
     if (Date.now() > deadline) {
       const actor = rs ? (rs.pending ? `выбор ${rs.pending.chooser} (${rs.pending.source})` : `ход ${rs.current}`) : '-';
       const cl = bots
-        .map((b) => `[seat ${b.c.seat} alive=${b.alive} open=${b.t.isOpen} awaiting=${b.c.awaiting} broken=${b.c.broken} phase=${b.c.state?.phase} sync=${b.c.state ? stateHash(b.c.state) === stateHash(rs!) : '-'} applied=${b.c.appliedSeq}/${host.room.snapshot().log.length} err=${b.errors.length} rej=${b.rejects.join('|')}]`)
+        .map((b) => `[seat ${b.c.seat} alive=${b.alive} open=${b.t.isOpen} awaiting=${b.c.awaiting} broken=${b.c.broken} phase=${b.c.state?.phase} sync=${b.c.state ? stateHash(b.c.state) === stateHash(rs!) : '-'} match=${b.m ? `${stateHash(b.m.state) === stateHash(rs!)}/busy=${b.m.isBusy}` : '-'} applied=${b.c.appliedSeq}/${host.room.snapshot().log.length} err=${b.errors.length} rej=${b.rejects.join('|')}]`)
         .join(' ');
       why = `не завершилась: статус ${st}, ход ${rs?.turn}, ${actor}; ${cl}
     гость: ${bots.find((b) => b.c.seat === 1)?.c.trace.join(' ')}
@@ -352,7 +347,10 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
     }
   }
   host.dispose();
-  for (const b of bots) b.t.close();
+  for (const b of bots) {
+    b.m?.stop();
+    b.t.close();
+  }
 
   const rs = host.room.state;
   const errs = bots.flatMap((b) => b.errors);
