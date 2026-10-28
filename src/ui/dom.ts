@@ -21,7 +21,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
 /** Кнопка-«плита» со звуком и случайным покачиванием на ховере. */
 export function btn(label: string | Node, onClick: () => void, cls = 'btn-stone', extra: Props = {}) {
   const b = h('button', { class: `btn ${cls}`, ...extra }, label);
-  b.style.setProperty('--wob', `${(Math.random() - 0.5) * 3}deg`);
+  b.style.setProperty('--wob', `${(Math.random() - 0.5) * 1.5}deg`);
   b.addEventListener('mouseenter', () => !b.disabled && sfx.hover());
   b.addEventListener('click', () => {
     if (b.disabled) return;
@@ -42,7 +42,7 @@ export function clear(el: Element) {
   while (el.firstChild) el.firstChild.remove();
 }
 
-export function toast(text: string, tone: 'stone' | 'red' | 'amber' = 'stone') {
+export function toast(text: string, tone: 'stone' | 'brand' | 'amber' = 'stone') {
   let host = document.querySelector('.toasts');
   if (!host) {
     host = h('div', { class: 'toasts' });

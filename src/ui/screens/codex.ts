@@ -22,9 +22,9 @@ export function codexScreen(root: HTMLElement) {
         h(
           'div',
           { class: 'tags' },
-          h('span', { class: 'tag', style: `--c:${TIER_STYLE[tier].rim}` }, TIER_STYLE[tier].label),
+          h('span', { class: `tag tag-tier-${tier}` }, TIER_STYLE[tier].label),
           h('span', { class: 'tag' }, d.timing === 'period' ? 'в течение периода' : 'после получения'),
-          d.takesTurn ? h('span', { class: 'tag tag-red' }, 'занимает ход') : null,
+          d.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
           h('span', { class: 'tag' }, `×${d.count} в колоде`),
         ),
         h('p', { class: 'cd-quote' }, d.text),

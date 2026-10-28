@@ -7,6 +7,7 @@ import { anyLegalAction, canAct, homeRows, legalTargets, pieceAt, piecesOf } fro
 import { Rank, key, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
 import { getProfile, recordMatch } from '../../profile/profile';
 import { setMood } from '../../render/background';
+import { PAL } from '../../render/palette';
 import { BoardView } from '../../render/board';
 import { banner, floatText, pop, shake } from '../../render/fx';
 import { wait } from '../../render/tween';
@@ -14,7 +15,7 @@ import { Match } from '../../session/match';
 import { go } from '../app';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
-import { avatarEl, pieceIcon, titleEl } from '../widgets';
+import { avatarEl, pieceIcon, rubbleEl, titleEl } from '../widgets';
 import { menuScreen } from './menu';
 
 type Kind = 'bot' | 'hotseat';
@@ -231,7 +232,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   // ════════════════════════════════════════════════════════════════════════
   match.onError = (m) => {
     sfx.error();
-    toast(m, 'red');
+    toast(m, 'brand');
   };
 
   match.onEvents = async (events, st) => {
@@ -253,8 +254,8 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
           refresh();
           sfx.turn();
           if (i !== lastTurn) break;
-          if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'red' : 'stone', 450);
-          else if (e.player === 0) await banner('Ваш ход', `ход ${e.ownTurn}`, 'red', 380);
+          if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'brand' : 'stone', 450);
+          else if (e.player === 0) await banner('Ваш ход', `ход ${e.ownTurn}`, 'brand', 380);
           break;
         case 'cardDrawn':
           drawnNow.add(e.card);
@@ -272,7 +273,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
         case 'capture': {
           await board.playEvent(e);
           const at = board.cellToClient(e.to);
-          floatText(`−${GLYPH[e.victim.rank]}`, at.x, at.y, 'ft-red');
+          floatText(`−${GLYPH[e.victim.rank]}`, at.x, at.y, 'ft-brand');
           break;
         }
         case 'gameOver':
@@ -350,7 +351,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     if (s.pending) {
       if (human && s.pending.kind === 'cell') {
         ov.options = s.pending.options.map(unkey);
-        ov.optionsTone = DESTRUCTIVE.has(s.pending.source) ? 'red' : 'amber';
+        ov.optionsTone = DESTRUCTIVE.has(s.pending.source) ? 'brand' : 'amber';
       }
       return;
     }
@@ -447,7 +448,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
         'div',
         { class: 'pl-pieces' },
         ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, pl.color, 2, up), h('b', {}, String(cnt[r])))),
-        h('div', { class: 'pl-lost', title: 'на кладбище' }, '✝', h('b', {}, String(lost))),
+        h('div', { class: 'pl-lost', title: 'потеряно фигур' }, rubbleEl(2), h('b', {}, String(lost))),
       ),
       h(
         'div',
@@ -466,7 +467,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
               h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
-              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-red btn-small', { disabled: !canPlayHeld }) : null,
+              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-brand btn-small', { disabled: !canPlayHeld }) : null,
             ),
           )
         : null,
@@ -590,7 +591,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
         'div',
         { class: 'tags' },
         h('span', { class: 'tag' }, def.timing === 'period' ? 'в течение периода' : 'после получения'),
-        def.takesTurn ? h('span', { class: 'tag tag-red' }, 'занимает ход') : null,
+        def.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
       ),
       h('p', { class: 'kr-text' }, def.text),
     );
@@ -601,7 +602,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
         res();
       };
       const label = def.timing === 'period' && mode === 'drawn' ? 'В руку' : 'Принять';
-      btnHost.append(btn(label, done, 'btn-red btn-big'));
+      btnHost.append(btn(label, done, 'btn-brand btn-big'));
       if (!human || kind === 'bot') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });
@@ -661,7 +662,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     const ov = h(
       'div',
       { class: 'overlay in' },
-      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('Да', () => (close(), yes()), 'btn-red'), btn('Нет', close, 'btn-stone'))),
+      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('Да', () => (close(), yes()), 'btn-brand'), btn('Нет', close, 'btn-stone'))),
     );
     document.body.appendChild(ov);
   }
@@ -697,7 +698,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
       h(
         'div',
         { class: 'result' },
-        titleEl(title, 5, title === 'ПОРАЖЕНИЕ' ? { face: '#8f8b84', side: '#303035', edge: '#1b1b1e' } : {}),
+        titleEl(title, 5, title === 'ПОРАЖЕНИЕ' ? { face: PAL.concrete300, side: PAL.slab600, edge: PAL.slab800 } : {}),
         h('div', { class: 'result-sub' }, sub),
         h('div', { class: 'muted' }, reason !== sub ? reason : ''),
         h(
@@ -709,7 +710,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
           stat('карт', match.stats.cards[0]),
           kind === 'bot' ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
         ),
-        h('div', { class: 'row' }, btn('Реванш', () => (ov.remove(), go((r) => gameScreen(r, kind))), 'btn-red btn-big'), btn('В меню', () => (ov.remove(), go(menuScreen)), 'btn-stone btn-big')),
+        h('div', { class: 'row' }, btn('Реванш', () => (ov.remove(), go((r) => gameScreen(r, kind))), 'btn-brand btn-big'), btn('В меню', () => (ov.remove(), go(menuScreen)), 'btn-stone btn-big')),
       ),
     );
     document.body.appendChild(ov);

@@ -1,0 +1,54 @@
+# Сравнение визуала: при пуше в ветку редизайна публикует на GitHub Pages обе версии —
+# main в корень сайта, текущую ветку в /redesign-a/. Пуш в main (pages.yml) перезапишет сайт одной версией.
+name: Deploy compare to GitHub Pages
+
+on:
+  push:
+    branches: ['req/redesign-a-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          path: redesign
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci && npm run build
+        working-directory: main
+      - run: npm ci && npm run build
+        working-directory: redesign
+      - run: |
+          mkdir -p site
+          cp -r main/dist/. site/
+          cp -r redesign/dist site/redesign-a
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

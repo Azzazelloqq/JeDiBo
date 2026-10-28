@@ -4,7 +4,7 @@ import { sfx } from '../audio/sfx';
 import { forward, homeRows, isBarrier } from '../core/rules';
 import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type Pos } from '../core/types';
 import { PAL, STONE } from './palette';
-import { makeCanvas, px, tinyText, tinyWidth, type Canvas } from './pixel';
+import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
 import { ease, onFrame, tween, wait } from './tween';
 import { shake } from './fx';
@@ -46,7 +46,7 @@ export interface Overlay {
   moves: Pos[];
   attacks: Pos[];
   options: Pos[];
-  optionsTone: 'amber' | 'red';
+  optionsTone: 'amber' | 'brand';
   lastMove: Pos[];
   zone: { side: 0 | 1 } | null;
   ghost: { pos: Pos; rank: Rank; owner: PlayerId } | null;
@@ -143,7 +143,7 @@ export class BoardView {
     // утопленный паз под плиты
     g.fillStyle = PAL.void;
     g.fillRect(M - 2, M - 2, N * CELL + 4, N * CELL + 4);
-    g.fillStyle = '#7a756d';
+    g.fillStyle = PAL.concrete600;
     g.fillRect(M - 1, M - 1, N * CELL + 2, N * CELL + 2);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.drawImage(cellTile(x, y), M + x * CELL, M + y * CELL);
     // координаты
@@ -278,7 +278,7 @@ export class BoardView {
         if (!v) return;
         v.flash = 1;
         sfx.promote();
-        this.sparkle(v.x, v.y, e.to > e.from ? PAL.amber300 : PAL.blood400, 10);
+        this.sparkle(v.x, v.y, e.to > e.from ? PAL.amber300 : PAL.brand400, 10);
         await wait(90);
         v.rank = e.to;
         await this.pop(v);
@@ -445,16 +445,16 @@ export class BoardView {
 
     // зона расстановки
     if (this.ov.zone) {
-      g.fillStyle = `rgba(194,43,36,${0.14 + pulse * 0.06})`;
+      g.fillStyle = withAlpha(PAL.brand500, 0.1 + pulse * 0.06);
       for (const y of homeRows(s, this.ov.zone.side)) g.fillRect(M + 0, M + y * CELL, N * CELL, CELL);
       const ys = homeRows(s, this.ov.zone.side);
       const top = Math.min(...ys);
-      g.fillStyle = PAL.blood500;
+      g.fillStyle = PAL.brand500;
       g.fillRect(M, M + top * CELL, N * CELL, 1);
       g.fillRect(M, M + (top + 3) * CELL - 1, N * CELL, 1);
     }
     // последний ход
-    for (const c of this.ov.lastMove) this.fillCell(c, 'rgba(240,180,90,0.22)');
+    for (const c of this.ov.lastMove) this.fillCell(c, withAlpha(PAL.amber300, 0.22));
     // ховер
     if (this.hover && this.ov.hoverEnabled) this.fillCell(this.hover, 'rgba(255,255,255,0.16)');
 
@@ -467,20 +467,20 @@ export class BoardView {
       const hx = M + c.x * CELL;
       const hy = M + c.y * CELL;
       const isHover = this.hover && this.hover.x === c.x && this.hover.y === c.y;
-      if (isHover) this.fillCell(c, 'rgba(240,180,90,0.35)');
+      if (isHover) this.fillCell(c, withAlpha(PAL.amber300, 0.35));
       px(g, hx + 6, hy + 6, PAL.slab700, 4, 4);
       px(g, hx + 7, hy + 7, PAL.amber500, 2, 2);
       px(g, hx + 6, hy + 10, 'rgba(255,255,255,0.35)', 4, 1);
     }
     // цели атаки
     for (const c of this.ov.attacks) {
-      this.fillCell(c, `rgba(255,74,54,${0.18 + pulse * 0.22})`);
-      this.brackets(c, PAL.signal, Math.round(pulse));
+      this.fillCell(c, withAlpha(PAL.brand500, 0.18 + pulse * 0.22));
+      this.brackets(c, PAL.brand500, Math.round(pulse));
     }
     // варианты выбора (карты, повышение)
     for (const c of this.ov.options) {
-      const col = this.ov.optionsTone === 'red' ? PAL.signal : PAL.amber300;
-      this.fillCell(c, this.ov.optionsTone === 'red' ? `rgba(255,74,54,${0.12 + pulse * 0.18})` : `rgba(240,180,90,${0.1 + pulse * 0.18})`);
+      const col = this.ov.optionsTone === 'brand' ? PAL.brand500 : PAL.amber300;
+      this.fillCell(c, this.ov.optionsTone === 'brand' ? withAlpha(PAL.brand500, 0.12 + pulse * 0.18) : withAlpha(PAL.amber300, 0.1 + pulse * 0.18));
       this.brackets(c, col, Math.round(pulse));
     }
 
@@ -490,7 +490,7 @@ export class BoardView {
       const bx = M + v.x * CELL;
       const by = M + v.y * CELL;
       const shrink = Math.max(0.4, 1 - v.z / 30);
-      g.fillStyle = `rgba(20,16,14,${0.35 * v.alpha * shrink})`;
+      g.fillStyle = withAlpha(PAL.void, 0.35 * v.alpha * shrink);
       const sw = Math.round(12 * shrink);
       g.fillRect(Math.round(bx + 8 - sw / 2), Math.round(by + 13), sw, 2);
       g.fillRect(Math.round(bx + 8 - sw / 2 + 1), Math.round(by + 15), sw - 2, 1);
@@ -516,8 +516,8 @@ export class BoardView {
       const b = this.beam;
       const x0 = M + b.x * CELL;
       const w = b.t < 0.5 ? Math.floor(2 + b.t * 24) : CELL;
-      const flick = Math.random() < 0.5 ? PAL.signal : PAL.amber300;
-      g.fillStyle = `rgba(255,74,54,${0.25 + Math.random() * 0.2})`;
+      const flick = Math.random() < 0.5 ? PAL.brand500 : PAL.amber300;
+      g.fillStyle = withAlpha(PAL.brand500, 0.25 + Math.random() * 0.2);
       g.fillRect(x0 - 3, M, CELL + 6, N * CELL);
       g.fillStyle = flick;
       g.fillRect(x0 + Math.floor((CELL - w) / 2), M, w, N * CELL);

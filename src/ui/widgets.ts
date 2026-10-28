@@ -1,10 +1,65 @@
-// Общие виджеты: шапка профиля, пиктограммы фигур, иллюстрации плиток меню.
+// Общие виджеты: логотип, слайдер, шапка профиля, пиктограммы фигур, иллюстрации плиток меню.
 import { Rank } from '../core/types';
 import { getProfile, titleOf } from '../profile/profile';
 import { PAL, type StoneColor } from '../render/palette';
 import { concreteTile, hexToRgb, makeCanvas } from '../render/pixel';
-import { avatar, pieceSprite, stoneTitle } from '../render/sprites';
+import { avatar, logoMark, pieceSprite, rubbleIcon, stoneTitle } from '../render/sprites';
+import { sfx } from '../audio/sfx';
 import { canvasEl, h } from './dom';
+import logoSvg from '../assets/logo/jedibo-logo.svg?raw';
+import markSvg from '../assets/logo/jedibo-mark.svg?raw';
+
+/** Логотип из гайда. Векторный (SVG, цвет через currentColor) — без пикселизации и искажений пропорций.
+ *  `scale` — высота знака в модулях×px: 1 ≈ 151 px по высоте (как в гайде). Для мелкого знака (≤ 48 px)
+ *  можно взять пиксельную версию: `pixel: true` (только `variant: 'mark'`). */
+export function logoEl(opts: { variant?: 'full' | 'mark'; color?: 'brand' | 'ink' | 'bone'; scale?: number; pixel?: boolean; plate?: boolean } = {}) {
+  const variant = opts.variant ?? 'full';
+  const color = opts.color ?? 'brand';
+  const scale = opts.scale ?? 1;
+  let art: Element;
+  if (variant === 'mark' && opts.pixel) {
+    const k = Math.max(2, Math.round(scale * 3));
+    const tone = color === 'brand' ? PAL.logo : color === 'ink' ? PAL.void : PAL.bone;
+    art = canvasEl(logoMark(k, tone), 1, 'logo-art');
+  } else {
+    const holder = document.createElement('div');
+    holder.innerHTML = variant === 'full' ? logoSvg : markSvg;
+    art = holder.firstElementChild!;
+    art.classList.add('logo-art');
+    art.setAttribute('role', 'img');
+    art.setAttribute('aria-label', 'JeDiBo');
+    const H = 151 * scale;
+    art.setAttribute('height', String(Math.round(H)));
+    art.setAttribute('width', String(Math.round(variant === 'full' ? (H * 438) / 151 : H)));
+  }
+  return h('div', { class: `logo logo-${variant} logo-c-${color} ${opts.plate ? 'logo-plate-slab' : ''}` }, art);
+}
+
+/** Пиксельный слайдер: нативный range (клавиатура, доступность) + дорожка-паз и ползунок-плита.
+ *  `onChange` — когда пользователь отпустил ползунок (там удобно щёлкнуть звуком и сохранить). */
+export function pixelSlider(o: { value: number; min?: number; max?: number; step?: number; label?: string; onInput?: (v: number) => void; onChange?: (v: number) => void; format?: (v: number) => string }) {
+  const min = o.min ?? 0, max = o.max ?? 100, step = o.step ?? 1;
+  const fmt = o.format ?? ((v: number) => String(v));
+  const input = h('input', { type: 'range', class: 'pslider-input', min, max, step, value: String(o.value), 'aria-label': o.label ?? '' });
+  const out = h('output', { class: 'pslider-value' }, fmt(o.value));
+  const wrap = h('div', { class: 'pslider' }, h('div', { class: 'pslider-track' }, input), out);
+  const paint = () => {
+    const v = +input.value;
+    wrap.style.setProperty('--p', String((v - min) / (max - min || 1)));
+    out.textContent = fmt(v);
+    input.setAttribute('aria-valuetext', fmt(v));
+  };
+  input.addEventListener('input', () => {
+    paint();
+    o.onInput?.(+input.value);
+  });
+  input.addEventListener('change', () => {
+    sfx.click();
+    o.onChange?.(+input.value);
+  });
+  paint();
+  return wrap;
+}
 
 export function pieceIcon(rank: Rank, color: StoneColor, scale = 2, up = true) {
   const src = pieceSprite(rank, color, up);
@@ -12,6 +67,8 @@ export function pieceIcon(rank: Rank, color: StoneColor, scale = 2, up = true) {
   g.drawImage(src, 0, 0);
   return canvasEl(c, scale, 'piece-icon');
 }
+
+export const rubbleEl = (scale = 2) => canvasEl(rubbleIcon(), scale, 'rubble-icon');
 
 export function avatarEl(seed: string, scale = 5) {
   return canvasEl(avatar(seed), scale, 'avatar');

@@ -37,7 +37,7 @@ export function floatText(text: string, x: number, y: number, cls = '') {
 }
 
 /** Большой баннер поперёк экрана (как «блайнды» в Балатро). */
-export async function banner(text: string, sub = '', tone: 'red' | 'amber' | 'stone' = 'red', hold = 750) {
+export async function banner(text: string, sub = '', tone: 'brand' | 'amber' | 'stone' = 'brand', hold = 750) {
   const el = document.createElement('div');
   el.className = `banner banner-${tone}`;
   el.innerHTML = `<div class="banner-strip"><div class="banner-text">${text}</div>${sub ? `<div class="banner-sub">${sub}</div>` : ''}</div>`;

@@ -1,7 +1,7 @@
 import { setMood } from '../../render/background';
 import { go } from '../app';
 import { btn, canvasEl, h } from '../dom';
-import { profileChip, tileArt, titleEl } from '../widgets';
+import { logoEl, profileChip, tileArt } from '../widgets';
 import { codexScreen } from './codex';
 import { gameScreen } from './game';
 import { profileScreen } from './profile';
@@ -21,7 +21,7 @@ export function menuScreen(root: HTMLElement) {
       h('div', { class: 'tile-sub' }, sub),
       onClick ? null : h('div', { class: 'tile-lock' }, 'скоро'),
     );
-    el.style.setProperty('--wob', `${(Math.random() - 0.5) * 2.4}deg`);
+    el.style.setProperty('--wob', `${(Math.random() - 0.5) * 1.2}deg`);
     return el;
   };
 
@@ -30,7 +30,7 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'logo-wrap' },
-      titleEl('JEDIBO', 6, { size: 24, depth: 4, font: 'Pixelify Sans' }),
+      logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true }),
       h('div', { class: 'logo-plate' }, 'КЛАССИКА · 12×12 · КАРМА'),
     ),
     h(

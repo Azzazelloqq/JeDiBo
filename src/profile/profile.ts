@@ -26,6 +26,8 @@ export interface Profile {
 export interface Settings {
   volume: number;
   crt: boolean;
+  /** Тема применяется при загрузке (render/palette.ts); смена — перезагрузка страницы. */
+  theme?: 'dark' | 'light';
   shake: boolean;
   animSpeed: number;
 }
