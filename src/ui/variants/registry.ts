@@ -72,10 +72,13 @@ function save() {
 
 const state = load();
 
-// ?ui=b — все экраны; ?ui=menu:a,codex:b — по экранам. Выбор из адреса запоминается, как ручной.
+// ?ui=b — все экраны; ?ui=menu:a,codex:b — по экранам; ?cards=illustrated|icons. Выбор из адреса запоминается, как ручной.
 (function applyUrl() {
-  const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '').get('ui');
-  if (!q) return;
+  const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
+  const cards = params.get('cards');
+  if (cards === 'icons' || cards === 'illustrated') state.cards = cards;
+  const q = params.get('ui');
+  if (!q) return save();
   for (const part of q.split(',')) {
     const [a, b] = part.split(':');
     if (b === undefined && isVariant(a)) SCREENS.forEach((s) => (state.v[s] = a));

@@ -9,6 +9,8 @@ import { initialScreen, screen } from './ui/variants/registry';
 import { mountSwitcher } from './ui/variants/switcher';
 import './styles/variants/switcher.css';
 import './styles/variants/b.css';
+import './styles/variants/cards.css';
+import { preloadIllustrations } from './render/cardArt';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
@@ -51,6 +53,7 @@ async function boot() {
   } catch {
     /* офлайн — останется моноширинный запасной */
   }
+  preloadIllustrations();
   mountSwitcher();
   go(screen(initialScreen()));
 }

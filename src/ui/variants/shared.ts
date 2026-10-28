@@ -7,7 +7,8 @@ import { PAL } from '../../render/palette';
 import { fromAscii, makeCanvas, outline, type Canvas } from '../../render/pixel';
 import { cellTile, pieceSprite } from '../../render/sprites';
 import { sfx } from '../../audio/sfx';
-import { h } from '../dom';
+import { btn, h } from '../dom';
+import { cardArtMode, setCardArtMode } from './registry';
 
 /** Тумблер вкл/выкл (роль «switch» для клавиатуры и экранных дикторов). */
 export function toggleEl(value: boolean, onToggle: (v: boolean) => void, label = '') {
@@ -165,4 +166,13 @@ export function arrowNav(root: HTMLElement, selector = 'button:not(:disabled)') 
   };
   window.addEventListener('keydown', onKey);
   return () => window.removeEventListener('keydown', onKey);
+}
+
+/** Выбранная карта Колоды — переживает перерисовку экрана при смене режима карт и варианта. */
+export const codexState = { pick: 0 };
+
+/** Переключатель «Карты: Иконки / Иллюстрации» (Колода во всех вариантах). */
+export function cardArtToggle(cls = 'btn-small') {
+  const ill = cardArtMode() === 'illustrated';
+  return btn(ill ? 'Карты: иллюстрации' : 'Карты: иконки', () => setCardArtMode(ill ? 'icons' : 'illustrated'), cls, { title: 'Переключить вид Карт Кармы' });
 }
