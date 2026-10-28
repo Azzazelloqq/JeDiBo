@@ -9,6 +9,7 @@ import { menuScreen } from '../screens/menu';
 import { profileScreen } from '../screens/profile';
 import { rulesScreen } from '../screens/rules';
 import { settingsScreen } from '../screens/settings';
+import { chronicleV } from './chronicle/v';
 import { menuV } from './menu/v';
 import { modeSelectV } from './modeSelect/v';
 import { settingsV } from './settings/v';
@@ -36,7 +37,7 @@ type Impl = (root: HTMLElement, arg?: unknown) => (() => void) | void;
 const IMPL: Partial<Record<ScreenId, Partial<Record<VariantId, Impl>>>> = {
   menu: { a: (r) => menuV(r, 'a'), b: (r) => menuV(r, 'b'), c: menuScreen },
   modeSelect: { a: (r) => modeSelectV(r, 'a'), b: (r) => modeSelectV(r, 'b') },
-  chronicle: { c: profileScreen },
+  chronicle: { a: (r) => chronicleV(r, 'a'), b: (r) => chronicleV(r, 'b'), c: profileScreen },
   codex: { c: codexScreen },
   rules: { c: rulesScreen },
   settings: { a: (r) => settingsV(r, 'a'), b: (r) => settingsV(r, 'b'), c: settingsScreen },
