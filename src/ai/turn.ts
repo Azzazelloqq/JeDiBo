@@ -20,6 +20,8 @@ export interface TurnOpts {
   lookahead: number;
   /** сколько лучших разных планов вернуть (для проверки ответом соперника) */
   top?: number;
+  /** момент (performance.now), после которого новые уровни луча не раскрываются */
+  deadline?: number;
 }
 
 export interface TurnPlan {
@@ -75,6 +77,7 @@ export function planTurn(b: FastBoard, me: PlayerId, w: Weights, o: TurnOpts): T
   seen.add(boardKey(b));
 
   for (let depth = 0; depth < 8 && beam.length; depth++) {
+    if (depth > 0 && o.deadline !== undefined && performance.now() > o.deadline) break;
     const next: { node: Node; pot: number }[] = [];
     for (const node of beam) {
       for (let k = 0; k < node.steps.length; k++) b.make(node.steps[k].pi, node.steps[k].t, undos[k]);

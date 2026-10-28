@@ -21,6 +21,8 @@ export interface Profile {
   captures: number;
   cardsPlayed: number;
   history: MatchRecord[];
+  /** последний выбранный уровень Странника */
+  botLevel?: string;
 }
 
 export interface Settings {

@@ -1,7 +1,7 @@
 // Сверка быстрой доски бота с движком и замер скорости. npm run aicheck [-- партий]
 // Позиции берутся из партий жадного бота; в часть из них подмешиваются эффекты Кармы.
 import { FastBoard, ATTACK, JUMP, CELL_MASK, newUndo } from '../src/ai/board';
-import { botAction } from '../src/ai/bot';
+import { botAction } from './greedy';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
 import { canAct, isAttacked, isFree, piecesOf, targetsOf } from '../src/core/rules';

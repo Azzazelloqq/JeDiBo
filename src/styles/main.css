@@ -381,6 +381,8 @@ body.no-crt #crt { display: none; }
 .overlay.out { opacity: 0; }
 .dialog { min-width: 360px; max-width: 520px; text-align: center; padding: 22px 26px; animation: dialogIn 0.35s var(--bounce); }
 @keyframes dialogIn { from { transform: translateY(40px) scale(0.9); opacity: 0; } }
+.level-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 16px; }
+.level-btn { width: 100%; }
 .dialog h2 { font-family: var(--f-pix); font-size: 30px; text-transform: uppercase; margin: 8px 0; }
 
 .karma-overlay { background: radial-gradient(ellipse at center, rgba(60, 10, 8, 0.55), rgba(5, 3, 3, 0.85)); }

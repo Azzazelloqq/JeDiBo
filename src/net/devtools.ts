@@ -1,7 +1,8 @@
 // Отладочный пульт сети в консоли (только dev-сборка). Работает с той же сессией, что и экраны:
 // __net.host() / __net.join('КОД') открывают лобби, __net.bots() сажает за эту вкладку бота
 // (он ходит через свой Match, экран показывает партию), __net.drop() рвёт канал гостя, __net.info() — сводка.
-import { botAction } from '../ai/bot';
+import { createAgent } from '../ai/agent';
+import { levelById } from '../ai/levels';
 import type { Action, GameState, PlayerId } from '../core/types';
 import { Match } from '../session/match';
 import { endNet, hostNet, joinNet, netSession } from '../session/netSession';
@@ -45,13 +46,15 @@ function startBot() {
   if (!bot || !c?.state || c.seat === null) return;
   const seat = c.seat;
   bot.match?.stop();
+  const agent = createAgent(levelById('novice').config);
   bot.match = new Match({
     names: [c.state.players[0].name, c.state.players[1].name],
     controllers: seat === 0 ? ['bot', 'remote'] : ['remote', 'bot'],
     net: c,
     botDelay: bot.delay,
     // длинные партии ботов обрезаем — для проверки сети хватает
-    botAct: (gs: GameState, p: PlayerId): Action | null => (gs.phase === 'play' && gs.turn > 400 ? { type: 'resign', by: p } : botAction(gs, p)),
+    // самый быстрый уровень и синхронно: для проверки сети сила бота не важна
+    botAct: (gs: GameState, p: PlayerId): Action | null => (gs.phase === 'play' && gs.turn > 400 ? { type: 'resign', by: p } : agent(gs, p)),
   });
   bot.match.onError = (e) => log('бот:', e);
   // реванш: новый seed → новый Match

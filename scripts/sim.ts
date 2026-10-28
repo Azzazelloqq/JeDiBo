@@ -1,7 +1,8 @@
 // Headless прогон: бот против бота. npm run sim
 // Заодно проверка детерминизма для сети: лог действий, прогнанный через JSON (как по проводу),
 // переигрывается с того же seed и должен дать тот же stateHash на каждом шаге.
-import { botAction } from '../src/ai/bot';
+import { createAgent } from '../src/ai/agent';
+import { levelById } from '../src/ai/levels';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
 import type { Action, CardId } from '../src/core/types';
@@ -12,13 +13,14 @@ const stats = { win0: 0, win1: 0, draw: 0, stuck: 0, turns: 0, cards: {} as Reco
 for (let g = 0; g < N; g++) {
   const seed = (g * 7919 + 13) | 0;
   const s = createGame(CLASSIC, seed, ['A', 'B']);
+  const bots = [0, 1].map((p) => createAgent({ ...levelById('amateur').config, budgetMs: undefined }, seed * 2 + p));
   const log: Action[] = [];
   const hashes: number[] = [];
   let steps = 0;
   while (s.phase !== 'over' && steps < 20000) {
     steps++;
     const who = s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current;
-    const a = botAction(s, who);
+    const a = bots[who](s, who);
     if (!a) throw new Error(`no action for ${who} at step ${steps}`);
     const r = dispatch(s, a);
     if (!r.ok) throw new Error(`game ${g}: ${r.error} ${JSON.stringify(a)} pending=${JSON.stringify(s.pending)}`);

@@ -1,9 +1,9 @@
-// Простой жадный бот «Странник». Выдаёт по одному действию за вызов —
-// так сессия может анимировать каждое действие отдельно.
-import { CARDS } from '../core/karma/cards';
-import { canAct, forward, homeRows, isAttacked, lastRow, pieceAt, piecesOf, sideOf, targetsOf } from '../core/rules';
-import { Rank, other, unkey, type Action, type GameState, type Pending, type Piece, type PlayerId, type Pos } from '../core/types';
-import { PRESETS } from '../core/presets';
+// Старый жадный бот «Странник» — только эталон для арены и источник позиций для проверок (в игре не используется).
+// Выдаёт по одному действию за вызов.
+import { CARDS } from '../src/core/karma/cards';
+import { canAct, forward, homeRows, isAttacked, lastRow, pieceAt, piecesOf, sideOf, targetsOf } from '../src/core/rules';
+import { Rank, other, unkey, type Action, type GameState, type Pending, type Piece, type PlayerId, type Pos } from '../src/core/types';
+import { PRESETS } from '../src/core/presets';
 
 const VALUE = [1, 3, 5];
 

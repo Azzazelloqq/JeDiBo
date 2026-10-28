@@ -1,3 +1,5 @@
+import { LEVELS, levelById, type LevelId } from '../../ai/levels';
+import { getProfile, saveProfile } from '../../profile/profile';
 import { setMood } from '../../render/background';
 import { go } from '../app';
 import { btn, canvasEl, h } from '../dom';
@@ -10,6 +12,46 @@ import { rulesScreen } from './rules';
 import { settingsScreen } from './settings';
 
 export const VERSION = '0.1.0-PROTO';
+
+const LEVEL_NOTE: Record<LevelId, string> = {
+  novice: 'часто ошибается',
+  amateur: 'не зевает простое',
+  master: 'считает ответ соперника',
+  grandmaster: 'думает дольше',
+};
+
+/** Выбор уровня Странника перед партией; выбранный уровень запоминается в профиле. */
+function chooseLevel() {
+  const current = levelById(getProfile().botLevel).id;
+  const close = () => ov.remove();
+  const start = (id: LevelId) => {
+    saveProfile({ botLevel: id });
+    close();
+    go((r) => gameScreen(r, 'bot', undefined, id));
+  };
+  const ov = h(
+    'div',
+    { class: 'overlay in', onclick: (e: Event) => e.target === ov && close() },
+    h(
+      'div',
+      { class: 'slab dialog level-dialog' },
+      h('h2', {}, 'Уровень Странника'),
+      h(
+        'div',
+        { class: 'level-list' },
+        ...LEVELS.map((l) =>
+          btn(
+            `${l.name} · ${l.rating} — ${LEVEL_NOTE[l.id]}`,
+            () => start(l.id),
+            `${l.id === current ? 'btn-amber' : 'btn-stone'} level-btn`,
+          ),
+        ),
+      ),
+      h('div', { class: 'row' }, btn('Отмена', close, 'btn-stone btn-small')),
+    ),
+  );
+  document.body.appendChild(ov);
+}
 
 export function menuScreen(root: HTMLElement) {
   setMood('menu');
@@ -37,7 +79,7 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'mode-row' },
-      tile('bot', 'Против Странника', 'один за столом · рейтинг', () => go((r) => gameScreen(r, 'bot'))),
+      tile('bot', 'Против Странника', 'один за столом · рейтинг', chooseLevel),
       tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => go((r) => gameScreen(r, 'hotseat'))),
       tile('net', 'По сети', 'по коду · дуэль · рейтинг', () => go(lobbyScreen)),
     ),

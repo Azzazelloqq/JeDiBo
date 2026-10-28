@@ -1,4 +1,5 @@
 // Экран партии: расстановка → игра → итог. Связывает Match, BoardView и HUD.
+import { levelById, type LevelId } from '../../ai/levels';
 import { sfx } from '../../audio/sfx';
 import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
@@ -50,10 +51,11 @@ const fmt = (ms: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. */
-export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
+/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. botLevel — уровень Странника (kind 'bot'). */
+export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botLevel?: LevelId) {
   setMood('game');
   const prof = getProfile();
+  const level = levelById(botLevel ?? prof.botLevel);
   const client = kind === 'net' ? net!.client : null;
   // «я» — место в комнате; офлайн всегда игрок 0
   const me: PlayerId = client?.seat ?? 0;
@@ -66,7 +68,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
   const match = new Match(
     client
       ? { names, controllers: me === 0 ? ['human', 'remote'] : ['remote', 'human'], net: client }
-      : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'] },
+      : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'], botLevel: level.id },
   );
   const s = match.state;
   const gameSeed = s.seed;
@@ -531,7 +533,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
 
   function controllerLabel(p: PlayerId) {
     const c = match.cfg.controllers[p];
-    if (c === 'bot') return h('div', { class: 'muted small' }, 'бот');
+    if (c === 'bot') return h('div', { class: 'muted small' }, `бот · ${level.name}`);
     if (c !== 'remote') return h('div', { class: 'muted small' }, kind === 'net' ? 'вы' : 'игрок');
     const on = !!client?.opponentConnected;
     return h('div', { class: `net-badge ${on ? 'on' : 'off'}` }, on ? '● на связи' : '○ нет связи');
@@ -758,9 +760,9 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
     // сеть: итог мог уже быть записан до перезагрузки вкладки — второй раз не пишем
     const recorded = kind === 'net' && !markRecorded(`${net!.code}:${gameSeed}`);
     const delta = recorded ? 0 : recordMatch(
-      { opponent: names[opp], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
+      { opponent: kind === 'bot' ? `${names[opp]} · ${level.name}` : names[opp], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
       { captures: match.stats.captures[me], cards: match.stats.cards[me] },
-      client?.opponent?.rating ?? 1000,
+      kind === 'bot' ? level.rating : (client?.opponent?.rating ?? 1000),
     );
     const deltaEl = h('div', { class: `delta ${delta >= 0 ? 'good' : 'bad'}` }, '0');
     const ov = h(
@@ -798,7 +800,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
   }
   /** Реванш: офлайн — новая партия сразу; в сети — просьба в комнату, новая партия придёт как start с новым seed. */
   function rematchBtn() {
-    if (kind !== 'net') return btn('Реванш', () => go((r) => gameScreen(r, kind)), 'btn-red btn-big');
+    if (kind !== 'net') return btn('Реванш', () => go((r) => gameScreen(r, kind, undefined, level.id)), 'btn-red btn-big');
     const alive = client!.status === 'over' && !hostGone && client!.opponentConnected && net!.link?.status !== 'failed';
     const b = btn(
       'Реванш',

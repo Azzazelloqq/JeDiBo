@@ -1,7 +1,8 @@
 // Сессия партии: связывает движок, контроллеры игроков (человек / бот / сеть), часы и UI.
 // Офлайн действия применяются сразу. В сети (cfg.net) свои действия уходят в комнату, а применяются
 // только подтверждённые ею — в том же порядке и с теми же анимациями, что и офлайн.
-import { botAction } from '../ai/bot';
+import { BotClient } from '../ai/botClient';
+import { DEFAULT_LEVEL, type LevelId } from '../ai/levels';
 import { createGame, dispatch } from '../core/engine';
 import { CLASSIC } from '../core/modes';
 import type { Action, GameEvent, GameState, ModeConfig, PlayerId } from '../core/types';
@@ -14,9 +15,12 @@ export interface MatchConfig {
   controllers: [ControllerKind, ControllerKind];
   mode?: ModeConfig;
   seed?: number;
+  /** пауза перед действием бота, мс (бот считает в это же время; ждём большее из двух) */
   botDelay?: number;
-  /** выбор хода бота (по умолчанию — «Странник»); тесты подменяют, чтобы бот «задумывался» */
-  botAct?: (s: GameState, p: PlayerId) => Action | null;
+  /** уровень сложности бота (по умолчанию — DEFAULT_LEVEL) */
+  botLevel?: LevelId;
+  /** выбор хода бота вместо BotClient; тесты подменяют, чтобы бот «задумывался». clockMs — остаток часов бота */
+  botAct?: (s: GameState, p: PlayerId, clockMs?: number) => Action | null | Promise<Action | null>;
   /** сетевая партия: клиент комнаты, уже получивший start. Место соперника — 'remote'. */
   net?: RoomClient;
 }
@@ -52,6 +56,10 @@ export class Match {
   private stopped = false;
   private resetTo: GameState | null = null;
   private unlisten: (() => void) | null = null;
+  /** растёт с каждым применённым действием и сбросом: ответ бота на устаревшее состояние отбрасывается */
+  private version = 0;
+  private bot: BotClient | null = null;
+  private botRetries = 0;
 
   constructor(cfg: MatchConfig) {
     this.cfg = cfg;
@@ -105,6 +113,8 @@ export class Match {
     this.timer = null;
     this.unlisten?.();
     this.unlisten = null;
+    this.bot?.dispose();
+    this.bot = null;
   }
 
   /** Пауза часов (оверлеи Кармы, меню). В сети часы ведёт комната — пауза не действует. */
@@ -143,6 +153,7 @@ export class Match {
         else if (this.isHuman(a.by)) this.onError(r.error ?? 'Ошибка');
         continue;
       }
+      this.version++;
       this.count(r.events);
       if (!this.cfg.net && r.events.some((e) => e.type === 'turnStart')) this.clocks.turnLeft = this.state.mode.turnMs;
       await this.onEvents(r.events, this.state);
@@ -161,6 +172,7 @@ export class Match {
     const fresh = this.resetTo!;
     this.resetTo = null;
     this.queue = [];
+    this.version++;
     Object.assign(this.state, fresh); // у GameState все поля обязательны — перезаписываются все
     this.syncClocks();
     this.onReset(this.state);
@@ -173,28 +185,43 @@ export class Match {
     }
   }
 
+  private botAct(s: GameState, p: PlayerId): Promise<Action | null> {
+    const clockMs = this.clocks.total[p];
+    if (this.cfg.botAct) return Promise.resolve(this.cfg.botAct(s, p, clockMs));
+    this.bot ??= new BotClient(this.cfg.botLevel ?? DEFAULT_LEVEL);
+    return this.bot.act(s, p, clockMs);
+  }
+
   private driveBots() {
     const s = this.state;
     if (s.phase === 'over' || this.stopped || this.busy) return;
-    const act = this.cfg.botAct ?? botAction;
+    const v = this.version;
+    // ответ применяется, только если за время расчёта ничего не изменилось
+    const fresh = (who: PlayerId) => !this.stopped && this.version === v && !this.isBusy && this.state.phase !== 'over' && (this.state.phase === 'placement' || this.actor() === who);
     if (s.phase === 'placement') {
       // бот расставляется сразу, не дожидаясь человека
       for (const p of [0, 1] as PlayerId[])
         if (this.cfg.controllers[p] === 'bot' && !s.players[p].placed && !(this.cfg.net?.seat === p && this.cfg.net.placeCommitted)) {
-          const a = act(s, p);
-          if (a) this.submit(a);
+          void this.botAct(s, p).then((a) => {
+            if (a && fresh(p) && !this.state.players[p].placed) this.submit(a);
+          });
           return;
         }
       return;
     }
     const who = this.actor();
     if (this.cfg.controllers[who] !== 'bot') return;
-    const delay = this.cfg.botDelay ?? 420;
-    setTimeout(() => {
-      if (this.isBusy || this.stopped || this.state.phase === 'over' || this.actor() !== who) return;
-      const a = act(this.state, who);
-      if (a) this.submit(a);
-    }, delay * (0.7 + Math.random() * 0.6));
+    // когда на часах бота мало времени, он не тянет паузу
+    const base = this.cfg.botDelay ?? 420;
+    const delay = (this.clocks.total[who] < 60_000 ? base * 0.25 : base) * (0.7 + Math.random() * 0.6);
+    const pause = new Promise((r) => setTimeout(r, delay));
+    void Promise.all([this.botAct(s, who), pause]).then(([a]) => {
+      if (!fresh(who)) return;
+      if (a) {
+        this.botRetries = 0;
+        this.submit(a);
+      } else if (this.botRetries++ < 3) this.driveBots(); // воркер упал или ответа нет — повторить
+    });
   }
 
   private syncClocks() {

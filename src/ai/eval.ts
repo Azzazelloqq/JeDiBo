@@ -15,6 +15,8 @@ export interface Weights {
   myThreat: number;
   /** при перевесе — сближение кругов с фигурами соперника (на клетку расстояния) */
   chase: number;
+  /** видеть атаки «сквозь свои фигуры» (соперник уводит блокирующую фигуру и бьёт); слабые уровни не видят */
+  xray: boolean;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -23,6 +25,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   threat: 0.9,
   myThreat: 0.3,
   chase: 0.05,
+  xray: true,
 };
 
 export const WIN = 1e6;
@@ -37,12 +40,12 @@ export function bestCapture(b: FastBoard, by: PlayerId, w: Weights): number {
     if (!b.alive[v] || b.owner[v] !== def) continue;
     const gainMax = w.val[b.rank[v]];
     if (gainMax <= best) continue;
-    const a = b.attackerOf(b.px[v], b.py[v], by, true);
+    const a = b.attackerOf(b.px[v], b.py[v], by, w.xray);
     if (a < 0) continue;
     // размен: после взятия может ли защитник взять атакующего на той же клетке
     const cell = b.py[v] * b.n + b.px[v];
     b.make(a, cell | ATTACK, u);
-    const recaptured = b.attacked(b.px[a], b.py[a], def, true);
+    const recaptured = b.attacked(b.px[a], b.py[a], def, w.xray);
     b.unmake(u);
     const gain = gainMax - (recaptured ? w.val[b.rank[a]] : 0);
     if (gain > best) best = gain;

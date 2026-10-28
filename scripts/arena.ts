@@ -5,28 +5,35 @@
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { DEFAULT_CONFIG, createAgent } from '../src/ai/agent';
-import { botAction } from '../src/ai/bot';
+import { LEVELS } from '../src/ai/levels';
+import { botAction } from './greedy';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
 import type { Action, GameState, PlayerId } from '../src/core/types';
 
 type BotFn = (s: GameState, me: PlayerId) => Action | null;
 
-const BOTS: Record<string, () => BotFn> = {
+// фабрики получают seed: случайность бота воспроизводима (партия + место)
+const BOTS: Record<string, (seed: number) => BotFn> = {
   greedy: () => botAction,
-  planner: () => createAgent(),
-  planner1: () => createAgent({ ...DEFAULT_CONFIG, search: { candidates: 1, reply: null } }),
+  planner: (seed) => createAgent(DEFAULT_CONFIG, seed),
+  planner1: (seed) => createAgent({ ...DEFAULT_CONFIG, search: { candidates: 1, reply: null } }, seed),
 };
+// уровни сложности: novice, amateur, … — расчёт ограничен шириной поиска; с суффиксом @time — ещё и бюджетом времени
+for (const l of LEVELS) {
+  BOTS[l.id] = (seed) => createAgent({ ...l.config, budgetMs: undefined }, seed);
+  BOTS[`${l.id}@time`] = (seed) => createAgent(l.config, seed);
+}
 
 // planner:w=8,c=12,r=4,la=0.6 — планировщик с параметрами (w — луч, c — кандидатов, r — луч ответа, 0 — без ответа)
-function botFactory(name: string): (() => BotFn) | undefined {
+function botFactory(name: string): ((seed: number) => BotFn) | undefined {
   if (BOTS[name]) return BOTS[name];
   if (!name.startsWith('planner:')) return undefined;
   const o = Object.fromEntries(name.slice(8).split(',').map((kv) => kv.split('=')));
   const turn = { width: Number(o.w ?? DEFAULT_CONFIG.turn.width), lookahead: Number(o.la ?? DEFAULT_CONFIG.turn.lookahead) };
   const r = Number(o.r ?? DEFAULT_CONFIG.search.reply?.width ?? 0);
   const search = { candidates: Number(o.c ?? DEFAULT_CONFIG.search.candidates), reply: r > 0 ? { width: r, lookahead: turn.lookahead } : null };
-  return () => createAgent({ ...DEFAULT_CONFIG, turn, search });
+  return (seed) => createAgent({ ...DEFAULT_CONFIG, turn, search }, seed);
 }
 
 interface Job { nameA: string; nameB: string; games: number[]; limit: number }
@@ -37,7 +44,7 @@ function runGames(job: Job): Res {
   for (const g of job.games) {
     // бот A сидит на месте 0 в чётных партиях, на месте 1 — в нечётных
     const seatOf: [number, number] = g % 2 === 0 ? [0, 1] : [1, 0];
-    const fns = [botFactory(job.nameA)!(), botFactory(job.nameB)!()];
+    const fns = [botFactory(job.nameA)!(g * 2 + 1), botFactory(job.nameB)!(g * 2 + 2)];
     const s = createGame(CLASSIC, (g * 2654435761 + 17) | 0, ['A', 'B']);
     let steps = 0;
     while (s.phase !== 'over' && s.turn <= job.limit && steps++ < job.limit * 40) {

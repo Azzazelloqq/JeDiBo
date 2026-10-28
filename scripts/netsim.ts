@@ -2,7 +2,11 @@
 // 1) проверки «плохого соперника» — сырые сообщения в комнату и подделки в клиента;
 // 2) партии бот-против-бота через RoomHost + LoopbackTransport: у каждого клиента своя копия GameState,
 //    на каждом действии сверяются хэши; сценарии — задержки, обрывы с переподключением, таймауты, уход игрока.
-import { botAction, botPlacement } from '../src/ai/bot';
+import { createAgent, placement as botPlacement } from '../src/ai/agent';
+import { levelById } from '../src/ai/levels';
+
+// сети всё равно, как играет бот: берём самый быстрый уровень
+const newBot = () => createAgent({ ...levelById('novice').config, budgetMs: undefined });
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
 import type { Action, GameState, ModeConfig, PlayerId } from '../src/core/types';
@@ -112,7 +116,7 @@ async function roomChecks() {
   const before = logLen();
   await idle.send({ t: 'submit', cseq: 7, action: { type: 'endTurn', by: cur } });
   check('ход не в свою очередь (с чужим by) → reject', idle.last('reject')?.cseq === 7 && logLen() === before);
-  const bot = botAction(s, cur)!;
+  const bot = newBot()(s, cur)!;
   await idle.send({ t: 'submit', cseq: 8, action: bot });
   check('легальный ход соперника от чужого имени → reject', idle.last('reject')?.cseq === 8 && logLen() === before);
   const actor = cur === 0 ? a : b;
@@ -244,13 +248,14 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
   const delay = sc === 'plain' ? undefined : () => (Math.random() < 0.3 ? Math.random() * 4 : 0);
   const bots: Bot[] = [];
 
+  const agents = [newBot(), newBot()];
   const botAct = (s: GameState, p: PlayerId): Action | null => {
     if (s.phase === 'play') {
       if (sc === 'timeout' && Math.random() < 0.2) return null; // «задумался»: пусть сработают часы комнаты
       // боты играют долго (в среднем ~600 ходов) — для проверки сети хватит 300
       if (s.turn > 300) return { type: 'resign', by: p };
     }
-    return botAction(s, p);
+    return agents[p](s, p);
   };
   for (const i of [0, 1]) {
     const t = new LoopbackTransport(host, { delay });
