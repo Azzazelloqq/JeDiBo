@@ -10,7 +10,6 @@ export function homeRows(s: GameState, side: Side): number[] {
   const n = s.mode.size;
   return side === 0 ? [n - 1, n - 2, n - 3] : [0, 1, 2];
 }
-export const fourthRow = (s: GameState, side: Side) => (side === 0 ? s.mode.size - 4 : 3);
 export const lastRow = (s: GameState, side: Side) => (side === 0 ? 0 : s.mode.size - 1);
 
 export const sideOf = (s: GameState, p: PlayerId) => s.players[p].side;
@@ -138,7 +137,10 @@ export function anyLegalAction(s: GameState): boolean {
   return piecesOf(s, s.current).some((pc) => legalTargets(s, pc).length > 0);
 }
 
-/** Свободные клетки для новой фигуры: стартовая зона, иначе 4-й ряд, иначе любая своя половина. */
+/**
+ * Свободные клетки для новой фигуры: стартовая зона, иначе 4-й ряд, иначе ближайший к игроку ряд
+ * со свободной клеткой (5-й, 6-й… до последнего). Пусто — только если занято всё поле.
+ */
 export function spawnCells(s: GameState, owner: PlayerId): Pos[] {
   const side = sideOf(s, owner);
   const rowsFree = (rows: number[]) => {
@@ -146,13 +148,13 @@ export function spawnCells(s: GameState, owner: PlayerId): Pos[] {
     for (const y of rows) for (let x = 0; x < s.mode.size; x++) if (isFree(s, { x, y })) out.push({ x, y });
     return out;
   };
-  let cells = rowsFree(homeRows(s, side));
-  if (!cells.length) cells = rowsFree([fourthRow(s, side)]);
-  if (!cells.length) {
-    const half = Array.from({ length: s.mode.size / 2 }, (_, i) => (side === 0 ? s.mode.size - 1 - i : i));
-    cells = rowsFree(half);
+  const cells = rowsFree(homeRows(s, side));
+  if (cells.length) return cells;
+  for (let i = 3; i < s.mode.size; i++) {
+    const row = rowsFree([side === 0 ? s.mode.size - 1 - i : i]);
+    if (row.length) return row;
   }
-  return cells;
+  return [];
 }
 
 export const opponentOf = (s: GameState) => other(s.current);

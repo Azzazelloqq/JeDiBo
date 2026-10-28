@@ -250,6 +250,50 @@ test('вопрос из очереди не предлагает фигуру, �
   assertPendingAnswerable(s, 'Предательство после повышения');
 });
 
+/** Фигуры игрока на всех клетках рядов `rows` (номера рядов 1–12, как на доске), кроме `except`. */
+function fillRows(owner: PlayerId, rows: number[], except: string[] = []): [PlayerId, Rank, string][] {
+  const out: [PlayerId, Rank, string][] = [];
+  for (const n of rows) for (const col of 'ABCDEFGHIJKL') if (!except.includes(`${col}${n}`)) out.push([owner, Rank.Triangle, `${col}${n}`]);
+  return out;
+}
+const optionNames = (s: GameState) => s.pending!.options.map((o) => cellName(Number(o.split(',')[1]) * 12 + Number(o.split(',')[0]))).sort();
+
+test('повышение: новая фигура — в стартовую зону, без места — в 4-й ряд, дальше — в ближайший ряд со свободной клеткой', () => {
+  // треугольник игрока 0 с L11 выходит на последний ряд L12; соперник далеко и его не атакует
+  const promote = (own: [PlayerId, Rank, string][]) => {
+    const s = position([[0, Rank.Triangle, 'L11'], ...own, [1, Rank.Triangle, 'A10']], 0);
+    const pc = s.pieces.find((q) => cellName(q.y * 12 + q.x) === 'L11')!;
+    assert(dispatch(s, { type: 'move', by: 0, pieceId: pc.id, to: at('L12') }).ok, 'ход на последний ряд отклонён');
+    assert(s.pending?.source === 'promotion', `ожидалось повышение, вопрос: ${s.pending?.source}`);
+    return optionNames(s);
+  };
+  const home = promote(fillRows(0, [1, 2, 3], ['C2']));
+  assert(home.join() === 'C2', `в стартовой зоне свободна только C2, варианты: ${home.join(' ')}`);
+  const fourth = promote(fillRows(0, [1, 2, 3]));
+  assert(fourth.length === 12 && fourth.every((c) => /^[A-L]4$/.test(c)), `ожидался весь 4-й ряд, варианты: ${fourth.join(' ')}`);
+  const next = promote(fillRows(0, [1, 2, 3, 4, 5], ['H5']).concat(fillRows(0, [6], ['B6', 'C6'])));
+  assert(next.join() === 'H5', `ожидалась единственная свободная клетка 5-го ряда H5, варианты: ${next.join(' ')}`);
+  const far = promote(fillRows(0, [1, 2, 3, 4, 5, 6, 7, 8], ['E8']));
+  assert(far.join() === 'E8', `ожидалась клетка E8 (8-й ряд), варианты: ${far.join(' ')}`);
+});
+
+test('Подарок: круг — в стартовую зону, без места — в следующий ряд со свободной клеткой', () => {
+  // игрок 0 тянет Карму на своём 7-м ходу
+  const gift = (own: [PlayerId, Rank, string][]) => {
+    const s = position([...own, [1, Rank.Triangle, 'A10']], 1);
+    s.players[0].ownTurns = 6;
+    s.actedThisTurn = true;
+    s.deck = ['gift'];
+    dispatch(s, { type: 'endTurn', by: 1 });
+    assert(s.pending?.source === 'gift', `ожидался Подарок, вопрос: ${s.pending?.source}`);
+    return optionNames(s);
+  };
+  const fourth = gift(fillRows(0, [1, 2, 3]));
+  assert(fourth.length === 12 && fourth.every((c) => /^[A-L]4$/.test(c)), `ожидался весь 4-й ряд, варианты: ${fourth.join(' ')}`);
+  const fifth = gift(fillRows(0, [1, 2, 3, 4], []).concat(fillRows(0, [5], ['J5'])));
+  assert(fifth.join() === 'J5', `ожидалась J5, варианты: ${fifth.join(' ')}`);
+});
+
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {
   const r = fuzz({ games: 120, seed: 7 });
   assert(!r.error, r.error!);
