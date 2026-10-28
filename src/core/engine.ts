@@ -3,7 +3,7 @@
 import { CARDS, fullDeck } from './karma/cards';
 import { RANK_NAME, checkPromotion, destroy, log, spawn, startPromotion, type Ctx } from './ops';
 import { randInt, shuffle } from './rng';
-import { anyLegalAction, canAct, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
+import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
 import { START_ARMY } from './modes';
 import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type Pending, type PlayerId } from './types';
 
@@ -89,7 +89,11 @@ export function dispatch(s: GameState, a: Action): Result {
       break;
     case 'timeout':
       if (a.total) finish(c, other(a.by), `У ${s.players[a.by].name} закончилось общее время`);
-      else {
+      else if (a.choice) {
+        // доигрываются только вопросы выбирающего; ход продолжается (или кончается, если карта занимает ход)
+        log(c, 'Время на выбор истекло', a.by);
+        autoResolve(c, a.by);
+      } else {
         log(c, 'Время хода истекло', a.by);
         autoResolve(c);
         endTurn(c);
@@ -121,7 +125,10 @@ function validate(s: GameState, a: Action): string | null {
   }
   if (s.phase !== 'play') return 'Партия ещё не началась';
   if (a.type === 'resign') return null;
-  if (a.type === 'timeout') return a.by === s.current || a.total ? null : 'Не ваш ход';
+  if (a.type === 'timeout') {
+    if (a.choice) return choosingOpponent(s) === a.by ? null : 'Нет выбора соперника';
+    return a.by === s.current || a.total ? null : 'Не ваш ход';
+  }
   if (a.type === 'choose' || a.type === 'skip') {
     const p = s.pending;
     if (!p || p.chooser !== a.by) return 'Нет выбора';
@@ -258,13 +265,14 @@ function afterAction(c: Ctx) {
 /**
  * Время вышло, а вопросы открыты: они не отменяются, а доигрываются. Обязательный выбор (куда поставить
  * фигуру, чью фигуру уничтожить…) делается случайно, необязательный (Отступление, Предательство) пропускается.
+ * only — доиграть только вопросы этого игрока (кончилось время на выбор соперника).
  */
-function autoResolve(c: Ctx) {
+function autoResolve(c: Ctx, only?: PlayerId) {
   const s = c.s;
   for (let guard = 0; guard < 64; guard++) {
     if (!s.pending && s.queue.length) s.pending = s.queue.shift()!;
     const p = s.pending;
-    if (!p) return;
+    if (!p || (only !== undefined && p.chooser !== only)) return;
     p.options = liveOptions(s, p);
     if (!p.options.length) {
       s.pending = null;

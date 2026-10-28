@@ -96,6 +96,8 @@ export interface ModeConfig {
   matchDeckSize: number;
   turnMs: number;
   totalMs: number;
+  /** время соперника на выбор по карте в чужой ход (целиком на весь выбор); часы ходящего в это время стоят */
+  choiceMs: number;
 }
 
 export interface GameState {
@@ -135,7 +137,8 @@ export type Action =
   | { type: 'skip'; by: PlayerId }
   /** left — игрок покинул сетевую партию (выставляет только комната) */
   | { type: 'resign'; by: PlayerId; left?: boolean }
-  | { type: 'timeout'; by: PlayerId; total: boolean };
+  /** choice — у соперника кончилось время на выбор по карте (by — выбирающий) */
+  | { type: 'timeout'; by: PlayerId; total: boolean; choice?: boolean };
 
 /** События — то, что видит слой представления (анимации, звук, хроника). */
 export type GameEvent =

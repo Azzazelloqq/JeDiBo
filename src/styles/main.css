@@ -246,7 +246,10 @@ body.no-crt #crt { display: none; }
 .tb-clock { font-family: var(--f-pix); font-size: 22px; font-weight: 700; }
 .clock-bar { width: 120px; height: 6px; background: var(--void); }
 .clock-fill { height: 100%; background: var(--patina-500); transition: width 0.25s linear; }
+.clock-bar.choice .clock-fill { background: var(--amber-500); }
 .clock-bar.low .clock-fill { background: var(--signal); animation: blink 0.5s steps(2) infinite; }
+.tb-choice { font-size: 11px; color: var(--amber-300); text-transform: uppercase; letter-spacing: 0.05em; }
+.tb-choice:empty { display: none; }
 @keyframes blink { 50% { opacity: 0.3; } }
 .tb-totals { font-size: 11px; color: var(--concrete-400); }
 

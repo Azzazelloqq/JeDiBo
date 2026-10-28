@@ -158,3 +158,8 @@ export function spawnCells(s: GameState, owner: PlayerId): Pos[] {
 }
 
 export const opponentOf = (s: GameState) => other(s.current);
+
+/** Соперник отвечает на вопрос карты в чужой ход (Двойная смерть, Девальвация, Предательство) — кто именно. */
+export function choosingOpponent(s: GameState): PlayerId | null {
+  return s.phase === 'play' && s.pending && s.pending.chooser !== s.current ? s.pending.chooser : null;
+}

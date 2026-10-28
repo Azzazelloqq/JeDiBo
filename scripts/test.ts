@@ -5,6 +5,7 @@ import { ATTACK, CELL_MASK, FastBoard, newUndo, passTurn } from '../src/ai/board
 import { DEFAULT_WEIGHTS, bestCapture, type Weights } from '../src/ai/eval';
 import { LEVELS, levelById, type LevelId } from '../src/ai/levels';
 import { searchTurn } from '../src/ai/search';
+import { clocksAfter, expiredClock, newClocks, spendTime, type Clocks } from '../src/core/clocks';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
@@ -372,6 +373,55 @@ test('таймаут хода во время необязательного в�
   timeout(betrayal);
   assert(piecesNamed(betrayal, 0).join() === before, `фигуры сдвинулись: ${piecesNamed(betrayal, 0).join(' ')}`);
   assert(betrayal.current === 1 && !betrayal.pending, 'ход не перешёл к сопернику');
+});
+
+/** Прошло ms на часах; если какие-то кончились — применить таймаут, как это делают Match и комната. */
+function passTime(s: GameState, c: Clocks, ms: number) {
+  spendTime(s, c, ms);
+  const a = expiredClock(s, c);
+  if (!a) return null;
+  const r = dispatch(s, a);
+  assert(r.ok, `таймаут ${JSON.stringify(a)} отклонён: ${r.error}`);
+  clocksAfter(s, c, r.events);
+  return a;
+}
+
+test('часы: пока соперник выбирает по карте, часы ходящего стоят; по истечении 15 с — автовыбор, ход продолжается', () => {
+  const s = drawCard('devaluation', [[0, Rank.Circle, 'F6'], [0, Rank.Square, 'B2'], [0, Rank.Triangle, 'A2']]);
+  assert(s.pending!.chooser === 1 && s.current === 0, 'выбирать должен соперник в ход игрока 0');
+  const c = newClocks(s.mode);
+  assert(passTime(s, c, 10_000) === null, 'таймаут раньше срока');
+  assert(c.turnLeft === s.mode.turnMs && c.total[0] === s.mode.totalMs && c.total[1] === s.mode.totalMs, `часы игроков шли: ${JSON.stringify(c)}`);
+  const a = passTime(s, c, 5_000);
+  assert(a?.choice && a.by === 1, `ожидался таймаут выбора соперника, есть: ${JSON.stringify(a)}`);
+  // Девальвация доиграна: круг и квадрат понижены
+  assert(piecesNamed(s, 0).join() === 'SF6,TA2,TB2', `ожидались понижения, фигуры: ${piecesNamed(s, 0).join(' ')}`);
+  assert(s.current === 0 && !s.pending && s.ap === s.mode.ap, 'ход игрока 0 должен продолжиться');
+  passTime(s, c, 1_000);
+  assert(c.turnLeft === s.mode.turnMs - 1_000 && c.choiceLeft === s.mode.choiceMs, `после выбора пошли часы хода: ${JSON.stringify(c)}`);
+});
+
+test('часы: 15 секунд — на весь выбор целиком (Двойная смерть)', () => {
+  const s = drawCard('doubleDeath', [[0, Rank.Triangle, 'A2'], [0, Rank.Triangle, 'B2'], [0, Rank.Triangle, 'C2']]);
+  const c = newClocks(s.mode);
+  passTime(s, c, 10_000);
+  const r = dispatch(s, { type: 'choose', by: 1, option: s.pending!.options[0] });
+  clocksAfter(s, c, r.events);
+  assert(s.pending?.chooser === 1, 'ожидался второй выбор соперника');
+  assert(c.choiceLeft === 5_000, `таймер выбора сбросился после первого шага: ${c.choiceLeft}`);
+  assert(passTime(s, c, 5_000)?.choice, 'ожидался таймаут выбора');
+  assert(piecesNamed(s, 0).length === 1, `должна остаться одна фигура: ${piecesNamed(s, 0).join(' ')}`);
+  assert(s.current === 1, 'Двойная смерть занимает ход — ход должен перейти к сопернику');
+});
+
+test('таймаут выбора: принимается только от выбирающего соперника; Предательство пропускается', () => {
+  const s = drawCard('betrayal', [[0, Rank.Triangle, 'A2'], [0, Rank.Circle, 'F6']]);
+  assert(!dispatch(clone(s), { type: 'timeout', by: 0, total: false, choice: true }).ok, 'таймаут выбора от ходящего принят');
+  const before = piecesNamed(s, 0).join();
+  assert(dispatch(s, { type: 'timeout', by: 1, total: false, choice: true }).ok, 'таймаут выбора отклонён');
+  assert(piecesNamed(s, 0).join() === before, `фигуры сдвинулись: ${piecesNamed(s, 0).join(' ')}`);
+  assert(s.current === 1 && !s.pending, 'ход не перешёл к сопернику');
+  assert(!dispatch(s, { type: 'timeout', by: 0, total: false, choice: true }).ok, 'таймаут выбора без вопроса принят');
 });
 
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {

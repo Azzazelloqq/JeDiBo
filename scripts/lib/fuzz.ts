@@ -7,7 +7,7 @@ import { createGame, dispatch } from '../../src/core/engine';
 import { CARDS } from '../../src/core/karma/cards';
 import { CLASSIC } from '../../src/core/modes';
 import { PRESETS } from '../../src/core/presets';
-import { anyLegalAction, isBarrier, legalTargets, piecesOf, sideOf } from '../../src/core/rules';
+import { anyLegalAction, choosingOpponent, isBarrier, legalTargets, piecesOf, sideOf } from '../../src/core/rules';
 import { key, type Action, type GameState, type ModeConfig, type PlayerId } from '../../src/core/types';
 import { lcg } from './boardcheck';
 
@@ -98,9 +98,12 @@ export function fuzz(opts: FuzzOpts): { error: string | null; steps: number; que
       const ends = acts.filter((a) => a.type === 'endTurn');
       const rest = acts.filter((a) => a.type !== 'endTurn');
       const r0 = rnd();
+      const ch = choosingOpponent(s);
       const a: Action =
         s.phase === 'play' && r0 < 0.02
-          ? { type: 'timeout', by: s.current, total: false }
+          ? ch !== null
+            ? { type: 'timeout', by: ch, total: false, choice: true }
+            : { type: 'timeout', by: s.current, total: false }
           : ends.length && (!rest.length || r0 < 0.25)
             ? ends[0]
             : pick(rest);

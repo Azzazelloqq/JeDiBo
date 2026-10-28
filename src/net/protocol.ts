@@ -2,7 +2,7 @@
 import type { Action, ModeConfig, PlayerId } from '../core/types';
 
 /** Меняется при любой несовместимой правке протокола или правил движка. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 /** лимит сообщения клиента; сообщения комнаты (start с полным логом) бывают намного больше */
 export const MAX_MSG_BYTES = 8 * 1024;
 export const MAX_SERVER_MSG_BYTES = 4 * 1024 * 1024;
@@ -22,8 +22,12 @@ export interface PeerInfo {
 export interface ClockSnap {
   turnLeft: number;
   total: [number, number];
-  /** чьи часы идут; null — стоят (расстановка, конец партии) */
+  /** чьи часы идут; null — стоят (расстановка, конец партии, выбор соперника по карте) */
   running: PlayerId | null;
+  /** остаток времени соперника на выбор по карте */
+  choiceLeft: number;
+  /** кто сейчас выбирает по карте в чужой ход (идёт его таймер выбора); null — никто */
+  choice: PlayerId | null;
   /** время комнаты в момент снимка — для интерполяции на клиенте */
   now: number;
 }
