@@ -465,3 +465,24 @@ body.no-crt #crt { display: none; }
   .mode-row { bottom: 96px; }
   .mode-tile .tile-art { display: none; }
 }
+
+/* ── лобби сетевой игры (минимальное, до редизайна) ───────────────────────── */
+.lobby-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.lobby-card { display: flex; flex-direction: column; gap: 12px; align-items: stretch; min-width: 0; }
+.lobby-card p { margin: 0; line-height: 1.45; }
+.lobby-wait { align-items: center; text-align: center; padding: 26px; }
+.room-code { font-family: var(--f-pix); font-size: 64px; letter-spacing: 0.18em; color: var(--amber-300); text-shadow: 4px 4px 0 var(--void); }
+.lobby-status { font-family: var(--f-pix); font-size: 18px; }
+.lobby-status.bad, .lobby-fail { color: var(--blood-400); }
+.lobby-fail { line-height: 1.45; }
+.code-input {
+  font-family: var(--f-pix); font-size: 36px; letter-spacing: 0.2em; text-align: center; text-transform: uppercase;
+  width: 100%; box-sizing: border-box; min-width: 0;
+  background: var(--void); color: var(--amber-300); border: 3px solid var(--slab-600); padding: 8px 10px; outline: none;
+}
+.code-input:focus { border-color: var(--amber-500); }
+@media (max-width: 760px) { .lobby-grid { grid-template-columns: 1fr; } }
+.net-badge { font-family: var(--f-pix); font-size: 13px; }
+.net-badge.on { color: var(--amber-300); }
+.net-badge.off { color: var(--blood-400); }
+.net-strip { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60; padding: 8px 16px; font-family: var(--f-pix); font-size: 16px; color: var(--amber-300); background: var(--void); border: 3px solid var(--blood-600); box-shadow: 0 5px 0 var(--void); }

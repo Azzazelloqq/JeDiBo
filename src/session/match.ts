@@ -85,6 +85,10 @@ export class Match {
     return s.pending ? s.pending.chooser : s.current;
   }
   isHuman = (p: PlayerId) => this.cfg.controllers[p] === 'human';
+  /** сколько подтверждённых действий ещё ждут анимации — экран может проиграть их без анимаций, чтобы догнать */
+  get backlog() {
+    return this.queue.length;
+  }
   /** идёт анимация или ждём подтверждения своего действия от комнаты — ввод заблокирован */
   get isBusy() {
     return this.busy || this.queue.length > 0 || !!this.cfg.net?.awaiting;

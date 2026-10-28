@@ -63,11 +63,13 @@ export class RoomHost {
           windowStart = t;
           count = 0;
         }
+        const m = decodeClientMsg(raw);
         if (++count > this.rate) {
-          link.send(encode({ t: 'error', code: 'badMsg', text: 'Слишком много сообщений' }));
+          // отброшенный ход — с отказом, иначе клиент так и будет ждать ответа на него
+          if (m?.t === 'submit') link.send(encode({ t: 'reject', cseq: Number.isInteger(m.cseq) ? m.cseq : -1, error: 'Слишком часто' }));
+          else link.send(encode({ t: 'error', code: 'badMsg', text: 'Слишком много сообщений' }));
           return Promise.resolve();
         }
-        const m = decodeClientMsg(raw);
         if (!m) {
           link.send(encode({ t: 'error', code: 'badMsg', text: 'Неразборчивое сообщение' }));
           return Promise.resolve();

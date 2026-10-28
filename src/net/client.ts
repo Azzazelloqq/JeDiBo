@@ -14,6 +14,9 @@ export interface ClientIdentity extends PeerInfo {
 
 export type ClientErrorCode = ErrorCode | 'desync';
 
+/** столько ждём подтверждения своего действия, прежде чем сверяться с комнатой */
+const INFLIGHT_TIMEOUT_MS = 10_000;
+
 export interface RoomClientEvents {
   welcome?(seat: PlayerId, status: RoomStatus): void;
   opponent?(info: PeerInfo | null, connected: boolean): void;
@@ -53,6 +56,7 @@ export class RoomClient {
   private myPlace: Commitment<Layout> | null = null;
   private placing = false;
   private attempt = 0;
+  private inflightTimer: ReturnType<typeof setTimeout> | null = null;
   private desyncs: number[] = [];
   private revealed = false;
   private commits: [string | null, string | null] = [null, null];
@@ -96,6 +100,13 @@ export class RoomClient {
     const cseq = ++this.cseq;
     this.inflight = cseq;
     this.send({ t: 'submit', action: a, cseq });
+    // ответ потерялся (обрыв, лимит) — не ждём вечно: сбрасываем ожидание и сверяемся с комнатой
+    if (this.inflightTimer) clearTimeout(this.inflightTimer);
+    this.inflightTimer = setTimeout(() => {
+      if (this.inflight !== cseq) return;
+      this.inflight = null;
+      this.resync();
+    }, INFLIGHT_TIMEOUT_MS);
     return cseq;
   }
 

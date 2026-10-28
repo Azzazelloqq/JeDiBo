@@ -67,9 +67,9 @@ export function profileScreen(root: HTMLElement) {
                       'div',
                       { class: `hist hist-${r.result}` },
                       h('span', { class: 'hist-res' }, r.result === 'win' ? 'ПОБЕДА' : r.result === 'loss' ? 'ПОРАЖЕНИЕ' : 'НИЧЬЯ'),
-                      h('span', {}, `vs ${r.opponent}`),
+                      h('span', {}, `vs ${r.opponent}${r.kind === 'net' ? ' · сеть' : ''}`),
                       h('span', { class: 'muted' }, `${r.turns} ход.`),
-                      h('span', { class: 'hist-delta' }, r.kind === 'bot' ? `${r.delta >= 0 ? '+' : ''}${r.delta}` : '—'),
+                      h('span', { class: 'hist-delta' }, r.kind !== 'hotseat' ? `${r.delta >= 0 ? '+' : ''}${r.delta}` : '—'),
                     ),
                   ),
                 )

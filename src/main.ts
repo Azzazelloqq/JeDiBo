@@ -3,6 +3,7 @@ import { applyCssPalette, PAL } from './render/palette';
 import { startBackground } from './render/background';
 import { concreteCss } from './render/sprites';
 import { go } from './ui/app';
+import { bootScreen } from './ui/screens/lobby';
 import { menuScreen } from './ui/screens/menu';
 import { applySettings } from './ui/screens/settings';
 
@@ -24,7 +25,8 @@ async function boot() {
   } catch {
     /* офлайн — останется моноширинный запасной */
   }
-  go(menuScreen);
+  // ссылка-приглашение или возврат в сетевую комнату после перезагрузки вкладки — иначе меню
+  go(bootScreen() ?? menuScreen);
   // отладочный пульт сети: в прод-сборку не попадает
   if (import.meta.env.DEV) void import('./net/devtools');
 }

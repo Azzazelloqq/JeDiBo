@@ -3,7 +3,7 @@
 export interface MatchRecord {
   at: number;
   opponent: string;
-  kind: 'bot' | 'hotseat';
+  kind: 'bot' | 'hotseat' | 'net';
   result: 'win' | 'loss' | 'draw';
   delta: number;
   turns: number;
@@ -88,11 +88,11 @@ export function titleOf(r: number) {
   return { name: TITLES[i][1], from: TITLES[i][0], to: next?.[0] ?? TITLES[i][0] + 200, next: next?.[1] ?? null };
 }
 
-/** Эло против фиксированного рейтинга бота; хотсит рейтинг не меняет. Возвращает дельту. */
+/** Эло: против бота — его фиксированный рейтинг, по сети — рейтинг соперника из его профиля; хотсит рейтинг не меняет. Возвращает дельту. */
 export function recordMatch(rec: Omit<MatchRecord, 'delta' | 'at'>, stats: { captures: number; cards: number }, oppRating = 1000): number {
   const p = profile;
   let delta = 0;
-  if (rec.kind === 'bot') {
+  if (rec.kind !== 'hotseat') {
     const exp = 1 / (1 + 10 ** ((oppRating - p.rating) / 400));
     const score = rec.result === 'win' ? 1 : rec.result === 'draw' ? 0.5 : 0;
     delta = Math.round(32 * (score - exp));

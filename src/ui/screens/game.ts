@@ -4,20 +4,22 @@ import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
 import { anyLegalAction, canAct, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
-import { Rank, key, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
+import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
+import { ABANDON_MS } from '../../net/protocol';
 import { getProfile, recordMatch } from '../../profile/profile';
 import { setMood } from '../../render/background';
 import { BoardView } from '../../render/board';
 import { banner, floatText, pop, shake } from '../../render/fx';
 import { wait } from '../../render/tween';
 import { Match } from '../../session/match';
+import { endNet, type NetSession } from '../../session/netSession';
 import { go } from '../app';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
 import { avatarEl, pieceIcon, titleEl } from '../widgets';
 import { menuScreen } from './menu';
 
-type Kind = 'bot' | 'hotseat';
+type Kind = 'bot' | 'hotseat' | 'net';
 const LETTERS = 'ABCDEFGHIJKL';
 const coord = (p: Pos) => `${LETTERS[p.x]}${12 - p.y}`;
 const GLYPH = ['▲', '■', '●'];
@@ -30,19 +32,46 @@ const EFFECT_NAME: Record<string, string> = {
   barrier: 'Барьер',
   blitz: 'Блицкриг',
 };
+/** Отметить сетевую партию как записанную в профиль. false — уже была записана (перезагрузка вкладки). */
+function markRecorded(id: string): boolean {
+  try {
+    const k = 'jedibo.net.recorded';
+    const list: string[] = JSON.parse(sessionStorage.getItem(k) ?? '[]');
+    if (list.includes(id)) return false;
+    sessionStorage.setItem(k, JSON.stringify([...list, id].slice(-20)));
+  } catch {
+    // без sessionStorage — пишем как есть
+  }
+  return true;
+}
+
 const fmt = (ms: number) => {
   const t = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-export function gameScreen(root: HTMLElement, kind: Kind) {
+/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. */
+export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession) {
   setMood('game');
   const prof = getProfile();
-  const names: [string, string] = kind === 'bot' ? [prof.name, 'Странник'] : [prof.name, 'Гость'];
-  const match = new Match({ names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'] });
+  const client = kind === 'net' ? net!.client : null;
+  // «я» — место в комнате; офлайн всегда игрок 0
+  const me: PlayerId = client?.seat ?? 0;
+  const opp = other(me);
+  const names: [string, string] = client
+    ? [client.state!.players[0].name, client.state!.players[1].name]
+    : kind === 'bot'
+      ? [prof.name, 'Странник']
+      : [prof.name, 'Гость'];
+  const match = new Match(
+    client
+      ? { names, controllers: me === 0 ? ['human', 'remote'] : ['remote', 'human'], net: client }
+      : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'] },
+  );
   const s = match.state;
+  const gameSeed = s.seed;
   const board = new BoardView();
-  const avatarSeed = (p: PlayerId) => (p === 0 ? prof.avatarSeed : `${names[1]}#seed`);
+  const avatarSeed = (p: PlayerId) => (p === me ? prof.avatarSeed : (client?.opponent?.avatarSeed ?? `${names[p]}#seed`));
 
   // ── каркас ──────────────────────────────────────────────────────────────
   const left = h('aside', { class: 'side side-left' });
@@ -197,7 +226,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     top.replaceChildren(
       h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${color}` }), s.players[placingFor].name),
       h('div', { class: 'tb-title' }, 'Скрытая расстановка'),
-      h('div', { class: 'tb-note' }, kind === 'bot' ? 'Странник уже расставился' : `Игрок ${placingFor + 1} из 2`),
+      h('div', { class: 'tb-note' }, kind === 'bot' ? 'Странник уже расставился' : kind === 'net' ? (oppReady ? 'Соперник готов' : 'Соперник расставляется…') : `Игрок ${placingFor + 1} из 2`),
     );
     bottom.replaceChildren(
       h('div', { class: 'presets' }, ...PRESETS.map((p) => btn(p.name, () => applyPreset(p.id), 'btn-stone btn-small'))),
@@ -220,10 +249,25 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     board.onHover = () => {};
     board.onCell = () => {};
     match.submit({ type: 'place', by: placingFor, layout: lay });
+    if (kind === 'net') renderWaiting();
     if (kind === 'hotseat' && placingFor === 0) {
       await curtain(`Передайте устройство`, `${names[1]} расставляет фигуры`);
       startPlacement(1);
     }
+  }
+
+  /** Сеть: своя расстановка отправлена — ждём соперника. */
+  function renderWaiting() {
+    board.ov = { ...board.ov, zone: null, ghost: null };
+    board.onHover = () => {};
+    board.onCell = () => {};
+    top.replaceChildren(
+      h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${s.players[me].color}` }), s.players[me].name),
+      h('div', { class: 'tb-title' }, 'Расстановка отправлена'),
+      h('div', { class: 'tb-note' }, oppReady ? 'Соперник готов — начинаем…' : 'Ждём, пока соперник расставится…'),
+    );
+    right.replaceChildren(h('section', { class: 'slab hint' }, 'Ваша расстановка скрыта: соперник увидит её только когда закончит свою.'));
+    bottom.replaceChildren(h('div', { class: 'prompt' }, 'Ждём соперника…'));
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -236,6 +280,18 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
 
   match.onEvents = async (events, st) => {
     if (events.some((e) => e.type === 'placed') && st.phase === 'placement') return;
+    // отстали (свёрнутая вкладка, переподключение) — догоняем без анимаций
+    if (match.backlog > 2) {
+      for (const e of events) chronicleFrom(e, st);
+      if (events.some((e) => e.type === 'start')) {
+        board.ov = { ...board.ov, zone: null, ghost: null };
+        board.onHover = () => {};
+        board.onCell = playClick;
+      }
+      board.sync(st);
+      refresh();
+      return;
+    }
     const drawnNow = new Set<CardId>();
     // спавны расстановки не анимируем по одному — армии «падают» разом в beginPlay()
     const startAt = events.findIndex((e) => e.type === 'start');
@@ -254,7 +310,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
           sfx.turn();
           if (i !== lastTurn) break;
           if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'red' : 'stone', 450);
-          else if (e.player === 0) await banner('Ваш ход', `ход ${e.ownTurn}`, 'red', 380);
+          else if (e.player === me) await banner('Ваш ход', `ход ${e.ownTurn}`, 'red', 380);
           break;
         case 'cardDrawn':
           drawnNow.add(e.card);
@@ -440,7 +496,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
         'div',
         { class: 'pl-head' },
         avatarEl(avatarSeed(p), 4),
-        h('div', { class: 'pl-id' }, h('div', { class: 'pl-name' }, pl.name), h('div', { class: 'muted small' }, match.cfg.controllers[p] === 'bot' ? 'бот' : 'игрок')),
+        h('div', { class: 'pl-id' }, h('div', { class: 'pl-name' }, pl.name), controllerLabel(p)),
         active ? h('div', { class: 'pl-turn' }, 'ходит') : null,
       ),
       h(
@@ -473,6 +529,14 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     );
   }
 
+  function controllerLabel(p: PlayerId) {
+    const c = match.cfg.controllers[p];
+    if (c === 'bot') return h('div', { class: 'muted small' }, 'бот');
+    if (c !== 'remote') return h('div', { class: 'muted small' }, kind === 'net' ? 'вы' : 'игрок');
+    const on = !!client?.opponentConnected;
+    return h('div', { class: `net-badge ${on ? 'on' : 'off'}` }, on ? '● на связи' : '○ нет связи');
+  }
+
   function effectsPanel() {
     const list = s.effects.filter((e) => !(e.kind === 'blitz' && e.done));
     return h(
@@ -496,7 +560,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     return h(
       'div',
       { class: 'controls' },
-      btn('Сдаться', () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', () => match.submit({ type: 'resign', by: kind === 'bot' ? 0 : s.current })), 'btn-dark btn-small'),
+      btn('Сдаться', () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', () => match.submit({ type: 'resign', by: kind === 'hotseat' ? s.current : me })), 'btn-dark btn-small'),
       btn('В меню', () => leave(), 'btn-dark btn-small'),
     );
   }
@@ -602,7 +666,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
       };
       const label = def.timing === 'period' && mode === 'drawn' ? 'В руку' : 'Принять';
       btnHost.append(btn(label, done, 'btn-red btn-big'));
-      if (!human || kind === 'bot') ov.addEventListener('click', done);
+      if (!human || kind !== 'hotseat') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });
     ov.classList.add('out');
@@ -677,18 +741,26 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     });
   }
 
+  let resultShown = false;
   async function showResult(winner: PlayerId | 'draw', reason: string) {
+    if (resultShown) return;
+    resultShown = true;
     overlayOpen = true;
+    stopNetWatch();
     await wait(500);
-    const meWon = winner === 0;
-    let title = winner === 'draw' ? 'НИЧЬЯ' : kind === 'bot' ? (meWon ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ') : `ПОБЕДА`;
+    const meWon = winner === me;
+    const rated = kind !== 'hotseat';
+    let title = winner === 'draw' ? 'НИЧЬЯ' : rated ? (meWon ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ') : `ПОБЕДА`;
     const sub = kind === 'hotseat' && winner !== 'draw' ? s.players[winner].name : reason;
-    setMood(winner === 'draw' ? 'game' : kind === 'bot' && !meWon ? 'lose' : 'win');
-    (winner === 'draw' || (kind === 'bot' && !meWon) ? sfx.lose : sfx.win)();
+    setMood(winner === 'draw' ? 'game' : rated && !meWon ? 'lose' : 'win');
+    (winner === 'draw' || (rated && !meWon) ? sfx.lose : sfx.win)();
     const result = winner === 'draw' ? 'draw' : meWon ? 'win' : 'loss';
-    const delta = recordMatch(
-      { opponent: names[1], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
-      { captures: match.stats.captures[0], cards: match.stats.cards[0] },
+    // сеть: итог мог уже быть записан до перезагрузки вкладки — второй раз не пишем
+    const recorded = kind === 'net' && !markRecorded(`${net!.code}:${gameSeed}`);
+    const delta = recorded ? 0 : recordMatch(
+      { opponent: names[opp], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
+      { captures: match.stats.captures[me], cards: match.stats.cards[me] },
+      client?.opponent?.rating ?? 1000,
     );
     const deltaEl = h('div', { class: `delta ${delta >= 0 ? 'good' : 'bad'}` }, '0');
     const ov = h(
@@ -704,12 +776,12 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
           'div',
           { class: 'result-stats slab' },
           stat('ходов', s.turn),
-          stat('сбито', match.stats.captures[0]),
-          stat('потеряно', match.stats.captures[1]),
-          stat('карт', match.stats.cards[0]),
-          kind === 'bot' ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
+          stat('сбито', match.stats.captures[me]),
+          stat('потеряно', match.stats.captures[opp]),
+          stat('карт', match.stats.cards[me]),
+          rated ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
         ),
-        h('div', { class: 'row' }, btn('Реванш', () => (ov.remove(), go((r) => gameScreen(r, kind))), 'btn-red btn-big'), btn('В меню', () => (ov.remove(), go(menuScreen)), 'btn-stone btn-big')),
+        h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), go(menuScreen)), 'btn-stone btn-big')),
       ),
     );
     document.body.appendChild(ov);
@@ -724,11 +796,148 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
     if (!steps) deltaEl.textContent = '±0';
     pop(deltaEl);
   }
+  /** Реванш: офлайн — новая партия сразу; в сети — просьба в комнату, новая партия придёт как start с новым seed. */
+  function rematchBtn() {
+    if (kind !== 'net') return btn('Реванш', () => go((r) => gameScreen(r, kind)), 'btn-red btn-big');
+    const alive = client!.status === 'over' && !hostGone && client!.opponentConnected && net!.link?.status !== 'failed';
+    const b = btn(
+      'Реванш',
+      () => {
+        client!.rematch();
+        b.disabled = true;
+        b.textContent = oppWantsRematch ? 'Начинаем…' : 'Ждём соперника…';
+      },
+      'btn-red btn-big',
+      { disabled: !alive },
+    );
+    rematchButton = b;
+    return b;
+  }
   const stat = (l: string, v: number) => h('div', { class: 'stat' }, h('div', { class: 'stat-v' }, String(v)), h('div', { class: 'stat-l' }, l));
 
   function leave() {
+    if (kind === 'net') {
+      if (s.phase === 'over') return endNet(true), go(menuScreen);
+      return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', () => (endNet(true), go(menuScreen)));
+    }
     if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => go(menuScreen));
     else go(menuScreen);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // СЕТЬ: связь, переподключение, реванш, ошибки
+  // ════════════════════════════════════════════════════════════════════════
+  let oppReady = false;
+  let oppWantsRematch = false;
+  let rematchButton: HTMLButtonElement | null = null;
+  let hostGone = false;
+  /** когда пропала связь (у гостя — с хостом, у хоста — у соперника) */
+  let lostSince: number | null = null;
+  const strip = h('div', { class: 'net-strip' });
+  let netTimer: ReturnType<typeof setInterval> | null = null;
+  const unlisten: (() => void)[] = [];
+
+  function stopNetWatch() {
+    if (netTimer) clearInterval(netTimer);
+    netTimer = null;
+    strip.remove();
+  }
+
+  function showStrip() {
+    if (lostSince === null || s.phase === 'over' || resultShown) return strip.remove();
+    const left = Math.max(0, Math.ceil((ABANDON_MS - (Date.now() - lostSince)) / 1000));
+    const actorIsOpp = s.phase === 'play' && match.actor() === opp;
+    strip.textContent =
+      net!.role === 'guest'
+        ? `Связь с хостом потеряна — переподключаемся… ${left} с`
+        : `Соперник отключился${actorIsOpp || s.phase !== 'play' ? ` — ${left} с на возвращение` : ', ждём'}`;
+    if (!strip.isConnected) document.body.appendChild(strip);
+  }
+
+  /** На экране итога соперник пропал — реванша не будет. */
+  function rematchGone() {
+    if (!rematchButton) return;
+    rematchButton.disabled = true;
+    rematchButton.textContent = 'Соперник ушёл';
+  }
+
+  function fatal(title: string, text: string) {
+    stopNetWatch();
+    overlayOpen = true;
+    const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), go(menuScreen)), 'btn-stone'))));
+    document.body.appendChild(ov);
+  }
+
+  if (client && net) {
+    unlisten.push(
+      client.listen({
+        opponent: (_info, on) => {
+          if (resultShown) return on ? undefined : rematchGone();
+          if (net.role === 'host') {
+            lostSince = on ? null : Date.now();
+            toast(on ? 'Соперник снова на связи' : 'Соперник отключился', on ? 'amber' : 'red');
+          }
+          if (s.phase !== 'placement') refresh();
+          showStrip();
+        },
+        placeCommitted: (seat) => {
+          if (seat !== opp) return;
+          oppReady = true;
+          if (s.phase === 'placement') (client.placeCommitted ? renderWaiting() : renderPlacement());
+        },
+        rematch: (seat) => {
+          if (seat !== opp) return;
+          oppWantsRematch = true;
+          toast('Соперник хочет реванш', 'amber');
+          if (rematchButton?.disabled) rematchButton.textContent = 'Начинаем…';
+        },
+        abandoned: () => fatal('Партия не состоялась', 'Соперник ушёл до начала партии.'),
+        error: (code, text) => {
+          if (code === 'cheat') fatal('Партия остановлена', `Соперник нарушил правила: ${text}`);
+          else if (code === 'desync' && client.broken) fatal('Партия остановлена', text);
+          else if (code === 'version') fatal('Разные версии игры', text);
+        },
+      }),
+    );
+    // гость: связь с хостом — комната живёт у него, поэтому о его уходе гостю никто не скажет
+    if (net.link) {
+      net.link.onStatus = (st) => {
+        if (resultShown && st !== 'open') rematchGone();
+        if (st === 'open') lostSince = null;
+        else if (lostSince === null) lostSince = Date.now();
+        if (st === 'failed') lostSince = Date.now() - ABANDON_MS;
+        showStrip();
+      };
+    }
+    netTimer = setInterval(() => {
+      showStrip();
+      // хост пропал дольше окна возвращения — партия засчитывается гостю
+      if (net.role === 'guest' && lostSince !== null && Date.now() - lostSince > ABANDON_MS + 2_000 && !resultShown) {
+        hostGone = true;
+        if (s.phase === 'play') void showResult(me, `${s.players[opp].name} покинул партию`);
+        else fatal('Хост пропал', 'Соединение с хостом потеряно.');
+        endNet(false);
+      }
+    }, 500);
+    // переподключение / resync / реванш: Match уже обновил состояние — перерисовать без анимаций
+    match.onReset = (st) => {
+      if (st.seed !== gameSeed) return go((r) => gameScreen(r, 'net', net));
+      if (st.phase === 'placement') {
+        if (client.placeCommitted || st.players[me].placed) renderWaiting();
+        return;
+      }
+      enterPlayDirect();
+    };
+  }
+
+  /** Сразу в партию без анимаций (возврат после перезагрузки или переподключения). */
+  function enterPlayDirect() {
+    board.ov = { ...board.ov, zone: null, ghost: null };
+    board.onHover = () => {};
+    board.onCell = playClick;
+    board.sync(s);
+    refresh();
+    if (s.phase === 'over' && s.winner !== null) void showResult(s.winner, s.endReason ?? '');
   }
 
   const onKey = (e: KeyboardEvent) => {
@@ -747,11 +956,16 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   // отладка из консоли: __match.state, __match.submit(...)
   if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }) });
 
-  startPlacement(0);
+  if (s.phase !== 'placement') enterPlayDirect();
+  else if (kind === 'net' && (client!.placeCommitted || s.players[me].placed)) renderWaiting();
+  else startPlacement(me);
   match.start();
   requestAnimationFrame(fit);
 
   return () => {
+    unlisten.forEach((u) => u());
+    stopNetWatch();
+    if (net?.link) net.link.onStatus = () => {};
     match.stop();
     board.destroy();
     ro.disconnect();

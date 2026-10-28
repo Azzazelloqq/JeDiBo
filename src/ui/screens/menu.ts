@@ -4,6 +4,7 @@ import { btn, canvasEl, h } from '../dom';
 import { profileChip, tileArt, titleEl } from '../widgets';
 import { codexScreen } from './codex';
 import { gameScreen } from './game';
+import { lobbyScreen } from './lobby';
 import { profileScreen } from './profile';
 import { rulesScreen } from './rules';
 import { settingsScreen } from './settings';
@@ -38,7 +39,7 @@ export function menuScreen(root: HTMLElement) {
       { class: 'mode-row' },
       tile('bot', 'Против Странника', 'один за столом · рейтинг', () => go((r) => gameScreen(r, 'bot'))),
       tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => go((r) => gameScreen(r, 'hotseat'))),
-      tile('net', 'По сети', 'p2p · дуэль', null),
+      tile('net', 'По сети', 'по коду · дуэль · рейтинг', () => go(lobbyScreen)),
     ),
     h(
       'div',
