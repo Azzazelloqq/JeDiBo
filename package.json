@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.pure.json && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pure.json",
     "sim": "esbuild scripts/sim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/sim.mjs --log-level=warning && node node_modules/.sim/sim.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,9 @@
+{
+  // «Чистая» сборка: движок и сетевая логика без DOM (только то, что есть в воркере/на сервере).
+  // Если сюда через импорт попадёт ui/render/audio/profile или window/document — сборка упадёт.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"]
+  },
+  "include": ["src/core", "src/net/hash.ts", "src/net/commit.ts", "src/net/protocol.ts"]
+}

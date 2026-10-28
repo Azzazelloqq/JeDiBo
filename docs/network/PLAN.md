@@ -11,11 +11,11 @@
 
 ## Этап 0. Подготовка (≈0.5 дня)
 
-- [ ] Полный `stateHash(state)` по всему `GameState`; тест: два прогона одной партии дают одинаковые хэши.
-- [ ] Проверка «чистоты»: отдельный `tsconfig` без `lib: dom` для `src/core` + `src/net/{protocol,room,commit}.ts`,
+- [x] Полный `stateHash(state)` по всему `GameState`; тест: два прогона одной партии дают одинаковые хэши.
+- [x] Проверка «чистоты»: отдельный `tsconfig` без `lib: dom` для `src/core` + `src/net/{protocol,room,commit}.ts`,
       подключить к `npm run build`.
-- [ ] `src/net/protocol.ts`: `ClientMsg`, `ServerMsg`, `ClockSnap`, `PeerInfo`, `PROTOCOL_VERSION`.
-- [ ] `src/net/commit.ts`: commit-reveal на `crypto.subtle` (есть и в браузере, и в Node).
+- [x] `src/net/protocol.ts`: `ClientMsg`, `ServerMsg`, `ClockSnap`, `PeerInfo`, `PROTOCOL_VERSION`.
+- [x] `src/net/commit.ts`: commit-reveal на `crypto.subtle` (есть и в браузере, и в Node).
 
 **Готово, когда:** сборка проходит, ядро собирается без DOM-типов.
 
@@ -105,6 +105,7 @@
 | Не соединяются пары за строгим NAT | понятная ошибка `failed`, статистика на тестах, TURN по результатам |
 | Публичный PeerJS-брокер недоступен | свой брокер — один процесс, клиент меняет только URL |
 | Хост закрыл/свернул вкладку (особенно телефон) | `sessionStorage` + подъём комнаты, ABANDON, совет «хостить с ПК» |
+| Окно переподключения 15 с короткое: брокер может не сразу отдать peer id после перезагрузки хоста | замерить на тестах; при необходимости — новый peer id с суффиксом поколения, гость перебирает `jedibo-<код>-<n>` |
 | Скрытая недетерминированность в `core` | полный `stateHash` + `netsim`; правило «в core нет Math.random/Date» |
 | Жульничество хоста | commit-reveal для seed и расстановки, гость проверяет всё своим `dispatch`; часы и колода — на доверии |
 | Редизайн параллельно меняет `game.ts` | этап 4 — минимальные правки; этап 6 — после вливания A |
