@@ -25,8 +25,9 @@ const OPEN_TIMEOUT_MS = 15_000;
 const REOPEN_TIMEOUT_MS = 5_000;
 /** живой хост отвечает на предложение соединения за 1–2 с; нет ответа столько — хоста, видимо, нет */
 const ANSWER_MS = 5_000;
-/** столько гость пытается найти хоста, прежде чем сдаться («комната не найдена») */
-const FIND_HOST_MS = 12_000;
+/** столько гость ищет хоста, прежде чем сдаться («комната не найдена»): хост на телефоне мог свернуть
+ *  браузер, чтобы отправить ссылку, — мобильный браузер замораживает вкладку, и комната пропадает до возвращения */
+const FIND_HOST_MS = 60_000;
 
 // ── сохранение в sessionStorage (переживает перезагрузку вкладки) ──────────────
 
@@ -79,11 +80,15 @@ export class HostRoom {
   onStatus: (s: HostStatus, detail?: string) => void = () => {};
   status: HostStatus = 'connecting';
   private peer: Peer | null = null;
-  private everOpen = false;
   private destroyed = false;
   private watchdog: ReturnType<typeof setInterval>;
   private live = new Map<DataConnection, { attached: Attached | null; lastData: number }>();
+  // закрытие/перезагрузка вкладки или уход в кэш вкладок — сразу освобождаем id у брокера (вернёмся через pageshow)
   private readonly onPageHide = () => this.peer?.destroy();
+  /** вкладка снова видна или поднята из кэша: связь с брокером могла умереть, пока она была заморожена */
+  private readonly onBack = () => {
+    if (document.visibilityState === 'visible') this.revive();
+  };
 
   /** data — снимок комнаты после перезагрузки вкладки (savedHostRoom). */
   constructor(
@@ -107,7 +112,26 @@ export class HostRoom {
     }, 2_000);
     // при закрытии/перезагрузке вкладки сразу освобождаем id у брокера — иначе он держит его до таймаута
     addEventListener('pagehide', this.onPageHide);
+    addEventListener('pageshow', this.onBack);
+    document.addEventListener('visibilitychange', this.onBack);
     this.register(0);
+  }
+
+  /** Вернуть комнату к брокеру без ожидания: пересоздать peer, если его нет, или переподключить. */
+  private revive() {
+    const peer = this.peer;
+    if (this.destroyed || !peer) return;
+    if (peer.destroyed) this.register(1);
+    else if (peer.disconnected) {
+      this.setStatus('reconnecting');
+      peer.reconnect();
+    }
+  }
+
+  /** Есть ли живой канал с гостем (тогда peer не пересоздаём — каналы живут и без брокера). */
+  private hasLiveGuest() {
+    for (const l of this.live.values()) if (l.attached) return true;
+    return false;
   }
 
   /** Транспорт для собственного клиента хоста: в ту же комнату, без сети. */
@@ -120,6 +144,8 @@ export class HostRoom {
     this.destroyed = true;
     clearInterval(this.watchdog);
     removeEventListener('pagehide', this.onPageHide);
+    removeEventListener('pageshow', this.onBack);
+    document.removeEventListener('visibilitychange', this.onBack);
     this.peer?.destroy();
     this.host.dispose();
     if (forget) ssSet(K_HOST, null);
@@ -127,13 +153,11 @@ export class HostRoom {
 
   private register(attempt: number) {
     if (this.destroyed) return;
+    if (this.peer && !this.peer.destroyed) this.peer.destroy();
     this.setStatus(attempt ? 'reconnecting' : 'connecting');
     const peer = new Peer(peerId(this.code), peerOptions());
     this.peer = peer;
-    peer.on('open', () => {
-      this.everOpen = true;
-      this.setStatus('open');
-    });
+    peer.on('open', () => this.setStatus('open'));
     peer.on('connection', (conn) => this.accept(conn));
     peer.on('disconnected', () => {
       // потеряли брокер; открытые каналы с гостем живут и без него
@@ -145,8 +169,8 @@ export class HostRoom {
       if (this.destroyed) return;
       if (err.type === 'unavailable-id') {
         // каналы с гостем живут и без брокера: peer с открытыми каналами не пересоздаём
-        if (this.everOpen) return this.setStatus('reconnecting', 'Брокер отдал id другому');
-        // брокер ещё держит id прошлой вкладки (перезагрузка) — пробуем снова
+        if (this.hasLiveGuest()) return this.setStatus('reconnecting', 'Брокер отдал id другому');
+        // брокер ещё держит id прошлого подключения (перезагрузка, заморозка вкладки) — пробуем снова
         peer.destroy();
         if (attempt < 30) setTimeout(() => this.register(attempt + 1), 1_000);
         else this.setStatus('failed', 'Код комнаты занят');
@@ -226,8 +250,8 @@ export class GuestLink {
   private everOpened = false;
   private backoff = 500;
   private searchingSince = Date.now();
-  /** брокер сообщал, что хоста с таким кодом нет (повторные попытки он может и не подтверждать) */
-  private hostMissing = false;
+  /** хост не отвечает (нет у брокера или вкладка хоста заморожена) — экран показывает «ждём хоста» */
+  hostMissing = false;
   private lastPong = Date.now();
   private beat: ReturnType<typeof setInterval> | null = null;
   private openTimer: ReturnType<typeof setTimeout> | null = null;

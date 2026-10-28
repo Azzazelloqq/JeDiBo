@@ -84,6 +84,14 @@ const api = {
   drop() {
     netSession()?.link?.drop();
   },
+  /** Хост: как будто вкладку заморозили — peer уничтожен, у брокера комнаты нет. */
+  freeze() {
+    (netSession()?.room as unknown as { peer?: { destroy(): void } } | undefined)?.peer?.destroy();
+  },
+  /** Хост: возвращение во вкладку (visibilitychange). */
+  thaw() {
+    document.dispatchEvent(new Event('visibilitychange'));
+  },
   leave() {
     sessionStorage.removeItem(K_BOTS);
     bot?.match?.stop();

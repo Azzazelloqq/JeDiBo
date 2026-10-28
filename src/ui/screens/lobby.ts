@@ -10,7 +10,7 @@ import { gameScreen } from './game';
 import { menuScreen } from './menu';
 
 const FAIL_TEXT: Record<GuestFailure, string> = {
-  notFound: 'Комната не найдена. Проверьте код — или хост закрыл вкладку.',
+  notFound: 'Комната не найдена. Проверьте код. Если хост с телефона — пусть откроет игру и не сворачивает браузер.',
   ice: 'Не удалось соединиться напрямую: сеть одного из игроков не пропускает соединение. Попробуйте другую сеть (например, раздать интернет с телефона).',
   browser: 'Браузер не поддерживает WebRTC — откройте игру в свежем Chrome, Firefox или Safari.',
 };
@@ -95,6 +95,14 @@ export function lobbyScreen(root: HTMLElement) {
     render();
   }
 
+  async function shareLink(code: string) {
+    try {
+      await navigator.share({ title: 'JeDiBo — дуэль', text: `Комната ${code}`, url: inviteLink(code) });
+    } catch {
+      // отмена в системном окне — ничего не делаем
+    }
+  }
+
   async function copyLink(code: string) {
     try {
       await navigator.clipboard.writeText(inviteLink(code));
@@ -142,14 +150,26 @@ export function lobbyScreen(root: HTMLElement) {
     } else if (session.role === 'host') {
       const st = session.room!.status;
       const opp = session.client.opponent;
+      const code = session.code;
+      const canShare = typeof navigator.share === 'function';
       body = h(
         'section',
         { class: 'slab lobby-card lobby-wait' },
         h('div', { class: 'h-label' }, 'Код комнаты'),
-        h('div', { class: 'room-code' }, session.code),
-        h('div', { class: 'row' }, btn('Скопировать ссылку', () => void copyLink(session!.code), 'btn-amber'), btn('Отмена', cancel, 'btn-dark')),
+        h('div', { class: 'room-code' }, code),
+        h(
+          'div',
+          { class: 'row' },
+          canShare ? btn('Поделиться', () => void shareLink(code), 'btn-red') : null,
+          btn('Скопировать ссылку', () => void copyLink(code), 'btn-amber'),
+          btn('Отмена', cancel, 'btn-dark'),
+        ),
         h('p', { class: `lobby-status ${st === 'failed' ? 'bad' : ''}` }, opp ? `${opp.name} подключается…` : HOST_STATUS[st]),
-        h('p', { class: 'muted small' }, 'Не закрывайте и не сворачивайте надолго эту вкладку: комната живёт в ней.'),
+        h(
+          'p',
+          { class: 'muted small' },
+          'Комната живёт в этой вкладке. На телефоне после отправки ссылки сразу вернитесь в игру: пока браузер свёрнут, к комнате не подключиться.',
+        ),
       );
     } else {
       body = h(
@@ -157,7 +177,15 @@ export function lobbyScreen(root: HTMLElement) {
         { class: 'slab lobby-card lobby-wait' },
         h('div', { class: 'h-label' }, 'Комната'),
         h('div', { class: 'room-code' }, session.code),
-        h('p', { class: 'lobby-status' }, session.link?.status === 'open' ? 'Соединение есть, ждём начала…' : 'Подключаемся к хосту…'),
+        h(
+          'p',
+          { class: 'lobby-status' },
+          session.link?.status === 'open'
+            ? 'Соединение есть, ждём начала…'
+            : session.link?.hostMissing
+              ? 'Хост не отвечает — возможно, он свернул браузер, чтобы отправить ссылку. Ждём его…'
+              : 'Подключаемся к хосту…',
+        ),
         h('div', { class: 'row' }, btn('Отмена', cancel, 'btn-dark')),
       );
     }
