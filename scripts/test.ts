@@ -294,6 +294,26 @@ test('Подарок: круг — в стартовую зону, без мес
   assert(fifth.join() === 'J5', `ожидалась J5, варианты: ${fifth.join(' ')}`);
 });
 
+test('Предательство: каждую фигуру соперник двигает не больше одного раза', () => {
+  const s = position([[0, Rank.Circle, 'F6'], [0, Rank.Triangle, 'A2'], [1, Rank.Triangle, 'L10']], 1);
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = ['betrayal'];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  const opt = (name: string) => `${at(name).x},${at(name).y}`;
+  assert(s.pending?.source === 'betrayal', `ожидалось Предательство, вопрос: ${s.pending?.source}`);
+  assert(dispatch(s, { type: 'choose', by: 1, option: opt('F6') }).ok, 'соперник не смог выбрать круг');
+  assert(dispatch(s, { type: 'choose', by: 1, option: opt('F7') }).ok, 'соперник не смог сдвинуть круг');
+  assert(s.pending?.source === 'betrayal', `ожидалось второе перемещение, вопрос: ${s.pending?.source}`);
+  assert(!s.pending.options.includes(opt('F7')), `сдвинутый круг снова предложен: ${optionNames(s).join(' ')}`);
+  assert(optionNames(s).join() === 'A2', `ожидался только треугольник A2, варианты: ${optionNames(s).join(' ')}`);
+  assert(dispatch(s, { type: 'choose', by: 1, option: opt('A2') }).ok, 'соперник не смог выбрать треугольник');
+  assert(dispatch(s, { type: 'choose', by: 1, option: opt('A3') }).ok, 'соперник не смог сдвинуть треугольник');
+  // двигать больше нечего — карта закончилась, ход (Предательство занимает ход) перешёл к сопернику
+  assert(!s.pending, `остался вопрос «${s.pending?.source}»: ${s.pending && optionNames(s).join(' ')}`);
+  assert(s.current === 1, 'ход не перешёл к сопернику');
+});
+
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {
   const r = fuzz({ games: 120, seed: 7 });
   assert(!r.error, r.error!);

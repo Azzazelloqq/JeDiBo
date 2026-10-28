@@ -366,14 +366,15 @@ const defs: CardDef[] = [
     count: 1,
     timing: 'onReceive',
     takesTurn: true,
-    text: 'Противник может выполнить 3 передвижения вашими фигурами.',
-    rule: 'Соперник выполняет до трёх перемещений фигурами игрока. Направления их движения сохраняются, эффекты Кармы на них не действуют. Занимает ход.',
+    text: 'Противник может передвинуть три разные ваши фигуры.',
+    rule: 'Соперник выполняет до трёх перемещений разными фигурами игрока. Направления их движения сохраняются, эффекты Кармы на них не действуют. Занимает ход.',
     play(c, p) {
-      return askBetrayalPiece(c, p, 0);
+      return askBetrayalPiece(c, p, 0, []);
     },
     onChoice(c, pend, opt) {
       if (opt === null) return;
       const p = pend.beneficiary;
+      const moved = movedBy(pend);
       if (pend.step % 2 === 0) {
         const pc = pieceFromOpt(c.s, opt)!;
         ask(c, {
@@ -382,7 +383,7 @@ const defs: CardDef[] = [
           canSkip: false,
           options: cellOptions(plainMoves(c.s, pc)),
           prompt: `Предательство: куда сдвинуть (${pend.step / 2 + 1}/3)`,
-          data: { pieceId: pc.id },
+          data: { pieceId: pc.id, moved },
         });
         return;
       }
@@ -394,10 +395,10 @@ const defs: CardDef[] = [
       c.ev.push({ type: 'move', pieceId: pc.id, from, to, forced: true });
       checkPromotion(c, pc, false);
       const moveNo = (pend.step + 1) / 2;
-      if (moveNo < 3) askBetrayalPiece(c, p, pend.step + 1);
+      if (moveNo < 3) askBetrayalPiece(c, p, pend.step + 1, [...moved, pc.id]);
     },
     refresh(s, pend) {
-      if (pend.step % 2 === 0) return cellOptions(posOf(betrayalPool(s, pend.beneficiary)));
+      if (pend.step % 2 === 0) return cellOptions(posOf(betrayalPool(s, pend.beneficiary, movedBy(pend))));
       const pc = pieceById(s, pend.data.pieceId as number);
       return pc && pc.owner === pend.beneficiary ? cellOptions(plainMoves(s, pc)) : [];
     },
@@ -546,10 +547,13 @@ function plainMoves(s: GameState, pc: NonNullable<ReturnType<typeof pieceAt>>): 
     .map((t) => t.to);
 }
 
-const betrayalPool = (s: GameState, p: PlayerId) => piecesOf(s, p).filter((q) => plainMoves(s, q).length > 0);
+/** Каждую фигуру Предательство двигает один раз: id уже сдвинутых. */
+const movedBy = (pend: Pending) => (pend.data.moved as number[] | undefined) ?? [];
+const betrayalPool = (s: GameState, p: PlayerId, moved: number[]) =>
+  piecesOf(s, p).filter((q) => !moved.includes(q.id) && plainMoves(s, q).length > 0);
 
-function askBetrayalPiece(c: Ctx, p: PlayerId, step: number): boolean {
-  const pool = betrayalPool(c.s, p);
+function askBetrayalPiece(c: Ctx, p: PlayerId, step: number, moved: number[]): boolean {
+  const pool = betrayalPool(c.s, p, moved);
   if (!pool.length) return false;
   ask(c, {
     source: 'betrayal',
@@ -560,6 +564,7 @@ function askBetrayalPiece(c: Ctx, p: PlayerId, step: number): boolean {
     canSkip: step > 0,
     prompt: `Предательство: выберите фигуру соперника (${step / 2 + 1}/3)`,
     step,
+    data: { moved },
   });
   return true;
 }
