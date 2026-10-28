@@ -1,0 +1,34 @@
+/* Свитчер визуала — служебная панель. Нейтральная, одинаковая во всех вариантах и темах:
+   моноширинный текст, тёмная подложка; свои цвета (не палитра игры), чтобы не путать с тестируемым UI. */
+.vsw {
+  position: fixed; left: 10px; bottom: 10px; z-index: 300;
+  font: 12px/1.3 'Consolas', 'Courier New', monospace;
+  color: #e6e6e6;
+  display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px;
+}
+.vsw[hidden] { display: none; }
+.vsw button { font: inherit; cursor: pointer; }
+.vsw-pill {
+  background: rgba(16, 16, 18, 0.88); color: #e6e6e6;
+  border: 1px solid rgba(255, 255, 255, 0.25); padding: 5px 9px; letter-spacing: 0.08em;
+}
+.vsw-pill:hover { border-color: rgba(255, 255, 255, 0.6); }
+.vsw-panel {
+  background: rgba(16, 16, 18, 0.94); border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 8px 10px; min-width: 290px; display: flex; flex-direction: column; gap: 4px;
+}
+.vsw-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.vsw-row > span { opacity: 0.8; }
+.vsw-row.cur > span { opacity: 1; }
+.vsw-row.cur > span::before { content: '▸ '; }
+.vsw-all { padding-bottom: 4px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); margin-bottom: 2px; }
+.vsw-opts { display: flex; gap: 3px; }
+.vsw-opt {
+  min-width: 26px; padding: 2px 6px;
+  background: transparent; color: #cfcfcf; border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.vsw-opt:hover { border-color: rgba(255, 255, 255, 0.6); }
+.vsw-opt.on { background: #e6e6e6; color: #111; border-color: #e6e6e6; }
+.vsw-sep { height: 1px; background: rgba(255, 255, 255, 0.15); margin: 3px 0; }
+.vsw-legend { opacity: 0.55; font-size: 11px; margin-top: 2px; }
+.vsw-hide { background: transparent; color: #9a9a9a; border: none; padding: 2px 0; text-align: left; text-decoration: underline; }

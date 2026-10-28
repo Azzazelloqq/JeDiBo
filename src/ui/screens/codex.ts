@@ -2,10 +2,9 @@
 import { ALL_CARDS, tierOf, type CardDef } from '../../core/karma/cards';
 import { setMood } from '../../render/background';
 import { TIER_STYLE } from '../../render/cardArt';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { cardEl } from '../card';
 import { btn, h } from '../dom';
-import { menuScreen } from './menu';
 
 export function codexScreen(root: HTMLElement) {
   setMood('karma');
@@ -47,7 +46,7 @@ export function codexScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'page' },
-      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), btn('В меню', () => go(menuScreen))),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), btn('В меню', () => open('menu'))),
       h('div', { class: 'codex' }, grid, detail),
     ),
   );

@@ -12,11 +12,10 @@ import { BoardView } from '../../render/board';
 import { banner, floatText, pop, shake } from '../../render/fx';
 import { wait } from '../../render/tween';
 import { Match } from '../../session/match';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
 import { avatarEl, pieceIcon, rubbleEl, titleEl } from '../widgets';
-import { menuScreen } from './menu';
 
 type Kind = 'bot' | 'hotseat';
 const LETTERS = 'ABCDEFGHIJKL';
@@ -710,7 +709,7 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
           stat('карт', match.stats.cards[0]),
           kind === 'bot' ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
         ),
-        h('div', { class: 'row' }, btn('Реванш', () => (ov.remove(), go((r) => gameScreen(r, kind))), 'btn-brand btn-big'), btn('В меню', () => (ov.remove(), go(menuScreen)), 'btn-stone btn-big')),
+        h('div', { class: 'row' }, btn('Реванш', () => (ov.remove(), open('game', kind)), 'btn-brand btn-big'), btn('В меню', () => (ov.remove(), open('menu')), 'btn-stone btn-big')),
       ),
     );
     document.body.appendChild(ov);
@@ -728,8 +727,8 @@ export function gameScreen(root: HTMLElement, kind: Kind) {
   const stat = (l: string, v: number) => h('div', { class: 'stat' }, h('div', { class: 'stat-v' }, String(v)), h('div', { class: 'stat-l' }, l));
 
   function leave() {
-    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => go(menuScreen));
-    else go(menuScreen);
+    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => open('menu'));
+    else open('menu');
   }
 
   const onKey = (e: KeyboardEvent) => {

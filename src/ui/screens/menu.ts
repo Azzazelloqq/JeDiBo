@@ -1,12 +1,7 @@
 import { setMood } from '../../render/background';
-import { go } from '../app';
 import { btn, canvasEl, h } from '../dom';
 import { logoEl, profileChip, tileArt } from '../widgets';
-import { codexScreen } from './codex';
-import { gameScreen } from './game';
-import { profileScreen } from './profile';
-import { rulesScreen } from './rules';
-import { settingsScreen } from './settings';
+import { open } from '../variants/registry';
 
 export const VERSION = '0.1.0-PROTO';
 
@@ -26,7 +21,7 @@ export function menuScreen(root: HTMLElement) {
   };
 
   root.append(
-    h('div', { class: 'menu-top' }, profileChip(() => go(profileScreen)), h('div', { class: 'version' }, VERSION)),
+    h('div', { class: 'menu-top' }, profileChip(() => open('chronicle')), h('div', { class: 'version' }, VERSION)),
     h(
       'div',
       { class: 'logo-wrap' },
@@ -36,17 +31,17 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'mode-row' },
-      tile('bot', 'Против Странника', 'один за столом · рейтинг', () => go((r) => gameScreen(r, 'bot'))),
-      tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => go((r) => gameScreen(r, 'hotseat'))),
+      tile('bot', 'Против Странника', 'один за столом · рейтинг', () => open('game', 'bot')),
+      tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => open('game', 'hotseat')),
       tile('net', 'По сети', 'p2p · дуэль', null),
     ),
     h(
       'div',
       { class: 'menu-bar' },
-      btn('Колода', () => go(codexScreen)),
-      btn('Правила', () => go(rulesScreen)),
-      btn('Профиль', () => go(profileScreen)),
-      btn('Настройки', () => go(settingsScreen)),
+      btn('Колода', () => open('codex')),
+      btn('Правила', () => open('rules')),
+      btn('Летопись', () => open('chronicle')),
+      btn('Настройки', () => open('settings')),
     ),
   );
 }

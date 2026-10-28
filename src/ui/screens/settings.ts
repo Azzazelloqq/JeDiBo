@@ -4,10 +4,9 @@ import { setMood } from '../../render/background';
 import { THEME } from '../../render/palette';
 import { setShakeEnabled } from '../../render/fx';
 import { setAnimSpeed } from '../../render/tween';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { btn, h } from '../dom';
 import { pixelSlider } from '../widgets';
-import { menuScreen } from './menu';
 
 export function applySettings(s: Settings = getSettings()) {
   setVolume(s.volume);
@@ -40,7 +39,7 @@ export function settingsScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page narrow' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'Настройки'), btn('В меню', () => go(menuScreen))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'Настройки'), btn('В меню', () => open('menu'))),
         h(
           'section',
           { class: 'slab settings' },

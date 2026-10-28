@@ -10,7 +10,7 @@ uniform vec2 res;
 uniform float time;
 uniform float heat;   // 0 — холодный бетон, 1 — раскалённый (Карма)
 uniform float spin;
-uniform float style;  // 0 — дым (тёмная тема), 1 — спокойный дым (светлая тема)
+uniform float style;  // 0 — дым (тёмная тема), 1 — спокойный дым (светлая тема), 2 — пиксельный вихрь (вариант «б»)
 uniform vec3 colA;
 uniform vec3 colB;
 uniform vec3 colC;
@@ -30,11 +30,36 @@ vec3 smoke(vec2 uv, float r, float calm){
   return mix(col, colC, smoothstep(0.62, 0.98, w*v) * (0.35 + heat*0.65) * (1.0 - calm * 0.5));
 }
 
+// вариант «б»: крупный закрученный узор полосами (4 ступени между colA и colB, пятна colC)
+vec3 swirl(vec2 uv, float r){
+  float t = time * 0.03;
+  vec2 q = uv * 1.7;
+  // два вихря: ближе к центру вихря поворот сильнее
+  for (int k = 0; k < 2; k++) {
+    vec2 c = k == 0 ? vec2(-0.55, 0.15) : vec2(0.7, -0.25);
+    vec2 d = q - c * 1.7;
+    float ang = 2.6 * exp(-dot(d, d) * 0.9) * (k == 0 ? 1.0 : -0.8) + t * 0.6;
+    float cs = cos(ang), sn = sin(ang);
+    q = c * 1.7 + mat2(cs, -sn, sn, cs) * d;
+  }
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    q += 0.22 * vec2(sin(q.y*2.3 + t*3.0 + fi*1.3), cos(q.x*2.1 - t*2.0 + fi*0.7));
+  }
+  float v = 0.5 + 0.5*sin(q.x*2.6 + q.y*1.9);
+  float w = 0.5 + 0.5*sin(q.x*1.3 - q.y*2.7 + 1.7);
+  vec3 col = mix(colA, colB, floor(v * 3.99) / 3.0);
+  col = mix(col, colC, step(0.86, w * v) * 0.8);
+  return col * (1.0 - 0.16 * floor(smoothstep(0.55, 1.3, r) * 3.0) / 3.0);
+}
+
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*res) / min(res.x,res.y);
   float r = length(uv);
   vec3 col;
-  if (style < 0.5) {
+  if (style > 1.5) {
+    col = swirl(uv, r);
+  } else if (style < 0.5) {
     // тёмная, камень: исходный закрученный дым с зерном и виньеткой
     col = smoke(uv, r, 0.0);
     float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)) + time) * 43758.5453);
@@ -73,7 +98,11 @@ const LIGHT_MOODS: typeof DARK_MOODS = {
   lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
 };
 const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
-const STYLE = THEME.scheme === 'dark' ? 0 : 1;
+const THEME_STYLE = THEME.scheme === 'dark' ? 0 : 1;
+/** Стиль фона: свой у темы или пиксельный вихрь варианта «б» (крупнее «пиксель»). */
+let style = THEME_STYLE;
+let pix = 5;
+let onPixChange: (() => void) | null = null;
 export type Mood = keyof typeof MOODS;
 
 type Colors = { a: string; b: string; c: string };
@@ -88,7 +117,18 @@ export const setMood = (m: Mood) => {
   target = m;
   custom = null;
   cycle = null;
+  setBackgroundStyle('theme');
 };
+
+/** 'swirl' — пиксельный закрученный узор варианта «б» (цвета — через setBackgroundPalette); setMood возвращает 'theme'. */
+export function setBackgroundStyle(s: 'theme' | 'swirl') {
+  style = s === 'swirl' ? 2 : THEME_STYLE;
+  const p = s === 'swirl' ? 8 : 5;
+  if (p !== pix) {
+    pix = p;
+    onPixChange?.();
+  }
+}
 
 /** Задать цвета фона вручную; с `cycle` — цвета плавно перетекают по кругу (период 30–60 с). */
 export function setBackgroundPalette(p: Partial<Colors> & { cycle?: string[][]; period?: number } | null) {
@@ -146,14 +186,14 @@ export function startBackground(canvas: HTMLCanvasElement) {
 
   // текущие (сглаженные) значения
   const cur = { a: hex(MOODS.menu.a), b: hex(MOODS.menu.b), c: hex(MOODS.menu.c), heat: MOODS.menu.heat, spin: MOODS.menu.spin };
-  const PIX = 5; // размер «пикселя» фона
-
+  // размер «пикселя» фона — pix (5, у вихря «б» — 8)
   const resize = () => {
-    canvas.width = Math.ceil(window.innerWidth / PIX);
-    canvas.height = Math.ceil(window.innerHeight / PIX);
+    canvas.width = Math.ceil(window.innerWidth / pix);
+    canvas.height = Math.ceil(window.innerHeight / pix);
     gl.viewport(0, 0, canvas.width, canvas.height);
   };
   window.addEventListener('resize', resize);
+  onPixChange = resize;
   resize();
 
   onFrame((now, dt) => {
@@ -170,7 +210,7 @@ export function startBackground(canvas: HTMLCanvasElement) {
     gl.uniform1f(uTime, now / 1000);
     gl.uniform1f(uHeat, cur.heat);
     gl.uniform1f(uSpin, cur.spin);
-    gl.uniform1f(uStyle, STYLE);
+    gl.uniform1f(uStyle, style);
     gl.uniform3fv(uA, cur.a);
     gl.uniform3fv(uB, cur.b);
     gl.uniform3fv(uC, cur.c);

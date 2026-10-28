@@ -5,7 +5,10 @@ import { startBackground } from './render/background';
 import { scaleCanvas } from './render/pixel';
 import { concreteCss, logoMark } from './render/sprites';
 import { go } from './ui/app';
-import { menuScreen } from './ui/screens/menu';
+import { initialScreen, screen } from './ui/variants/registry';
+import { mountSwitcher } from './ui/variants/switcher';
+import './styles/variants/switcher.css';
+import './styles/variants/b.css';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
@@ -42,11 +45,14 @@ async function boot() {
   applySettings();
   // пиксельный шрифт нужен до генерации заголовков на canvas
   try {
-    await Promise.race([document.fonts.load('24px "Tiny5"'), new Promise((r) => setTimeout(r, 1500))]);
+    // Press Start 2P и Rubik — шрифты варианта «б» (кириллица грузится отдельным диапазоном)
+    const fonts = ['24px "Tiny5"', '24px "Press Start 2P"', '500 16px "Rubik"', '700 16px "Rubik"'].map((f) => document.fonts.load(f, 'Аа'));
+    await Promise.race([Promise.all(fonts), new Promise((r) => setTimeout(r, 1500))]);
   } catch {
     /* офлайн — останется моноширинный запасной */
   }
-  go(menuScreen);
+  mountSwitcher();
+  go(screen(initialScreen()));
 }
 
 void boot();
