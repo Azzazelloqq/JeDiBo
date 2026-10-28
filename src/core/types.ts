@@ -133,7 +133,8 @@ export type Action =
   | { type: 'playCard'; by: PlayerId }
   | { type: 'choose'; by: PlayerId; option: string }
   | { type: 'skip'; by: PlayerId }
-  | { type: 'resign'; by: PlayerId }
+  /** left — игрок покинул сетевую партию (выставляет только комната) */
+  | { type: 'resign'; by: PlayerId; left?: boolean }
   | { type: 'timeout'; by: PlayerId; total: boolean };
 
 /** События — то, что видит слой представления (анимации, звук, хроника). */

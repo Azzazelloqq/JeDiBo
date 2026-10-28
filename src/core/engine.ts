@@ -85,7 +85,7 @@ export function dispatch(s: GameState, a: Action): Result {
       resolvePending(c, a.type === 'choose' ? a.option : null);
       break;
     case 'resign':
-      finish(c, other(a.by), `${s.players[a.by].name} сдаётся`);
+      finish(c, other(a.by), `${s.players[a.by].name} ${a.left ? 'покинул партию' : 'сдаётся'}`);
       break;
     case 'timeout':
       if (a.total) finish(c, other(a.by), `У ${s.players[a.by].name} закончилось общее время`);

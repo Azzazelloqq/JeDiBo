@@ -58,13 +58,16 @@
 ```
 src/net/
   protocol.ts        типы сообщений ClientMsg / ServerMsg, PROTOCOL_VERSION
+  hash.ts            stableStringify + полный stateHash
   room.ts            Room — чистая логика комнаты (без таймеров, I/O, DOM)
+  roomHost.ts        RoomHost — запуск Room: подключения, будильник, лимит частоты, снимки для сохранения
+  client.ts          RoomClient — протокол со стороны игрока: проверки честности, lockstep, resync
   commit.ts          commit-reveal: hash(payload + salt), проверка
-  loopback.ts        LoopbackTransport / LoopbackServer — Room в том же процессе (хост, тесты, netsim)
+  loopback.ts        LoopbackTransport — Room в том же процессе (хост, тесты, netsim)
   peer.ts            PeerJS: HostRoom (Room + DataChannel + таймеры + сохранение) и PeerTransport (гость)
   transport.ts       Transport (уже есть) + события состояния соединения
 src/session/match.ts Match получает сетевой режим ввода (§6)
-scripts/netsim.ts    два бота играют через LoopbackServer, проверка синхронности
+scripts/netsim.ts    проверки «плохого соперника» + партии ботов через RoomHost (задержки, обрывы, таймауты, уход, перезагрузка хоста)
 ```
 
 `src/core`, `protocol.ts`, `room.ts`, `commit.ts` не импортируют ничего из `ui/render/audio/profile` и не трогают
