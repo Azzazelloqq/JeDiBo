@@ -2,7 +2,8 @@
 import { Rank } from '../core/types';
 import { getProfile, titleOf } from '../profile/profile';
 import { PAL, type StoneColor } from '../render/palette';
-import { concreteTile, hexToRgb, makeCanvas } from '../render/pixel';
+import { hexToRgb, makeCanvas } from '../render/pixel';
+import { surfaceTile } from '../render/textures';
 import { avatar, logoMark, logoTexture, pieceSprite, rubbleIcon, stoneTitle } from '../render/sprites';
 import { sfx } from '../audio/sfx';
 import { canvasEl, h } from './dom';
@@ -118,7 +119,7 @@ export function profileChip(onClick: () => void) {
 export function tileArt(kind: 'bot' | 'hotseat' | 'net'): HTMLCanvasElement {
   const W = 84, H = 46;
   const [c, g] = makeCanvas(W, H);
-  g.drawImage(concreteTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, cracks: true, amp: 10 }), 0, 0);
+  g.drawImage(surfaceTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, cracks: true, amp: 10 }), 0, 0);
   // сетка клеток
   g.fillStyle = 'rgba(0,0,0,0.12)';
   for (let x = 2; x < W; x += 16) g.fillRect(x, 0, 1, H);
