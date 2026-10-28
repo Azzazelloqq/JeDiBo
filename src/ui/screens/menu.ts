@@ -1,5 +1,5 @@
-import { LEVELS, levelById, type LevelId } from '../../ai/levels';
-import { getProfile, saveProfile } from '../../profile/profile';
+import { LEVELS, type LevelId } from '../../ai/levels';
+import { saveProfile } from '../../profile/profile';
 import { setMood } from '../../render/background';
 import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
@@ -15,9 +15,8 @@ const LEVEL_NOTE: Record<LevelId, string> = {
   master: 'считает на ход вперёд',
 };
 
-/** Выбор уровня Странника перед партией (общий для всех вариантов); выбранный уровень запоминается в профиле. */
+/** Выбор уровня Странника перед партией (общий для всех вариантов). Уровень запоминается в профиле, но в окне не подсвечивается. */
 export function chooseLevel() {
-  const current = levelById(getProfile().botLevel).id;
   const close = () => ov.remove();
   const start = (id: LevelId) => {
     saveProfile({ botLevel: id });
@@ -38,7 +37,7 @@ export function chooseLevel() {
           btn(
             `${l.name} · ${l.rating} — ${LEVEL_NOTE[l.id]}`,
             () => start(l.id),
-            `${l.id === current ? 'btn-amber' : 'btn-stone'} level-btn`,
+            'btn-stone level-btn',
           ),
         ),
       ),
