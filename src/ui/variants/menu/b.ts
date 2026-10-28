@@ -1,11 +1,11 @@
-// Меню, вариант «б» (референс 1:1): пиксельный вихрь, рамка из фигур, логотип, панель с плиткой «Классика»
+// Меню, вариант «б» (референс 1:1): пиксельный вихрь, рамка из фигур, логотип, панель с кнопкой Play
 // и нижний ряд кнопок-иконок. Навигация стрелками и Enter.
 import { setMood } from '../../../render/background';
 import { canvasEl, h } from '../../dom';
 import { logoEl } from '../../widgets';
 import { VERSION } from '../../screens/menu';
 import { open } from '../registry';
-import { arrowNav, classicArt, cssVar, menuIcon, shapeFrame, swirlBackground, type MenuIcon } from '../shared';
+import { arrowNav, cssVar, menuIcon, shapeFrame, swirlBackground, type MenuIcon } from '../shared';
 import { sfx } from '../../../audio/sfx';
 
 export function menuB(root: HTMLElement) {
@@ -20,16 +20,8 @@ export function menuB(root: HTMLElement) {
   const iconBtn = (icon: MenuIcon, label: string, id: Parameters<typeof open>[0]) =>
     press(h('button', { class: 'bm-icon' }, canvasEl(menuIcon(icon), 3, 'bm-icon-art'), h('span', {}, label)), () => open(id));
 
-  const classic = press(
-    h(
-      'button',
-      { class: 'bm-tile' },
-      h('div', { class: 'bm-tile-art' }, canvasEl(classicArt(), 2)),
-      h('div', { class: 'bm-tile-title' }, 'КЛАССИКА'),
-      h('div', { class: 'bm-tile-sub' }, 'БОТ • ОДИН ПК • СЕТЬ'),
-    ),
-    () => open('modeSelect'),
-  );
+  // по решению владельца вместо плитки «Классика» — одна большая кнопка Play (дальше — выбор режима)
+  const play = press(h('button', { class: 'bm-play', 'aria-label': 'Play' }, h('span', { class: 'bm-play-icon' }), 'PLAY'), () => open('modeSelect'));
 
   root.append(
     h(
@@ -41,11 +33,11 @@ export function menuB(root: HTMLElement) {
       h(
         'div',
         { class: 'bm-panel' },
-        h('div', { class: 'bm-tiles' }, classic),
+        play,
         h('div', { class: 'bm-bar' }, iconBtn('codex', 'Колода', 'codex'), iconBtn('rules', 'Правила', 'rules'), iconBtn('chronicle', 'Летопись', 'chronicle'), iconBtn('settings', 'Настройки', 'settings')),
       ),
     ),
   );
-  requestAnimationFrame(() => classic.focus({ preventScroll: true }));
+  requestAnimationFrame(() => play.focus({ preventScroll: true }));
   return arrowNav(root);
 }
