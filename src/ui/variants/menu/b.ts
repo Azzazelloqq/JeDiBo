@@ -1,6 +1,8 @@
-// Меню, вариант «б» (референс 1:1): пиксельный вихрь, рамка из фигур, логотип, панель с кнопкой Play
+// Меню, вариант «б» (референс 1:1): пиксельный вихрь, рамка из фигур, логотип, панель с кнопкой «Играть»
 // и нижний ряд кнопок-иконок. Навигация стрелками и Enter.
+import { Rank } from '../../../core/types';
 import { setMood } from '../../../render/background';
+import { pieceSprite } from '../../../render/sprites';
 import { canvasEl, h } from '../../dom';
 import { logoEl } from '../../widgets';
 import { VERSION } from '../../screens/menu';
@@ -20,8 +22,13 @@ export function menuB(root: HTMLElement) {
   const iconBtn = (icon: MenuIcon, label: string, id: Parameters<typeof open>[0]) =>
     press(h('button', { class: 'bm-icon' }, canvasEl(menuIcon(icon), 3, 'bm-icon-art'), h('span', {}, label)), () => open(id));
 
-  // по решению владельца вместо плитки «Классика» — одна большая кнопка Play (дальше — выбор режима)
-  const play = press(h('button', { class: 'bm-play', 'aria-label': 'Play' }, h('span', { class: 'bm-play-icon' }), 'PLAY'), () => open('modeSelect'));
+  // по решению владельца вместо плитки «Классика» — одна кнопка «Играть» (дальше — выбор режима);
+  // значок — наш красный треугольник из партии
+  const tri = canvasEl(pieceSprite(Rank.Triangle, 'red', true), 5, 'bm-play-tri');
+  const play = press(
+    h('button', { class: 'bm-play' }, h('span', { class: 'bm-play-sheen' }), h('span', { class: 'bm-play-piece' }, tri), h('span', { class: 'bm-play-text' }, 'ИГРАТЬ')),
+    () => open('modeSelect'),
+  );
 
   root.append(
     h(

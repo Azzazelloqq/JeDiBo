@@ -36,6 +36,8 @@ body.ui-b.theme-dark {
   --b-shadow: rgba(0, 0, 0, 0.45);
   --b-frame: #d8c8ee;
   --b-tile-band: rgba(12, 16, 22, 0.82);
+  --b-play-hi: #ffc068;
+  --b-play-ink: #101418;
   --b-bg-menu-a: #2a1640;
   --b-bg-menu-b: #61457c;
   --b-bg-menu-c: #925f55;
@@ -78,6 +80,8 @@ body.ui-b.theme-light {
   --b-shadow: rgba(70, 55, 40, 0.28);
   --b-frame: #7c68a0;
   --b-tile-band: rgba(250, 247, 242, 0.9);
+  --b-play-hi: #ffc068;
+  --b-play-ink: #2a1a0c;
   --b-bg-menu-a: #c4b5d8;
   --b-bg-menu-b: #e8e0f1;
   --b-bg-menu-c: #ecc4ac;
@@ -193,41 +197,43 @@ body.ui-b .bm-panel {
   box-shadow: 0 6px 0 var(--b-panel-edge), 0 18px 40px var(--b-shadow);
   display: flex; flex-direction: column; gap: 22px;
 }
+/* кнопка «Играть»: оранжевая плита с пиксельной фаской, тёмной обводкой, диагональной фактурой
+   и бликом, пробегающим ступенями; значок — красный треугольник из партии */
 body.ui-b .bm-play {
-  display: flex; align-items: center; justify-content: center; gap: 22px; cursor: pointer;
-  height: 112px; border: none; border-radius: 8px;
-  background: var(--b-accent);
-  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.28), 0 6px 0 var(--b-accent-edge), 0 10px 18px var(--b-shadow);
-  font-family: var(--b-f-head); font-size: 46px; letter-spacing: 0.08em; color: #fff;
-  text-shadow: 3px 0 0 #101418, -3px 0 0 #101418, 0 3px 0 #101418, 0 -3px 0 #101418, 3px 3px 0 #101418, 0 6px 0 #101418;
+  position: relative; overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 26px;
+  height: 116px; border: 4px solid var(--b-play-ink); border-radius: 10px;
+  background:
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.07) 0 8px, transparent 8px 20px),
+    linear-gradient(var(--b-play-hi) 0 6px, var(--b-accent) 6px calc(100% - 12px), var(--b-accent-edge) calc(100% - 12px));
+  box-shadow: inset 6px 0 0 rgba(255, 255, 255, 0.12), inset -6px 0 0 rgba(0, 0, 0, 0.12), 0 6px 0 var(--b-play-ink), 0 14px 22px var(--b-shadow);
   transition: transform 0.12s var(--bounce), filter 0.12s;
 }
-body.ui-b .bm-play:hover { transform: translateY(-3px); filter: brightness(1.06); }
-body.ui-b .bm-play:active { transform: translateY(4px); box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.28), 0 2px 0 var(--b-accent-edge); }
-body.ui-b .bm-play:focus-visible { outline: 3px solid var(--b-text); outline-offset: 4px; }
-/* пиксельный треугольник «▶» с той же обводкой */
-body.ui-b .bm-play-icon::before { content: ''; display: block; width: 100%; height: 100%; background: #fff; clip-path: polygon(0 0, 100% 50%, 0 100%); }
-body.ui-b .bm-play-icon {
-  width: 36px; height: 40px; margin-top: -4px;
-  filter: drop-shadow(3px 0 0 #101418) drop-shadow(-3px 0 0 #101418) drop-shadow(0 3px 0 #101418) drop-shadow(0 -3px 0 #101418);
+body.ui-b .bm-play:hover { transform: translateY(-3px); filter: brightness(1.07); }
+body.ui-b .bm-play:active { transform: translateY(4px); box-shadow: inset 6px 0 0 rgba(255, 255, 255, 0.12), inset -6px 0 0 rgba(0, 0, 0, 0.12), 0 2px 0 var(--b-play-ink); }
+body.ui-b .bm-play:focus-visible { outline: 3px solid var(--b-text); outline-offset: 5px; }
+body.ui-b .bm-play-text {
+  position: relative; margin-top: -6px;
+  font-family: var(--b-f-head); font-size: 44px; letter-spacing: 0.06em; color: #fff;
+  text-shadow: 3px 0 0 var(--b-play-ink), -3px 0 0 var(--b-play-ink), 0 3px 0 var(--b-play-ink), 0 -3px 0 var(--b-play-ink),
+    3px 3px 0 var(--b-play-ink), -3px 3px 0 var(--b-play-ink), 0 7px 0 var(--b-play-ink);
 }
-body.ui-b .bm-tile {
-  position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;
-  width: 100%; padding: 0; overflow: hidden; border-radius: 8px;
-  background: var(--b-tile); border: 4px solid var(--b-on);
-  box-shadow: 0 5px 0 var(--b-tile-edge); transition: transform 0.12s var(--bounce);
+/* треугольник из партии с жёсткой тенью; на наведении — подпрыгивает ступенями */
+body.ui-b .bm-play-piece { position: relative; width: 80px; height: 80px; margin-top: -10px; filter: drop-shadow(0 4px 0 rgba(16, 20, 24, 0.5)); }
+body.ui-b .bm-play-tri { display: block; }
+body.ui-b .bm-play:hover .bm-play-piece { animation: playHop 0.5s steps(4) infinite; }
+@keyframes playHop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+/* блик-полоса пробегает по кнопке раз в несколько секунд, ступенями */
+body.ui-b .bm-play-sheen {
+  position: absolute; top: 0; bottom: 0; left: -30%; width: 24%;
+  background: linear-gradient(90deg, transparent 0 20%, rgba(255, 255, 255, 0.22) 20% 45%, transparent 45% 60%, rgba(255, 255, 255, 0.14) 60% 72%, transparent 72%);
+  transform: skewX(-20deg); animation: playSheen 4.5s steps(18) infinite; pointer-events: none;
 }
-body.ui-b .bm-tile:hover:not(:disabled) { transform: translateY(-3px); }
-body.ui-b .bm-tile-art { width: 100%; display: flex; justify-content: center; background: var(--b-track); line-height: 0; }
-body.ui-b .bm-tile-art canvas { display: block; }
-body.ui-b .bm-tile-title {
-  margin-top: -26px; position: relative; font-family: var(--b-f-head); font-size: 30px; letter-spacing: 0.02em; color: #fff;
-  text-shadow: 2px 0 0 #101418, -2px 0 0 #101418, 0 2px 0 #101418, 0 -2px 0 #101418, 2px 2px 0 #101418, 0 5px 0 #101418;
+@keyframes playSheen { 0%, 62% { left: -30%; } 100% { left: 115%; } }
+@media (prefers-reduced-motion: reduce) {
+  body.ui-b .bm-play-sheen, body.ui-b .bm-play:hover .bm-play-piece { animation: none; }
 }
-body.ui-b .bm-tile-sub {
-  width: calc(100% - 20px); margin: 8px 10px 10px; padding: 8px; border-radius: 4px;
-  background: var(--b-tile-band); color: var(--b-text); font-weight: 700; font-size: 14px; letter-spacing: 0.12em;
-}
+
 body.ui-b .bm-bar { display: grid; grid-template-columns: repeat(4, 136px); gap: 12px; }
 body.ui-b .bm-icon {
   display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
