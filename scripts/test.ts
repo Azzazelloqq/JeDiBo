@@ -314,6 +314,66 @@ test('Предательство: каждую фигуру соперник д�
   assert(s.current === 1, 'ход не перешёл к сопернику');
 });
 
+/** Игрок 0 тянет карту `card` на своём 7-м ходу; у него фигуры `own`, у соперника — треугольник L10. */
+function drawCard(card: GameState['deck'][number], own: [PlayerId, Rank, string][], prep?: (s: GameState) => void): GameState {
+  const s = position([...own, [1, Rank.Triangle, 'L10']], 1);
+  prep?.(s);
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = [card];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  assert(s.pending?.source === card, `ожидался вопрос «${card}», есть: ${s.pending?.source}`);
+  return s;
+}
+const timeout = (s: GameState) => assert(dispatch(s, { type: 'timeout', by: s.current, total: false }).ok, 'таймаут хода отклонён');
+const piecesNamed = (s: GameState, p: PlayerId) => s.pieces.filter((q) => q.owner === p).map((q) => `${'TSC'[q.rank]}${cellName(q.y * 12 + q.x)}`).sort();
+
+test('таймаут хода во время повышения: фигура всё равно повышается', () => {
+  const s = position([[0, Rank.Triangle, 'L11'], [0, Rank.Triangle, 'A1'], [1, Rank.Triangle, 'A10']], 0);
+  const pc = s.pieces.find((q) => cellName(q.y * 12 + q.x) === 'L11')!;
+  dispatch(s, { type: 'move', by: 0, pieceId: pc.id, to: at('L12') });
+  assert(s.pending?.source === 'promotion', `ожидалось повышение, вопрос: ${s.pending?.source}`);
+  timeout(s);
+  const mine = piecesNamed(s, 0);
+  assert(!mine.includes('TL12'), `треугольник остался на последнем ряду: ${mine.join(' ')}`);
+  assert(mine.filter((n) => n.startsWith('S')).length === 1, `нет нового квадрата: ${mine.join(' ')}`);
+  assert(s.current === 1 && !s.pending, 'ход не перешёл к сопернику');
+});
+
+test('таймаут хода во время Воскрешения: фигура возвращается на поле', () => {
+  const s = drawCard('resurrection', [[0, Rank.Triangle, 'A2'], [0, Rank.Triangle, 'B2']], (g) => {
+    g.players[0].graveyard = [{ uid: 500, rank: Rank.Circle, period: 0 }];
+  });
+  timeout(s);
+  assert(piecesNamed(s, 0).some((n) => n.startsWith('C')), `круг не вернулся: ${piecesNamed(s, 0).join(' ')}`);
+  assert(s.players[0].graveyard.length === 0, 'круг остался на кладбище');
+  assert(s.current === 1 && !s.pending, 'ход не перешёл к сопернику');
+});
+
+test('таймаут хода во время Двойной смерти: обе фигуры уничтожаются', () => {
+  const s = drawCard('doubleDeath', [[0, Rank.Triangle, 'A2'], [0, Rank.Triangle, 'B2'], [0, Rank.Triangle, 'C2']]);
+  // соперник успел выбрать одну фигуру, на второй время кончилось
+  assert(dispatch(s, { type: 'choose', by: 1, option: s.pending!.options[0] }).ok, 'первый выбор отклонён');
+  timeout(s);
+  assert(piecesNamed(s, 0).length === 1, `должна остаться одна фигура: ${piecesNamed(s, 0).join(' ')}`);
+  assert(s.players[0].graveyard.length === 2, `на кладбище ${s.players[0].graveyard.length} фигур`);
+});
+
+test('таймаут хода во время необязательного выбора: Отступление и Предательство пропускаются', () => {
+  const own: [PlayerId, Rank, string][] = [[0, Rank.Triangle, 'A2'], [0, Rank.Circle, 'F6']];
+  const retreat = drawCard('retreat', own);
+  const before = piecesNamed(retreat, 0).join();
+  timeout(retreat);
+  assert(piecesNamed(retreat, 0).join() === before, `фигуры сдвинулись: ${piecesNamed(retreat, 0).join(' ')}`);
+  assert(retreat.current === 1 && !retreat.pending, 'ход не перешёл к сопернику');
+
+  const betrayal = drawCard('betrayal', own);
+  assert(dispatch(betrayal, { type: 'choose', by: 1, option: `${at('F6').x},${at('F6').y}` }).ok, 'выбор фигуры отклонён');
+  timeout(betrayal);
+  assert(piecesNamed(betrayal, 0).join() === before, `фигуры сдвинулись: ${piecesNamed(betrayal, 0).join(' ')}`);
+  assert(betrayal.current === 1 && !betrayal.pending, 'ход не перешёл к сопернику');
+});
+
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {
   const r = fuzz({ games: 120, seed: 7 });
   assert(!r.error, r.error!);

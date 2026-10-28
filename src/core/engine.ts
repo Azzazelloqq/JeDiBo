@@ -91,8 +91,7 @@ export function dispatch(s: GameState, a: Action): Result {
       if (a.total) finish(c, other(a.by), `У ${s.players[a.by].name} закончилось общее время`);
       else {
         log(c, 'Время хода истекло', a.by);
-        s.pending = null;
-        s.queue = [];
+        autoResolve(c);
         endTurn(c);
       }
       break;
@@ -253,6 +252,26 @@ function afterAction(c: Ctx) {
       continue;
     }
     return;
+  }
+}
+
+/**
+ * Время вышло, а вопросы открыты: они не отменяются, а доигрываются. Обязательный выбор (куда поставить
+ * фигуру, чью фигуру уничтожить…) делается случайно, необязательный (Отступление, Предательство) пропускается.
+ */
+function autoResolve(c: Ctx) {
+  const s = c.s;
+  for (let guard = 0; guard < 64; guard++) {
+    if (!s.pending && s.queue.length) s.pending = s.queue.shift()!;
+    const p = s.pending;
+    if (!p) return;
+    p.options = liveOptions(s, p);
+    if (!p.options.length) {
+      s.pending = null;
+      continue;
+    }
+    const skip = p.canSkip || p.source === 'betrayal';
+    resolvePending(c, skip ? null : p.options[randInt(s, p.options.length)]);
   }
 }
 
