@@ -8,6 +8,7 @@ import { go } from './ui/app';
 import { bootScreen } from './ui/screens/lobby';
 import { initialScreen, screen } from './ui/variants/registry';
 import { mountSwitcher } from './ui/variants/switcher';
+import './styles/game-layout.css';
 import './styles/variants/switcher.css';
 import './styles/variants/a.css';
 import './styles/variants/b.css';

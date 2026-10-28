@@ -1,21 +1,18 @@
-// Партия, вариант «а»: наш визуал, UX референса (refs/09, HUD — refs/10).
-// Левая колонка — фигуры, «Ваша армия», подсказка, «В меню»; центр — компактная строка хода над полем и
-// вторичные действия под ним; правая — карточка игрока с крупным числом и сегментированной полосой,
-// при расстановке — большие кнопки выбора фигуры, в игре — очки действий, Карма, карта, колода, хроника;
-// внизу — главная кнопка. Только DOM: логика — в контроллере screens/game.ts.
+// Партия, вариант «а»: наш визуал, UX референса (refs/09, HUD — refs/10), каркас как у «в» (Balatro).
+// Левая колонка — строка хода, карточка своего игрока с крупным числом и сегментированной полосой,
+// при расстановке — большие кнопки выбора фигуры и пресеты, в игре — Карма, карта, эффекты;
+// правая — фигуры, «Ваша армия», подсказка, колода, хроника; под полем — подсказка и крупные кнопки.
+// Только DOM: логика — в контроллере screens/game.ts.
 import { CARDS } from '../../../core/karma/cards';
 import { RANK_NAME } from '../../../core/ops';
-import { PRESETS } from '../../../core/presets';
 import { homeRows, piecesOf } from '../../../core/rules';
 import { Rank, type PlayerId } from '../../../core/types';
 import { cardEl } from '../../card';
 import { btn, h } from '../../dom';
-import type { GameCtx, GameLayout, GameParts } from '../../screens/game';
+import { PLACE_ORDER, type GameCtx, type GameLayout, type GameParts } from '../../screens/game';
 import { avatarEl, pieceIcon } from '../../widgets';
 
 const START = [12, 6, 3];
-/** Раскрыта ли хроника — переживает перерисовку правой колонки. */
-let logOpen = false;
 const RANKS = [Rank.Triangle, Rank.Square, Rank.Circle];
 
 function segBar(n: number, of: number, cls = '') {
@@ -64,6 +61,25 @@ export const layoutA: GameLayout = {
         h('div', { class: 'tb-note' }, c.kind === 'bot' ? 'Странник уже расставился' : c.kind === 'net' ? 'Соперник расставляется сам' : `Игрок ${p + 1} из 2`),
       ],
       left: [
+        playerCard(c, p, total, total === 21 ? 'армия собрана' : 'на поле', true),
+        h(
+          'div',
+          { class: 'rank-picks' },
+          ...PLACE_ORDER.map((r) => {
+            const left = c.LIMIT[r] - cnt[r];
+            return h(
+              'button',
+              { class: `rank-pick ga-pick ${c.placeRank === r ? 'active' : ''} ${left === 0 ? 'empty' : ''}`, onclick: () => c.act.pickRank(r) },
+              pieceIcon(r, pl.color, 3, up),
+              h('span', { class: 'rp-name' }, RANK_NAME[r]),
+              h('span', { class: 'rp-left' }, String(left)),
+            );
+          }),
+        ),
+        c.ui.presetsPanel(),
+        h('div', { class: 'controls' }, btn('В меню', () => c.act.leave(), 'btn-dark btn-small')),
+      ],
+      right: [
         legend(c, p),
         h(
           'section',
@@ -74,27 +90,10 @@ export const layoutA: GameLayout = {
           ),
         ),
         h('section', { class: 'slab hint' }, 'Клик ставит фигуру, повторный клик — убирает. Расстановка скрыта от соперника.'),
-        h('div', { class: 'ga-grow' }),
-        btn('В меню', () => c.act.leave(), 'btn-dark'),
       ],
       bottom: [
-        h('div', { class: 'presets' }, ...PRESETS.map((pr) => btn(pr.name, () => c.act.preset(pr.id), 'btn-stone btn-small'))),
-        btn('Очистить', () => c.act.clear(), 'btn-dark btn-small'),
-      ],
-      right: [
-        playerCard(c, p, total, total === 21 ? 'армия собрана' : 'на поле', true),
-        ...RANKS.map((r) => {
-          const left = c.LIMIT[r] - cnt[r];
-          return h(
-            'button',
-            { class: `rank-pick ga-pick ${c.placeRank === r ? 'active' : ''} ${left === 0 ? 'empty' : ''}`, onclick: () => c.act.pickRank(r) },
-            pieceIcon(r, pl.color, 3, up),
-            h('span', { class: 'rp-name' }, RANK_NAME[r]),
-            h('span', { class: 'rp-left' }, String(left)),
-          );
-        }),
-        h('div', { class: 'ga-grow' }),
-        btn('Готово', () => c.act.ready(), `btn-amber btn-big ga-main ${total === 21 ? 'ready-pulse' : ''}`, { disabled: total !== 21 }),
+        h('div', { class: 'prompt slab' }, total === 21 ? 'Армия собрана — можно начинать' : `Осталось поставить ${21 - total}`),
+        h('div', { class: 'bb-actions' }, btn('Готово', () => c.act.ready(), `btn-amber btn-big bb-main ${total === 21 ? 'ready-pulse' : ''}`, { disabled: total !== 21 })),
       ],
     };
   },
@@ -125,38 +124,6 @@ export const layoutA: GameLayout = {
         h('div', { class: 'tb-time' }, c.ui.turnClock, c.ui.turnBar, c.ui.totals),
       ],
       left: [
-        legend(c, me),
-        h(
-          'section',
-          { class: 'slab' },
-          h('div', { class: 'h-label' }, c.kind !== 'hotseat' ? 'Ваша армия' : `Армия: ${mine.name}`),
-          ...RANKS.map((r) =>
-            h(
-              'div',
-              { class: 'army-row ga-army' },
-              pieceIcon(r, mine.color, 2, mine.side === 0),
-              h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${Math.min(1, alive[r] / START[r]) * 100}%` })),
-              h('b', {}, String(alive[r])),
-              h('span', { class: 'muted small' }, lost[r] ? `−${lost[r]}` : ''),
-            ),
-          ),
-        ),
-        h('section', { class: 'slab hint' }, 'Клик по фигуре — выбрать, по клетке — ход или атака. Пробел — завершить ход, Esc — отменить выбор.'),
-        c.ui.effectsPanel(),
-        h('div', { class: 'ga-grow' }),
-        btn('В меню', () => c.act.leave(), 'btn-dark'),
-      ],
-      bottom: [
-        h('div', { class: `prompt ${pr.hot ? 'prompt-hot' : ''}` }, pr.text),
-        h(
-          'div',
-          { class: 'bb-actions' },
-          c.canSkip() ? btn('Хватит', () => c.act.skip(), 'btn-dark btn-small') : null,
-          btn('Отменить выбор', () => c.act.deselect(), 'btn-stone btn-small', { disabled: c.selected === null }),
-          btn('Сдаться', () => c.act.resign(), 'btn-dark btn-small'),
-        ),
-      ],
-      right: [
         playerCard(c, me, pcs.length, pcs.length === 21 ? 'армия цела' : `соперник: ${oppAlive}`, s.current === me),
         h(
           'section',
@@ -173,15 +140,39 @@ export const layoutA: GameLayout = {
               )
             : h('div', { class: 'muted small' }, 'карты на руках нет'),
         ),
+        c.ui.effectsPanel(),
+        h('div', { class: 'controls' }, btn('Сдаться', () => c.act.resign(), 'btn-dark btn-small'), btn('В меню', () => c.act.leave(), 'btn-dark btn-small')),
+      ],
+      bottom: [
+        h('div', { class: `prompt slab ${pr.hot ? 'prompt-hot' : ''}` }, pr.text),
+        h(
+          'div',
+          { class: 'bb-actions' },
+          c.canSkip() ? btn('Хватит', () => c.act.skip(), 'btn-dark btn-big') : null,
+          btn('Отменить', () => c.act.deselect(), 'btn-stone btn-big', { disabled: c.selected === null }),
+          btn('Завершить ход', () => c.act.endTurn(), 'btn-amber btn-big bb-main', { disabled: !c.canEnd() }),
+        ),
+      ],
+      right: [
+        h(
+          'section',
+          { class: 'slab' },
+          h('div', { class: 'h-label' }, c.kind !== 'hotseat' ? 'Ваша армия' : `Армия: ${mine.name}`),
+          ...RANKS.map((r) =>
+            h(
+              'div',
+              { class: 'army-row ga-army' },
+              pieceIcon(r, mine.color, 2, mine.side === 0),
+              h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${Math.min(1, alive[r] / START[r]) * 100}%` })),
+              h('b', {}, String(alive[r])),
+              h('span', { class: 'muted small' }, lost[r] ? `−${lost[r]}` : ''),
+            ),
+          ),
+        ),
+        legend(c, me),
+        h('section', { class: 'slab hint' }, 'Клик по фигуре — выбрать, по клетке — ход или атака. Пробел — завершить ход, Esc — отменить выбор.'),
         c.ui.deckPanel(),
-        // хроника свёрнута в выдвижную панель
-        (() => {
-          const d = h('details', { class: 'ga-log', open: logOpen }, h('summary', {}, 'Хроника'), c.ui.logPanel());
-          d.addEventListener('toggle', () => (logOpen = d.open));
-          return d;
-        })(),
-        h('div', { class: 'ga-grow' }),
-        btn('Завершить ход', () => c.act.endTurn(), 'btn-amber btn-big ga-main', { disabled: !c.canEnd() }),
+        c.ui.logPanel(),
       ],
     };
   },

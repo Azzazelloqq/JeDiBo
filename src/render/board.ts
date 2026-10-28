@@ -57,7 +57,8 @@ export class BoardView {
   readonly el: HTMLDivElement;
   private canvas: Canvas;
   private g: CanvasRenderingContext2D;
-  private base: Canvas;
+  /** подложки с координатами: [обычная, перевёрнутая] */
+  private bases: [Canvas | null, Canvas | null] = [null, null];
   private vis = new Map<number, Vis>();
   private parts: Particle[] = [];
   private s: GameState | null = null;
@@ -66,6 +67,8 @@ export class BoardView {
   private barrierDrop = new Map<string, number>();
   private unsub: () => void;
   scale = 3;
+  /** Чьими глазами смотрим: его сторона всегда внизу (сторона 1 — поле повёрнуто на 180°). null — без поворота. */
+  viewer: PlayerId | null = null;
   ov: Overlay = { selected: null, moves: [], attacks: [], options: [], optionsTone: 'amber', lastMove: [], zone: null, ghost: null, hoverEnabled: true };
   onCell: (p: Pos) => void = () => {};
   onHover: (p: Pos | null) => void = () => {};
@@ -76,7 +79,6 @@ export class BoardView {
     [this.canvas, this.g] = makeCanvas(BOARD_PX, BOARD_PX);
     this.canvas.className = 'board-canvas';
     this.el.appendChild(this.canvas);
-    this.base = this.buildBase();
     this.canvas.addEventListener('mousemove', (e) => this.setHover(this.cellAt(e)));
     this.canvas.addEventListener('mouseleave', () => this.setHover(null));
     this.canvas.addEventListener('click', (e) => {
@@ -109,20 +111,41 @@ export class BoardView {
     const ly = ((e.clientY - r.top) / r.height) * BOARD_PX - M;
     const x = Math.floor(lx / CELL);
     const y = Math.floor(ly / CELL);
-    return x >= 0 && y >= 0 && x < N && y < N ? { x, y } : null;
+    if (x < 0 || y < 0 || x >= N || y >= N) return null;
+    return this.flipped ? { x: N - 1 - x, y: N - 1 - y } : { x, y };
   }
 
   /** Центр клетки в координатах страницы — для DOM-эффектов (всплывающий текст). */
   cellToClient(p: Pos): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
     return {
-      x: r.left + ((M + p.x * CELL + CELL / 2) / BOARD_PX) * r.width,
-      y: r.top + ((M + p.y * CELL + CELL / 2) / BOARD_PX) * r.height,
+      x: r.left + ((this.X(p.x) + CELL / 2) / BOARD_PX) * r.width,
+      y: r.top + ((this.Y(p.y) + CELL / 2) / BOARD_PX) * r.height,
     };
   }
 
+  /** Поле повёрнуто: зритель играет стороной 1 (верхней в координатах движка). */
+  get flipped() {
+    return this.viewer !== null && !!this.s && this.s.players[this.viewer].side === 1;
+  }
+  /** Клетка движка → пиксель канваса (левый/верхний край клетки); дробные клетки — для анимаций. */
+  private X(x: number) {
+    return M + (this.flipped ? N - 1 - x : x) * CELL;
+  }
+  private Y(y: number) {
+    return M + (this.flipped ? N - 1 - y : y) * CELL;
+  }
+  /** Спрайт фигуры «смотрит» вверх экрана: сторона 0 — вверх, при повороте — наоборот. */
+  private faceUp(owner: PlayerId, s: GameState) {
+    return forward(s.players[owner].side) < 0 !== this.flipped;
+  }
+
   // ── статичная подложка: рама + плиты + координаты ────────────────────────
-  private buildBase(): Canvas {
+  private base(flip: boolean): Canvas {
+    const i = flip ? 1 : 0;
+    return (this.bases[i] ??= this.buildBase(flip));
+  }
+  private buildBase(flip: boolean): Canvas {
     const [c, g] = makeCanvas(BOARD_PX, BOARD_PX);
     // рама — тёмный монолит
     g.fillStyle = PAL.slab800;
@@ -145,16 +168,17 @@ export class BoardView {
     g.fillRect(M - 2, M - 2, N * CELL + 4, N * CELL + 4);
     g.fillStyle = PAL.concrete600;
     g.fillRect(M - 1, M - 1, N * CELL + 2, N * CELL + 2);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.drawImage(cellTile(x, y), M + x * CELL, M + y * CELL);
-    // координаты
+    const at = (i: number) => M + (flip ? N - 1 - i : i) * CELL;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) g.drawImage(cellTile(x, y), at(x), at(y));
+    // координаты (подписи остаются за своими клетками и при повороте)
     const letters = 'ABCDEFGHIJKL';
     for (let i = 0; i < N; i++) {
       const L = letters[i];
-      const cx = M + i * CELL + Math.floor((CELL - tinyWidth(L)) / 2);
+      const cx = at(i) + Math.floor((CELL - tinyWidth(L)) / 2);
       tinyText(g, L, cx, 2, PAL.concrete500);
       tinyText(g, L, cx, BOARD_PX - 7, PAL.concrete500);
       const num = String(N - i);
-      const cy = M + i * CELL + 5;
+      const cy = at(i) + 5;
       tinyText(g, num, Math.floor((M - tinyWidth(num)) / 2), cy, PAL.concrete500);
       tinyText(g, num, BOARD_PX - M + Math.floor((M - tinyWidth(num)) / 2), cy, PAL.concrete500);
     }
@@ -381,8 +405,8 @@ export class BoardView {
       const a = Math.random() * Math.PI * 2;
       const sp = 0.4 + Math.random() * 1.6;
       this.parts.push({
-        x: M + v.x * CELL + 8 + (Math.random() - 0.5) * 8,
-        y: M + v.y * CELL + 8 + (Math.random() - 0.5) * 6,
+        x: this.X(v.x) + 8 + (Math.random() - 0.5) * 8,
+        y: this.Y(v.y) + 8 + (Math.random() - 0.5) * 6,
         z: 4 + Math.random() * 4,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp * 0.6,
@@ -402,8 +426,8 @@ export class BoardView {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       this.parts.push({
-        x: M + cx * CELL + 8 + Math.cos(a) * 5,
-        y: M + cy * CELL + 13 + Math.sin(a) * 2,
+        x: this.X(cx) + 8 + Math.cos(a) * 5,
+        y: this.Y(cy) + 13 + Math.sin(a) * 2,
         z: 0,
         vx: Math.cos(a) * 0.5,
         vy: Math.sin(a) * 0.2,
@@ -420,8 +444,8 @@ export class BoardView {
   private sparkle(cx: number, cy: number, color: string, n: number) {
     for (let i = 0; i < n; i++)
       this.parts.push({
-        x: M + cx * CELL + 2 + Math.random() * 12,
-        y: M + cy * CELL + 2 + Math.random() * 12,
+        x: this.X(cx) + 2 + Math.random() * 12,
+        y: this.Y(cy) + 2 + Math.random() * 12,
         z: 0,
         vx: (Math.random() - 0.5) * 0.3,
         vy: -0.4 - Math.random() * 0.7,
@@ -438,20 +462,20 @@ export class BoardView {
   private frame(now: number, dt: number) {
     if (!this.el.isConnected) return;
     const g = this.g;
-    g.drawImage(this.base, 0, 0);
     const s = this.s;
+    g.drawImage(this.base(this.flipped), 0, 0);
     if (!s) return;
     const pulse = (Math.sin(now / 180) + 1) / 2;
 
     // зона расстановки
     if (this.ov.zone) {
       g.fillStyle = withAlpha(PAL.brand500, 0.1 + pulse * 0.06);
-      for (const y of homeRows(s, this.ov.zone.side)) g.fillRect(M + 0, M + y * CELL, N * CELL, CELL);
-      const ys = homeRows(s, this.ov.zone.side);
+      const ys = homeRows(s, this.ov.zone.side).map((y) => this.Y(y));
+      for (const y of ys) g.fillRect(M + 0, y, N * CELL, CELL);
       const top = Math.min(...ys);
       g.fillStyle = PAL.brand500;
-      g.fillRect(M, M + top * CELL, N * CELL, 1);
-      g.fillRect(M, M + (top + 3) * CELL - 1, N * CELL, 1);
+      g.fillRect(M, top, N * CELL, 1);
+      g.fillRect(M, top + 3 * CELL - 1, N * CELL, 1);
     }
     // последний ход
     for (const c of this.ov.lastMove) this.fillCell(c, withAlpha(PAL.amber300, 0.22));
@@ -464,8 +488,8 @@ export class BoardView {
 
     // цели перемещения
     for (const c of this.ov.moves) {
-      const hx = M + c.x * CELL;
-      const hy = M + c.y * CELL;
+      const hx = this.X(c.x);
+      const hy = this.Y(c.y);
       const isHover = this.hover && this.hover.x === c.x && this.hover.y === c.y;
       if (isHover) this.fillCell(c, withAlpha(PAL.amber300, 0.35));
       px(g, hx + 6, hy + 6, PAL.slab700, 4, 4);
@@ -485,10 +509,11 @@ export class BoardView {
     }
 
     // тени и фигуры (сортировка по y для перекрытия)
-    const list = [...this.vis.values()].sort((a, b) => a.y - b.y || a.z - b.z);
+    // сортировка по экранной высоте: при повороте поля дальний ряд — с большим y
+    const list = [...this.vis.values()].sort((a, b) => this.Y(a.y) - this.Y(b.y) || a.z - b.z);
     for (const v of list) {
-      const bx = M + v.x * CELL;
-      const by = M + v.y * CELL;
+      const bx = this.X(v.x);
+      const by = this.Y(v.y);
       const shrink = Math.max(0.4, 1 - v.z / 30);
       g.fillStyle = withAlpha(PAL.void, 0.35 * v.alpha * shrink);
       const sw = Math.round(12 * shrink);
@@ -501,7 +526,7 @@ export class BoardView {
     if (this.ov.ghost) {
       const gh = this.ov.ghost;
       g.globalAlpha = 0.45 + pulse * 0.2;
-      g.drawImage(pieceSprite(gh.rank, s.players[gh.owner].color, forward(s.players[gh.owner].side) < 0), M + gh.pos.x * CELL, M + gh.pos.y * CELL);
+      g.drawImage(pieceSprite(gh.rank, s.players[gh.owner].color, this.faceUp(gh.owner, s)), this.X(gh.pos.x), this.Y(gh.pos.y));
       g.globalAlpha = 1;
     }
 
@@ -514,7 +539,7 @@ export class BoardView {
     // луч Линии смерти
     if (this.beam) {
       const b = this.beam;
-      const x0 = M + b.x * CELL;
+      const x0 = this.X(b.x);
       const w = b.t < 0.5 ? Math.floor(2 + b.t * 24) : CELL;
       const flick = Math.random() < 0.5 ? PAL.brand500 : PAL.amber300;
       g.fillStyle = withAlpha(PAL.brand500, 0.25 + Math.random() * 0.2);
@@ -532,12 +557,12 @@ export class BoardView {
   private drawPiece(v: Vis, s: GameState, pulse: number) {
     const g = this.g;
     const color = s.players[v.owner].color;
-    const up = forward(s.players[v.owner].side) < 0;
+    const up = this.faceUp(v.owner, s);
     const sprite = pieceSprite(v.rank, color, up);
     const w = CELL * v.sx;
     const h = CELL * v.sy;
-    const bx = M + v.x * CELL + (CELL - w) / 2;
-    const by = M + v.y * CELL + (CELL - h) - v.z + 1;
+    const bx = this.X(v.x) + (CELL - w) / 2;
+    const by = this.Y(v.y) + (CELL - h) - v.z + 1;
     const pc = s.pieces.find((q) => q.id === v.id);
     const dim = pc && s.phase === 'play' && pc.owner === s.current && pc.acted && !s.pending;
     g.globalAlpha = v.alpha;
@@ -554,8 +579,8 @@ export class BoardView {
     g.globalAlpha = 1;
     // отложенное повышение — мигающая стрелка
     if (pc?.promoteNextTurn && pulse > 0.4) {
-      const ax = M + v.x * CELL + 6;
-      const ay = M + v.y * CELL - 3;
+      const ax = this.X(v.x) + 6;
+      const ay = this.Y(v.y) - 3;
       px(g, ax + 1, ay, PAL.amber300, 2, 1);
       px(g, ax, ay + 1, PAL.amber300, 4, 1);
       px(g, ax + 1, ay + 2, PAL.amber500, 2, 2);
@@ -564,10 +589,10 @@ export class BoardView {
 
   private drawBarrier(c: Pos, drop: number) {
     const g = this.g;
-    const x = M + c.x * CELL;
-    const y = M + c.y * CELL - Math.round(drop * 40);
+    const x = this.X(c.x);
+    const y = this.Y(c.y) - Math.round(drop * 40);
     g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.fillRect(x + 1, M + c.y * CELL + 12, 14, 3);
+    g.fillRect(x + 1, this.Y(c.y) + 12, 14, 3);
     g.fillStyle = PAL.concrete500;
     g.fillRect(x + 1, y + 2, 14, 13);
     g.fillStyle = PAL.concrete400;
@@ -616,13 +641,13 @@ export class BoardView {
 
   private fillCell(c: Pos, color: string) {
     this.g.fillStyle = color;
-    this.g.fillRect(M + c.x * CELL, M + c.y * CELL, CELL, CELL);
+    this.g.fillRect(this.X(c.x), this.Y(c.y), CELL, CELL);
   }
 
   private brackets(c: Pos, color: string, off: number, big = false) {
     const g = this.g;
-    const x = M + c.x * CELL - (big ? 1 + off : off);
-    const y = M + c.y * CELL - (big ? 1 + off : off);
+    const x = this.X(c.x) - (big ? 1 + off : off);
+    const y = this.Y(c.y) - (big ? 1 + off : off);
     const s = CELL + (big ? 2 + off * 2 : off * 2);
     const L = 4;
     g.fillStyle = PAL.void;
