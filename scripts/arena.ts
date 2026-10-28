@@ -23,6 +23,8 @@ const BOTS: Record<string, (seed: number) => BotFn> = {
 for (const l of LEVELS) {
   BOTS[l.id] = (seed) => createAgent({ ...l.config, budgetMs: undefined }, seed);
   BOTS[`${l.id}@time`] = (seed) => createAgent(l.config, seed);
+  // @slowN — то же на устройстве в N раз медленнее: за тот же бюджет успевает в N раз меньше
+  for (const k of [2, 3, 5]) BOTS[`${l.id}@slow${k}`] = (seed) => createAgent({ ...l.config, budgetMs: l.config.budgetMs! / k }, seed);
   BOTS[`${l.id}@randcards`] = (seed) => createAgent({ ...l.config, budgetMs: undefined, randomChoices: true }, seed);
 }
 
