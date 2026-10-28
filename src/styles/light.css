@@ -504,9 +504,10 @@ body.no-crt #crt { display: none; }
 /* ── оверлеи ────────────────────────────────────────────────────────────── */
 .overlay {
   --muted: var(--concrete-300);
+  color: var(--bone); /* оверлеи тёмные — текст на них светлый (внутри .slab/.dialog снова графитовый) */
   position: fixed; inset: 0; z-index: 50;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  background: color-mix(in srgb, var(--slab-900) 72%, transparent);
+  background: color-mix(in srgb, var(--slab-900) 80%, transparent);
   opacity: 0; transition: opacity 0.25s;
 }
 .overlay.in { opacity: 1; }
@@ -515,7 +516,7 @@ body.no-crt #crt { display: none; }
 @keyframes dialogIn { from { transform: translateY(40px) scale(0.9); opacity: 0; } }
 .dialog h2 { font-family: var(--f-pix); font-size: 30px; text-transform: uppercase; margin: 8px 0; }
 
-.karma-overlay { background: radial-gradient(ellipse at center, color-mix(in srgb, color-mix(in srgb, var(--amber-700) 40%, var(--slab-900)) 86%, transparent) 30%, color-mix(in srgb, var(--slab-900) 78%, transparent)); }
+.karma-overlay { background: radial-gradient(ellipse at center, color-mix(in srgb, color-mix(in srgb, var(--amber-700) 40%, var(--slab-900)) 86%, transparent) 30%, color-mix(in srgb, var(--slab-900) 86%, transparent)); }
 .kr-head { text-align: center; }
 .kr-title { font-family: var(--f-pix); font-size: 44px; font-weight: 700; letter-spacing: 0.25em; text-transform: uppercase; color: var(--amber-300); text-shadow: 3px 3px 0 var(--amber-700), 6px 6px 0 var(--void); }
 .kr-who { font-family: var(--f-pix); color: var(--amber-100); letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 2px 2px 0 var(--void); }
@@ -538,7 +539,7 @@ body.no-crt #crt { display: none; }
 }
 .grave-item:hover { transform: translateY(-4px) rotate(-1deg); background: var(--brand-500); color: var(--bone); box-shadow: 0 4px 0 var(--brand-700), 0 7px 0 var(--shade); }
 
-.result-overlay { background: color-mix(in srgb, var(--slab-900) 70%, transparent); }
+.result-overlay { background: color-mix(in srgb, var(--slab-900) 80%, transparent); }
 .result { display: flex; flex-direction: column; align-items: center; gap: 12px; animation: dialogIn 0.5s var(--bounce); }
 .result .stone-title { filter: drop-shadow(0 8px 0 var(--shade)); animation: logoBob 3.5s ease-in-out infinite; }
 .result-sub { font-family: var(--f-pix); font-size: 22px; text-transform: uppercase; letter-spacing: 0.1em; text-shadow: 2px 2px 0 var(--void); }
