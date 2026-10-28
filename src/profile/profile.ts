@@ -7,6 +7,14 @@ export interface MatchRecord {
   result: 'win' | 'loss' | 'draw';
   delta: number;
   turns: number;
+  /** Расширенная история для Летописи (задача B); у старых записей полей нет — они валидны. */
+  ownTurns?: number;
+  karmaReceived?: number;
+  piecesLost?: number;
+  piecesTotal?: number;
+  promotions?: number;
+  cardsPlayed?: number;
+  mode?: 'classic';
 }
 
 export interface Profile {
@@ -23,11 +31,15 @@ export interface Profile {
   history: MatchRecord[];
   /** последний выбранный уровень Странника */
   botLevel?: string;
+  /** Открытые эмблемы Летописи: id → время открытия (profile/emblems.ts). */
+  emblems?: Record<string, number>;
 }
 
 export interface Settings {
   volume: number;
   crt: boolean;
+  /** Тема применяется при загрузке (render/palette.ts); смена — перезагрузка страницы. */
+  theme?: 'dark' | 'light';
   shake: boolean;
   animSpeed: number;
 }
@@ -109,7 +121,7 @@ export function recordMatch(rec: Omit<MatchRecord, 'delta' | 'at'>, stats: { cap
     bestStreak: Math.max(p.bestStreak, streak),
     captures: p.captures + stats.captures,
     cardsPlayed: p.cardsPlayed + stats.cards,
-    history: [{ ...rec, delta, at: Date.now() }, ...p.history].slice(0, 12),
+    history: [{ ...rec, delta, at: Date.now() }, ...p.history].slice(0, 40),
   });
   return delta;
 }

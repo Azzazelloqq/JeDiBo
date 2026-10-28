@@ -7,18 +7,19 @@ import { PRESETS } from '../../core/presets';
 import { anyLegalAction, canAct, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
 import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
 import { ABANDON_MS } from '../../net/protocol';
-import { getProfile, recordMatch } from '../../profile/profile';
+import { getProfile, recordMatch, type MatchRecord } from '../../profile/profile';
+import { checkEmblems } from '../../profile/emblems';
 import { setMood } from '../../render/background';
+import { PAL } from '../../render/palette';
 import { BoardView } from '../../render/board';
 import { banner, floatText, pop, shake } from '../../render/fx';
 import { wait } from '../../render/tween';
 import { Match } from '../../session/match';
 import { endNet, type NetSession } from '../../session/netSession';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
-import { avatarEl, pieceIcon, titleEl } from '../widgets';
-import { menuScreen } from './menu';
+import { avatarEl, pieceIcon, rubbleEl, titleEl } from '../widgets';
 
 type Kind = 'bot' | 'hotseat' | 'net';
 const LETTERS = 'ABCDEFGHIJKL';
@@ -51,8 +52,60 @@ const fmt = (ms: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. botLevel — уровень Странника (kind 'bot'). */
-export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botLevel?: LevelId) {
+/** Части экрана партии, которые строит раскладка варианта. */
+export interface GameParts { left: Node[]; right: Node[]; top: Node[]; bottom: Node[] }
+/** Раскладка партии варианта (B7): строит только DOM из контекста; контроллер (Match, клики, оверлеи, итог) — один. */
+export interface GameLayout {
+  cls: string;
+  placement(ctx: GameCtx): GameParts;
+  play(ctx: GameCtx): GameParts;
+}
+/** Всё, что раскладке нужно знать и уметь: состояние, данные расстановки, действия и общие блоки HUD. */
+export interface GameCtx {
+  s: GameState;
+  match: Match;
+  kind: Kind;
+  /** чья сторона показывается как «ваша»: против бота и по сети — своё место, в хотсите — тот, кто действует */
+  me: PlayerId;
+  placingFor: PlayerId;
+  placeRank: Rank;
+  counts: () => number[];
+  inRow: (y: number) => number;
+  LIMIT: number[];
+  selected: number | null;
+  prompt: () => { text: string; hot: boolean };
+  canEnd: () => boolean;
+  canSkip: () => boolean;
+  act: {
+    pickRank(r: Rank): void;
+    preset(id: string): void;
+    clear(): void;
+    ready(): void;
+    leave(): void;
+    resign(): void;
+    endTurn(): void;
+    skip(): void;
+    deselect(): void;
+    playCard(p: PlayerId): void;
+  };
+  ui: {
+    legendRow: (r: Rank, color: 'red' | 'black', up: boolean, name: string, d: string) => HTMLElement;
+    playerPanel: (p: PlayerId) => HTMLElement;
+    effectsPanel: () => HTMLElement;
+    deckPanel: () => HTMLElement;
+    logPanel: () => HTMLElement;
+    apPips: HTMLElement;
+    apNum: HTMLElement;
+    turnClock: HTMLElement;
+    turnBar: HTMLElement;
+    totals: HTMLElement;
+    avatarSeed: (p: PlayerId) => string;
+  };
+}
+
+/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. botLevel — уровень Странника (kind 'bot').
+ *  look — раскладка варианта; null — исходная («в»). */
+export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botLevel?: LevelId, look: GameLayout | null = null) {
   setMood('game');
   const prof = getProfile();
   const level = levelById(botLevel ?? prof.botLevel);
@@ -82,7 +135,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const bottom = h('div', { class: 'bottombar slab' });
   const boardSlot = h('div', { class: 'board-slot' }, board.el);
   const center = h('main', { class: 'center' }, top, boardSlot, bottom);
-  const layout = h('div', { class: 'game' }, left, center, right);
+  const layout = h('div', { class: `game ${look?.cls ?? ''}` }, left, center, right);
   root.append(layout);
 
   const fit = () => {
@@ -178,6 +231,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   function renderPlacement() {
+    if (look) return applyParts(look.placement(ctx()));
     const c = counts();
     const total = c[0] + c[1] + c[2];
     const color = s.players[placingFor].color;
@@ -277,7 +331,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   // ════════════════════════════════════════════════════════════════════════
   match.onError = (m) => {
     sfx.error();
-    toast(m, 'red');
+    toast(m, 'brand');
   };
 
   match.onEvents = async (events, st) => {
@@ -311,8 +365,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           refresh();
           sfx.turn();
           if (i !== lastTurn) break;
-          if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'red' : 'stone', 450);
-          else if (e.player === me) await banner('Ваш ход', `ход ${e.ownTurn}`, 'red', 380);
+          if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'brand' : 'stone', 450);
+          else if (e.player === me) await banner('Ваш ход', `ход ${e.ownTurn}`, 'brand', 380);
           break;
         case 'cardDrawn':
           drawnNow.add(e.card);
@@ -330,7 +384,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         case 'capture': {
           await board.playEvent(e);
           const at = board.cellToClient(e.to);
-          floatText(`−${GLYPH[e.victim.rank]}`, at.x, at.y, 'ft-red');
+          floatText(`−${GLYPH[e.victim.rank]}`, at.x, at.y, 'ft-brand');
           break;
         }
         case 'gameOver':
@@ -408,7 +462,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     if (s.pending) {
       if (human && s.pending.kind === 'cell') {
         ov.options = s.pending.options.map(unkey);
-        ov.optionsTone = DESTRUCTIVE.has(s.pending.source) ? 'red' : 'amber';
+        ov.optionsTone = DESTRUCTIVE.has(s.pending.source) ? 'brand' : 'amber';
       }
       return;
     }
@@ -424,10 +478,16 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function refresh() {
     if (s.phase === 'placement') return;
     refreshBoard();
-    renderTop();
-    renderBottom();
-    left.replaceChildren(playerPanel(0), effectsPanel(), controls());
-    right.replaceChildren(playerPanel(1), deckPanel(), logPanel());
+    if (look) {
+      updatePips();
+      applyParts(look.play(ctx()));
+      tickClocks();
+    } else {
+      renderTop();
+      renderBottom();
+      left.replaceChildren(playerPanel(0), effectsPanel(), controls());
+      right.replaceChildren(playerPanel(1), deckPanel(), logPanel());
+    }
     if (s.pending?.kind === 'grave' && match.isHuman(s.pending.chooser) && !overlayOpen) void gravePicker();
   }
 
@@ -437,12 +497,15 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const turnBar = h('div', { class: 'clock-bar' }, h('div', { class: 'clock-fill' }));
   const totals = h('div', { class: 'tb-totals' });
 
-  function renderTop() {
-    const cur = s.players[s.current];
+  function updatePips() {
     apPips.replaceChildren(...Array.from({ length: s.mode.ap }, (_, i) => h('div', { class: `pip ${i < s.ap ? 'on' : ''}` })));
     apNum.textContent = `${s.ap}/${s.mode.ap}`;
     if (s.ap !== lastAp) pop(apNum);
     lastAp = s.ap;
+  }
+  function renderTop() {
+    const cur = s.players[s.current];
+    updatePips();
     top.replaceChildren(
       h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${cur.color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
       h('div', { class: 'tb-ap' }, h('span', { class: 'h-label' }, 'Очки действий'), apPips, apNum),
@@ -460,7 +523,23 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
   const clockTimer = setInterval(tickClocks, 250);
 
+  function promptOf() {
+    const p = match.actor();
+    const human = match.isHuman(p);
+    if (s.phase === 'over') return { text: s.endReason ?? '', hot: false };
+    if (s.pending) {
+      const src = s.pending.source === 'promotion' ? 'Повышение' : CARDS[s.pending.source].name;
+      return { text: human ? `${src}: ${s.pending.prompt}` : `${s.players[p].name} выбирает (${src})…`, hot: human };
+    }
+    if (human) return { text: selected !== null ? 'Выберите клетку: точка — ход, рамка — атака' : s.actedThisTurn ? 'Ещё действие или завершите ход' : 'Выберите фигуру', hot: false };
+    return { text: `${s.players[p].name} думает…`, hot: false };
+  }
+  const canEndNow = () => {
+    const p = match.actor();
+    return match.isHuman(p) && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play';
+  };
   function renderBottom() {
+    if (look) return applyParts(look.play(ctx()), ['bottom', 'right']);
     const p = match.actor();
     const human = match.isHuman(p);
     let prompt = '';
@@ -505,7 +584,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         'div',
         { class: 'pl-pieces' },
         ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, pl.color, 2, up), h('b', {}, String(cnt[r])))),
-        h('div', { class: 'pl-lost', title: 'на кладбище' }, '✝', h('b', {}, String(lost))),
+        h('div', { class: 'pl-lost', title: 'потеряно фигур' }, rubbleEl(2), h('b', {}, String(lost))),
       ),
       h(
         'div',
@@ -524,7 +603,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
               h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
-              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-red btn-small', { disabled: !canPlayHeld }) : null,
+              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-brand btn-small', { disabled: !canPlayHeld }) : null,
             ),
           )
         : null,
@@ -656,7 +735,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         'div',
         { class: 'tags' },
         h('span', { class: 'tag' }, def.timing === 'period' ? 'в течение периода' : 'после получения'),
-        def.takesTurn ? h('span', { class: 'tag tag-red' }, 'занимает ход') : null,
+        def.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
       ),
       h('p', { class: 'kr-text' }, def.text),
     );
@@ -667,7 +746,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         res();
       };
       const label = def.timing === 'period' && mode === 'drawn' ? 'В руку' : 'Принять';
-      btnHost.append(btn(label, done, 'btn-red btn-big'));
+      btnHost.append(btn(label, done, 'btn-brand btn-big'));
       if (!human || kind !== 'hotseat') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });
@@ -727,7 +806,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const ov = h(
       'div',
       { class: 'overlay in' },
-      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('Да', () => (close(), yes()), 'btn-red'), btn('Нет', close, 'btn-stone'))),
+      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('Да', () => (close(), yes()), 'btn-brand'), btn('Нет', close, 'btn-stone'))),
     );
     document.body.appendChild(ov);
   }
@@ -757,13 +836,29 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     setMood(winner === 'draw' ? 'game' : rated && !meWon ? 'lose' : 'win');
     (winner === 'draw' || (rated && !meWon) ? sfx.lose : sfx.win)();
     const result = winner === 'draw' ? 'draw' : meWon ? 'win' : 'loss';
-    // сеть: итог мог уже быть записан до перезагрузки вкладки — второй раз не пишем
+    const st = match.stats;
+    const rec = {
+      opponent: kind === 'bot' ? `${names[opp]} · ${level.name}` : names[opp],
+      kind,
+      result: (kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result) as MatchRecord['result'],
+      turns: s.turn,
+      // расширенная история для Летописи
+      mode: 'classic' as const, ownTurns: s.players[me].ownTurns, karmaReceived: st.karma[me], piecesLost: st.lost[me], piecesTotal: 21,
+      promotions: st.promotions[me], cardsPlayed: st.cards[me],
+    };
+    // сеть: итог мог уже быть записан до перезагрузки вкладки — второй раз не пишем (и эмблемы не выдаём)
     const recorded = kind === 'net' && !markRecorded(`${net!.code}:${gameSeed}`);
-    const delta = recorded ? 0 : recordMatch(
-      { opponent: kind === 'bot' ? `${names[opp]} · ${level.name}` : names[opp], kind, result: kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result, turns: s.turn },
-      { captures: match.stats.captures[me], cards: match.stats.cards[me] },
-      kind === 'bot' ? level.rating : (client?.opponent?.rating ?? 1000),
-    );
+    const delta = recorded ? 0 : recordMatch(rec, { captures: st.captures[me], cards: st.cards[me] }, kind === 'bot' ? level.rating : (client?.opponent?.rating ?? 1000));
+    if (!recorded) {
+      const fresh = checkEmblems({
+        rec: { ...rec, delta, at: Date.now() },
+        piecesLeft: s.pieces.filter((pc) => pc.owner === me).length,
+        fatalPlayed: st.fatal[me],
+        squarePromotions: st.squarePromotions[me],
+        oppWiped: s.pieces.every((pc) => pc.owner === me),
+      });
+      fresh.forEach((em, i) => setTimeout(() => toast(`Новая эмблема: ${em.name}`, 'amber'), 900 + i * 700));
+    }
     const deltaEl = h('div', { class: `delta ${delta >= 0 ? 'good' : 'bad'}` }, '0');
     const ov = h(
       'div',
@@ -771,7 +866,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       h(
         'div',
         { class: 'result' },
-        titleEl(title, 5, title === 'ПОРАЖЕНИЕ' ? { face: '#8f8b84', side: '#303035', edge: '#1b1b1e' } : {}),
+        titleEl(title, 5, title === 'ПОРАЖЕНИЕ' ? { face: PAL.concrete300, side: PAL.slab600, edge: PAL.slab800 } : {}),
         h('div', { class: 'result-sub' }, sub),
         h('div', { class: 'muted' }, reason !== sub ? reason : ''),
         h(
@@ -783,7 +878,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           stat('карт', match.stats.cards[me]),
           rated ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
         ),
-        h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), go(menuScreen)), 'btn-stone btn-big')),
+        h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), open('menu')), 'btn-stone btn-big')),
       ),
     );
     document.body.appendChild(ov);
@@ -800,7 +895,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
   /** Реванш: офлайн — новая партия сразу; в сети — просьба в комнату, новая партия придёт как start с новым seed. */
   function rematchBtn() {
-    if (kind !== 'net') return btn('Реванш', () => go((r) => gameScreen(r, kind, undefined, level.id)), 'btn-red btn-big');
+    if (kind !== 'net') return btn('Реванш', () => open('game', { kind, level: level.id }), 'btn-brand btn-big');
     const alive = client!.status === 'over' && !hostGone && client!.opponentConnected && net!.link?.status !== 'failed';
     const b = btn(
       'Реванш',
@@ -809,7 +904,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         b.disabled = true;
         b.textContent = oppWantsRematch ? 'Начинаем…' : 'Ждём соперника…';
       },
-      'btn-red btn-big',
+      'btn-brand btn-big',
       { disabled: !alive },
     );
     rematchButton = b;
@@ -819,11 +914,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   function leave() {
     if (kind === 'net') {
-      if (s.phase === 'over') return endNet(true), go(menuScreen);
-      return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', () => (endNet(true), go(menuScreen)));
+      if (s.phase === 'over') return endNet(true), open('menu');
+      return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', () => (endNet(true), open('menu')));
     }
-    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => go(menuScreen));
-    else go(menuScreen);
+    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => open('menu'));
+    else open('menu');
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -866,7 +961,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function fatal(title: string, text: string) {
     stopNetWatch();
     overlayOpen = true;
-    const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), go(menuScreen)), 'btn-stone'))));
+    const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), open('menu')), 'btn-stone'))));
     document.body.appendChild(ov);
   }
 
@@ -877,7 +972,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           if (resultShown) return on ? undefined : rematchGone();
           if (net.role === 'host') {
             lostSince = on ? null : Date.now();
-            toast(on ? 'Соперник снова на связи' : 'Соперник отключился', on ? 'amber' : 'red');
+            toast(on ? 'Соперник снова на связи' : 'Соперник отключился', on ? 'amber' : 'brand');
           }
           if (s.phase !== 'placement') refresh();
           showStrip();
@@ -923,7 +1018,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }, 500);
     // переподключение / resync / реванш: Match уже обновил состояние — перерисовать без анимаций
     match.onReset = (st) => {
-      if (st.seed !== gameSeed) return go((r) => gameScreen(r, 'net', net));
+      if (st.seed !== gameSeed) return open('game', { kind: 'net', net });
       if (st.phase === 'placement') {
         if (client.placeCommitted || st.players[me].placed) renderWaiting();
         return;
@@ -957,6 +1052,38 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   // отладка из консоли: __match.state, __match.submit(...)
   if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }) });
+
+  function applyParts(parts: GameParts, only: (keyof GameParts)[] = ['left', 'right', 'top', 'bottom']) {
+    if (only.includes('left')) left.replaceChildren(...parts.left);
+    if (only.includes('right')) right.replaceChildren(...parts.right);
+    if (only.includes('top')) top.replaceChildren(...parts.top);
+    if (only.includes('bottom')) bottom.replaceChildren(...parts.bottom);
+  }
+  function ctx(): GameCtx {
+    return {
+      s, match, kind,
+      me: kind !== 'hotseat' ? me : s.phase === 'placement' ? placingFor : match.actor(),
+      placingFor, placeRank, counts, LIMIT, selected,
+      inRow: (y) => [...layoutMap.keys()].filter((k) => unkey(k).y === y).length,
+      prompt: promptOf,
+      canEnd: canEndNow,
+      canSkip: () => !!s.pending && s.pending.canSkip && match.isHuman(match.actor()),
+      act: {
+        pickRank: (r) => ((placeRank = r), sfx.select(), renderPlacement()),
+        preset: applyPreset,
+        clear: () => (layoutMap.clear(), board.sync(viewState()), renderPlacement()),
+        ready: () => void ready(),
+        leave,
+        resign: () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', () => match.submit({ type: 'resign', by: kind === 'hotseat' ? s.current : me })),
+        endTurn: () => match.submit({ type: 'endTurn', by: s.current }),
+        skip: () => match.submit({ type: 'skip', by: match.actor() }),
+        deselect: () => ((selected = null), refreshBoard(), renderBottom()),
+        playCard: (p) => match.submit({ type: 'playCard', by: p }),
+      },
+      ui: { legendRow, playerPanel, effectsPanel, deckPanel, logPanel, apPips, apNum, turnClock, turnBar, totals, avatarSeed },
+    };
+  }
+
 
   if (s.phase !== 'placement') enterPlayDirect();
   else if (kind === 'net' && (client!.placeCommitted || s.players[me].placed)) renderWaiting();

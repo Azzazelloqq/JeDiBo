@@ -4,10 +4,9 @@ import type { GuestFailure, HostStatus } from '../../net/peer';
 import type { TransportStatus } from '../../net/transport';
 import { setMood } from '../../render/background';
 import { endNet, hostNet, inviteLink, joinNet, netSession, normalizeCode, resumeNet, takeInviteCode, type NetSession } from '../../session/netSession';
-import { go, type Screen } from '../app';
+import type { Screen } from '../app';
 import { btn, h, toast } from '../dom';
-import { gameScreen } from './game';
-import { menuScreen } from './menu';
+import { open } from '../variants/registry';
 
 const FAIL_TEXT: Record<GuestFailure, string> = {
   notFound: 'Комната не найдена. Проверьте код. Если хост с телефона — пусть откроет игру и не сворачивает браузер.',
@@ -52,7 +51,7 @@ export function lobbyScreen(root: HTMLElement) {
           endNet(false);
           session = null;
           render();
-        } else toast(text, 'red');
+        } else toast(text, 'brand');
       },
     });
     if (s.room) s.room.onStatus = () => render();
@@ -70,7 +69,7 @@ export function lobbyScreen(root: HTMLElement) {
   function enterGame(s: NetSession) {
     unlisten?.();
     unlisten = null;
-    go((r) => gameScreen(r, 'net', s));
+    open('game', { kind: 'net', net: s });
   }
 
   function create() {
@@ -82,7 +81,7 @@ export function lobbyScreen(root: HTMLElement) {
 
   function join() {
     const code = normalizeCode(codeInput);
-    if (code.length !== 5) return toast('Код — 5 символов', 'red');
+    if (code.length !== 5) return toast('Код — 5 символов', 'brand');
     failure = null;
     session = joinNet(code);
     watch(session);
@@ -136,7 +135,7 @@ export function lobbyScreen(root: HTMLElement) {
           { class: 'slab lobby-card' },
           h('div', { class: 'h-label' }, 'Своя комната'),
           h('p', { class: 'muted' }, 'Вы получите код и ссылку для соперника. Игра идёт через ваш браузер — не закрывайте вкладку до конца партии.'),
-          btn('Создать комнату', create, 'btn-red btn-big'),
+          btn('Создать комнату', create, 'btn-brand btn-big'),
         ),
         h(
           'section',
@@ -160,7 +159,7 @@ export function lobbyScreen(root: HTMLElement) {
         h(
           'div',
           { class: 'row' },
-          canShare ? btn('Поделиться', () => void shareLink(code), 'btn-red') : null,
+          canShare ? btn('Поделиться', () => void shareLink(code), 'btn-brand') : null,
           btn('Скопировать ссылку', () => void copyLink(code), 'btn-amber'),
           btn('Отмена', cancel, 'btn-dark'),
         ),
@@ -193,7 +192,7 @@ export function lobbyScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page narrow lobby' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'По сети'), h('div', { class: 'page-sub' }, 'дуэль · Классика'), btn('В меню', () => (cancel(), go(menuScreen)))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'По сети'), h('div', { class: 'page-sub' }, 'дуэль · Классика'), btn('В меню', () => (cancel(), open('menu')))),
         failure ? h('section', { class: 'slab lobby-fail' }, failure) : null,
         body,
       ),
