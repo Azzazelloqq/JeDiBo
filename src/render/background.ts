@@ -1,6 +1,6 @@
 // Фон: закрученный «дым над бетоном» во фрагментном шейдере, рендер в низком разрешении.
-// Вид зависит от темы: тёмная — исходный красный дым, светлая — мягкий тёплый дым, плоская — ровная заливка.
-import { FLAT, THEME } from './palette';
+// Вид зависит от темы: тёмная — исходный красный дым, светлая — мягкий тёплый дым.
+import { THEME } from './palette';
 import { onFrame } from './tween';
 
 const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -10,7 +10,7 @@ uniform vec2 res;
 uniform float time;
 uniform float heat;   // 0 — холодный бетон, 1 — раскалённый (Карма)
 uniform float spin;
-uniform float style;  // 0 — дым (тёмная, камень), 1 — спокойный дым (светлая, камень), 2 — заливка (плоская)
+uniform float style;  // 0 — дым (тёмная тема), 1 — спокойный дым (светлая тема)
 uniform vec3 colA;
 uniform vec3 colB;
 uniform vec3 colC;
@@ -41,15 +41,12 @@ void main(){
     col += (grain - 0.5) * 0.035;
     col *= 1.0 - smoothstep(0.45, 1.25, r);
     col = floor(col * 18.0) / 18.0;
-  } else if (style < 1.5) {
+  } else {
     // светлая, камень: медленный крупный дым без зерна, ступени по яркости (без цветной «радуги»)
     col = smoke(uv, r, 1.0);
     col *= 1.0 - 0.12 * smoothstep(0.7, 1.6, r);
     float l = max(dot(col, vec3(0.299, 0.587, 0.114)), 0.001);
     col *= (floor(l * 14.0) / 14.0 + 0.035) / l;
-  } else {
-    // плоская поверхность: ровная заливка основным тоном настроения
-    col = colB;
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -69,13 +66,14 @@ const DARK_MOODS = {
 };
 const LIGHT_MOODS: typeof DARK_MOODS = {
   menu: { a: '#e3d6ca', b: '#f6eee5', c: '#ec6a55', heat: 0.3, spin: 0.9 },
-  game: { a: '#e2d7cc', b: '#f1e9e0', c: '#dcbfae', heat: 0.05, spin: 0.4 },
+  // партия: контрастнее меню по теням и с красным дымом, но медленнее — не отвлекает от поля
+  game: { a: '#c98a7a', b: '#f3e4da', c: '#d93a2b', heat: 0.9, spin: 0.6 },
   karma: { a: '#eadbc6', b: '#f8ecd8', c: '#f2b95e', heat: 0.8, spin: 1.3 },
   win: { a: '#ecdfcf', b: '#fbf3e8', c: '#f2b95e', heat: 0.6, spin: 1.0 },
   lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
 };
 const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
-const STYLE = FLAT ? 2 : THEME.scheme === 'dark' ? 0 : 1;
+const STYLE = THEME.scheme === 'dark' ? 0 : 1;
 export type Mood = keyof typeof MOODS;
 
 type Colors = { a: string; b: string; c: string };

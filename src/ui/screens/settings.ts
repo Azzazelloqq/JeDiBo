@@ -33,7 +33,7 @@ export function settingsScreen(root: HTMLElement) {
       h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => x !== v && on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
     // тема собирается при загрузке (палитра, спрайты, стили) — сохраняем и перезагружаем без параметров в адресе
     const reloadWith = (p: Partial<Settings>) => {
-      saveSettings({ theme: THEME.scheme, surface: THEME.surface, ...p });
+      saveSettings({ theme: THEME.scheme, ...p });
       location.href = location.pathname;
     };
     root.replaceChildren(
@@ -61,7 +61,6 @@ export function settingsScreen(root: HTMLElement) {
             }),
           ),
           choiceStr('Тема', [['Тёмная', 'dark'], ['Светлая', 'light']], THEME.scheme, (x) => reloadWith({ theme: x as Settings['theme'] })),
-          choiceStr('Поверхность', [['Камень', 'stone'], ['Плоская', 'flat']], THEME.surface, (x) => reloadWith({ surface: x as Settings['surface'] })),
           toggle('ЭЛТ-эффект', s.crt, () => set({ crt: !s.crt })),
           toggle('Тряска экрана', s.shake, () => set({ shake: !s.shake })),
           choice('Скорость анимаций', [['×1', 1], ['×1.5', 1.5], ['×2', 2]], s.animSpeed, (x) => set({ animSpeed: x })),

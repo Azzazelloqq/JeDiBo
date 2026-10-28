@@ -1,7 +1,7 @@
 // Лицевые стороны Карт Кармы: каменная плита по «тиру» + пиксельная иконка 14×14 (×2).
 import { CARDS, tierOf, type Tier } from '../core/karma/cards';
 import type { CardId } from '../core/types';
-import { FLAT, PAL, THEME } from './palette';
+import { PAL, THEME } from './palette';
 import { concreteTile, fromAscii, hexToRgb, makeCanvas, outline, px, scaleCanvas, type Canvas } from './pixel';
 
 const K: Record<string, string> = {
@@ -166,15 +166,6 @@ export function cardFace(id: CardId): Canvas {
   const [c, g] = makeCanvas(CARD_W, CARD_H);
   g.drawImage(concreteTile(CARD_W, CARD_H, hexToRgb(tier.face), id.length * 31, { pores: 50, amp: 12, seams: true }), 0, 0);
   const wx = 5, wy = 5, ww = CARD_W - 10, wh = 38;
-  if (FLAT) {
-    // плоская карта: заливка плиты, окно, иконка — без фасок, свечения и стяжек
-    g.fillStyle = PAL.slab800;
-    g.fillRect(wx, wy, ww, wh);
-    const ic = scaleCanvas(iconCanvas(id), 2);
-    g.drawImage(ic, Math.floor(wx + (ww - ic.width) / 2), Math.floor(wy + (wh - ic.height) / 2));
-    faceCache.set(id, c);
-    return c;
-  }
   // фаска плиты
   g.fillStyle = tier.rim;
   g.fillRect(1, 1, CARD_W - 2, 1);

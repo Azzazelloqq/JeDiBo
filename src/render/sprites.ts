@@ -1,6 +1,6 @@
 // Программные спрайты: фигуры из гранита/базальта, бетонные плиты поля, рубашка Кармы, аватары.
 import { Rank } from '../core/types';
-import { FLAT, PAL, STONE, THEME, type StoneColor } from './palette';
+import { PAL, STONE, THEME, type StoneColor } from './palette';
 import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, seeded, type Canvas, type Mask } from './pixel';
 
 export const CELL = 16;
@@ -47,14 +47,6 @@ export function pieceSprite(rank: Rank, color: StoneColor, up: boolean, variant:
     return out;
   }
 
-  if (FLAT) {
-    // плоская фигура: заливка основой, полоска тени снизу, контур — без крапин, фасок и бликов
-    for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (inFace(x, y)) px(g, ox + x, oy + y + 1, st.side);
-    for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (inFace(x, y)) px(g, ox + x, oy + y, st.base);
-    const flat = outline(c, st.outline);
-    spriteCache.set(k, flat);
-    return flat;
-  }
   // боковая грань
   for (let d = DEPTH; d >= 1; d--)
     for (let y = 0; y < FACE_H; y++)
@@ -92,39 +84,19 @@ export function pieceSprite(rank: Rank, color: StoneColor, up: boolean, variant:
   return out;
 }
 
-/** Бетонная плитка клетки. Небольшие вариации и трещины по сиду. */
+/** Клетка поля — плоская (решение владельца): ровная заливка в шахматном порядке и тонкий шов,
+ *  без пор, фасок и трещин. Рама доски и фигуры остаются рельефными. */
 export function cellTile(x: number, y: number): Canvas {
   const seed = x * 97 + y * 13 + 5;
   const rnd = seeded(seed);
   const shade = (x + y) % 2 === 0 ? 0 : -8;
   const base = hexToRgb(PAL.concrete200).map((v) => v + shade + Math.floor(rnd() * 6 - 3)) as [number, number, number];
-  const t = concreteTile(CELL, CELL, base, seed, { pores: 3 + Math.floor(rnd() * 3), amp: 9 });
-  const g = t.getContext('2d')!;
-  if (FLAT) {
-    // плоская клетка: только тонкий шов
-    g.fillStyle = 'rgba(40,36,32,0.18)';
-    g.fillRect(0, CELL - 1, CELL, 1);
-    g.fillRect(CELL - 1, 0, 1, CELL);
-    return t;
-  }
-  // фаска плиты: свет сверху/слева, тень справа/снизу
-  g.fillStyle = 'rgba(255,255,255,0.18)';
-  g.fillRect(0, 0, CELL, 1);
-  g.fillRect(0, 0, 1, CELL);
-  g.fillStyle = 'rgba(40,36,32,0.35)';
+  const [t, g] = makeCanvas(CELL, CELL);
+  g.fillStyle = `rgb(${base.join(',')})`;
+  g.fillRect(0, 0, CELL, CELL);
+  g.fillStyle = 'rgba(40,36,32,0.18)';
   g.fillRect(0, CELL - 1, CELL, 1);
   g.fillRect(CELL - 1, 0, 1, CELL);
-  // редкая волосяная трещина
-  if (rnd() < 0.1) {
-    let cx = 2 + Math.floor(rnd() * 10);
-    let cy = 2 + Math.floor(rnd() * 4);
-    g.fillStyle = 'rgba(60,55,50,0.22)';
-    for (let i = 0; i < 6; i++) {
-      g.fillRect(cx, cy, 1, 1);
-      cx += Math.round(rnd() * 2 - 1);
-      cy += 1;
-    }
-  }
   return t;
 }
 
@@ -169,10 +141,6 @@ export function cardBack(w = 52, h = 72): Canvas {
   const mark = logoMark(k, PAL.logo);
   const mx = Math.floor((w - mark.width) / 2);
   const my = Math.floor((h - mark.height) / 2);
-  if (FLAT) {
-    g.drawImage(mark, mx, my);
-    return c;
-  }
   // фаски: рама — свет сверху/слева, тень снизу/справа; плита «утоплена» наоборот
   g.fillStyle = PAL.slab500;
   g.fillRect(1, 1, w - 2, 1);

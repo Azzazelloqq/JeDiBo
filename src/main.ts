@@ -1,7 +1,6 @@
 import darkCss from './styles/dark.css?inline';
 import lightCss from './styles/light.css?inline';
-import flatCss from './styles/flat.css?inline';
-import { applyCssPalette, FLAT, PAL, THEME } from './render/palette';
+import { applyCssPalette, PAL, THEME } from './render/palette';
 import { startBackground } from './render/background';
 import { scaleCanvas } from './render/pixel';
 import { concreteCss, logoMark } from './render/sprites';
@@ -17,17 +16,17 @@ function setFavicon() {
   link.href = scaleCanvas(logoMark(2, PAL.logo), 2).toDataURL();
 }
 
-/** Стили темы: тёмная — исходный дизайн, светлая — красный акцент на светлом камне; плоская поверхность — поверх. */
+/** Стили темы: тёмная — исходный дизайн, светлая — красный акцент на светлом камне. */
 function applyTheme() {
   const style = document.createElement('style');
-  style.textContent = (THEME.scheme === 'dark' ? darkCss : lightCss) + (FLAT ? flatCss : '');
+  style.textContent = THEME.scheme === 'dark' ? darkCss : lightCss;
   document.head.appendChild(style);
-  document.body.classList.add(`theme-${THEME.scheme}`, `surface-${THEME.surface}`);
+  document.body.classList.add(`theme-${THEME.scheme}`);
   applyCssPalette();
-  // бетонные фактуры для CSS-панелей генерируются один раз при старте; у плоской поверхности их нет
+  // бетонные фактуры для CSS-панелей генерируются один раз при старте
   const root = document.documentElement.style;
   const tex = (name: string, hex: string, seed: number, soft = false) =>
-    root.setProperty(name, FLAT ? 'none' : `url(${concreteCss(hex, seed, 96, 96, soft)})`);
+    root.setProperty(name, `url(${concreteCss(hex, seed, 96, 96, soft)})`);
   const soft = THEME.scheme === 'light'; // светлая — лёгкий рельеф
   tex('--tex-concrete', PAL.concrete300, 9, soft);
   tex('--tex-concrete-light', PAL.concrete200, 13, soft);

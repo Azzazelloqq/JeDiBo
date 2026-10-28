@@ -1,5 +1,4 @@
 // Низкоуровневые инструменты программного пиксель-арта.
-import { FLAT } from './palette';
 
 export type Canvas = HTMLCanvasElement;
 export type C2D = CanvasRenderingContext2D;
@@ -108,12 +107,6 @@ export const tinyWidth = (text: string) => text.length * 4 - 1;
 /** Бетонная текстура: шум, поры, следы опалубки. Используется и в канвасе, и как CSS-фон. */
 export function concreteTile(w: number, h: number, base: [number, number, number], seed: number, opts: { pores?: number; seams?: boolean; amp?: number } = {}): Canvas {
   const [c, g] = makeCanvas(w, h);
-  if (FLAT) {
-    // плоская поверхность: ровная заливка без шума, пор и швов
-    g.fillStyle = `rgb(${base.map((v) => Math.round(v)).join(',')})`;
-    g.fillRect(0, 0, w, h);
-    return c;
-  }
   const rnd = seeded(seed);
   const img = g.createImageData(w, h);
   const amp = opts.amp ?? 10;

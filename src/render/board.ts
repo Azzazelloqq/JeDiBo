@@ -3,7 +3,7 @@
 import { sfx } from '../audio/sfx';
 import { forward, homeRows, isBarrier } from '../core/rules';
 import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type Pos } from '../core/types';
-import { FLAT, PAL, STONE } from './palette';
+import { PAL, STONE } from './palette';
 import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
 import { ease, onFrame, tween, wait } from './tween';
@@ -127,16 +127,14 @@ export class BoardView {
     // рама — тёмный монолит
     g.fillStyle = PAL.slab800;
     g.fillRect(0, 0, BOARD_PX, BOARD_PX);
-    if (!FLAT) {
-      g.fillStyle = PAL.slab600;
-      g.fillRect(0, 0, BOARD_PX, 1);
-      g.fillRect(0, 0, 1, BOARD_PX);
-      g.fillStyle = PAL.void;
-      g.fillRect(0, BOARD_PX - 1, BOARD_PX, 1);
-      g.fillRect(BOARD_PX - 1, 0, 1, BOARD_PX);
-    }
+    g.fillStyle = PAL.slab600;
+    g.fillRect(0, 0, BOARD_PX, 1);
+    g.fillRect(0, 0, 1, BOARD_PX);
+    g.fillStyle = PAL.void;
+    g.fillRect(0, BOARD_PX - 1, BOARD_PX, 1);
+    g.fillRect(BOARD_PX - 1, 0, 1, BOARD_PX);
     // шум рамы
-    for (let i = 0; i < (FLAT ? 0 : 900); i++) {
+    for (let i = 0; i < 900; i++) {
       const x = Math.floor(Math.random() * BOARD_PX);
       const y = Math.floor(Math.random() * BOARD_PX);
       g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.18)';
@@ -161,7 +159,7 @@ export class BoardView {
       tinyText(g, num, BOARD_PX - M + Math.floor((M - tinyWidth(num)) / 2), cy, PAL.concrete500);
     }
     // стяжки по углам рамы
-    for (const [x, y] of FLAT ? [] : [[2, 2], [BOARD_PX - 5, 2], [2, BOARD_PX - 5], [BOARD_PX - 5, BOARD_PX - 5]]) {
+    for (const [x, y] of [[2, 2], [BOARD_PX - 5, 2], [2, BOARD_PX - 5], [BOARD_PX - 5, BOARD_PX - 5]]) {
       px(g, x, y, PAL.void, 3, 3);
       px(g, x, y + 3, PAL.slab600, 3, 1);
     }

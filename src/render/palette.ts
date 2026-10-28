@@ -1,10 +1,9 @@
 // Палитры тем. Тема и поверхность выбираются один раз при загрузке (до генерации спрайтов):
-// ?theme=dark|light&surface=stone|flat в адресе, иначе — из настроек (localStorage). Смена — перезагрузка.
+// ?theme=dark|light в адресе, иначе — из настроек (localStorage). Смена — перезагрузка.
 // Источник правды для цветов — здесь; CSS получает те же значения через applyCssPalette()
 // (slab900 → --slab-900, brand500 → --brand-500).
 
 export type Scheme = 'dark' | 'light';
-export type Surface = 'stone' | 'flat';
 
 /** Роли токенов одинаковы в обеих темах:
  *  void/ink — самое тёмное (контуры, тени) · slab* — базальт (рамы, поле, тёмные поверхности) ·
@@ -99,8 +98,8 @@ const STONES = {
   },
 };
 
-function pick(): { scheme: Scheme; surface: Surface } {
-  let saved: { theme?: string; surface?: string } = {};
+function pick(): { scheme: Scheme } {
+  let saved: { theme?: string } = {};
   try {
     saved = JSON.parse(localStorage.getItem('jedibo.settings.v1') ?? '{}') ?? {};
   } catch {
@@ -108,14 +107,11 @@ function pick(): { scheme: Scheme; surface: Surface } {
   }
   const q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
   const t = q.get('theme') ?? saved.theme;
-  const s = q.get('surface') ?? saved.surface;
-  return { scheme: t === 'light' ? 'light' : 'dark', surface: s === 'flat' ? 'flat' : 'stone' };
+  return { scheme: t === 'light' ? 'light' : 'dark' };
 }
 
 /** Текущая тема — фиксируется при загрузке модуля. */
 export const THEME = pick();
-/** Плоская поверхность: без фактур, фасок и рельефа (бетонные текстуры становятся заливкой). */
-export const FLAT = THEME.surface === 'flat';
 
 export const PAL: typeof DARK = { ...(THEME.scheme === 'light' ? LIGHT : DARK) };
 export const STONE = STONES[THEME.scheme];
