@@ -539,7 +539,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     return match.isHuman(p) && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play';
   };
   function renderBottom() {
-    if (look) return applyParts(look.play(ctx()), ['bottom', 'right']);
+    // верх тоже: раскладка заново вставляет в него общие узлы (очки действий, часы) — без него они пропадут из шапки
+    if (look) return applyParts(look.play(ctx()), ['top', 'bottom', 'right']);
     const p = match.actor();
     const human = match.isHuman(p);
     let prompt = '';
