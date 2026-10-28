@@ -3,7 +3,7 @@
 // Сериализация — бинарная по умолчанию: она сама режет большие сообщения (start с полным логом),
 // а JSON-канал PeerJS отбрасывает всё длиннее ~16 КБ.
 import Peer, { type DataConnection, type PeerError } from 'peerjs';
-import { RoomClient, type ClientIdentity } from './client';
+import { RoomClient, type ClientIdentity, type PlaceStore } from './client';
 import { LoopbackTransport } from './loopback';
 import { decodeServerMsg, encode, type ClientMsg, type ServerMsg } from './protocol';
 import type { RoomData } from './room';
@@ -58,6 +58,26 @@ export function seatToken(code: string): string {
     ssSet(kToken(code), t);
   }
   return t;
+}
+
+const kPlace = (code: string) => `jedibo.net.place.${code}`;
+
+/** Своя заявка расстановки: после перезагрузки вкладки её нужно раскрыть, новую комната не примет. */
+export function placeStore(code: string): PlaceStore {
+  return {
+    load(seed) {
+      try {
+        const v = JSON.parse(ssGet(kPlace(code)) ?? 'null');
+        const c = v?.c;
+        return v?.seed === seed && Array.isArray(c?.value) && typeof c.salt === 'string' && typeof c.hash === 'string' ? c : null;
+      } catch {
+        return null;
+      }
+    },
+    save(seed, c) {
+      ssSet(kPlace(code), c ? JSON.stringify({ seed, c }) : null);
+    },
+  };
 }
 
 /** Комната, которую эта вкладка хостила до перезагрузки. */
@@ -207,7 +227,7 @@ export class HostRoom {
 /** Новая комната хоста + его собственный клиент. */
 export function hostGame(code: string, me: Omit<ClientIdentity, 'token'>, data?: RoomData) {
   const room = new HostRoom(code, data);
-  const client = new RoomClient(room.localTransport(), { ...me, token: seatToken(code) });
+  const client = new RoomClient(room.localTransport(), { ...me, token: seatToken(code) }, placeStore(code));
   client.hello();
   return { room, client };
 }
@@ -266,6 +286,7 @@ export class GuestLink {
     this.client = new RoomClient(
       { send() {}, onMessage() {}, close() {} },
       { ...me, token: seatToken(code) },
+      placeStore(code),
     );
     this.client.listen({ pong: () => (self.lastPong = Date.now()) });
     this.setStatus('connecting');

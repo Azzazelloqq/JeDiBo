@@ -14,6 +14,13 @@ export interface ClientIdentity extends PeerInfo {
 
 export type ClientErrorCode = ErrorCode | 'desync';
 
+/** Хранилище своей заявки расстановки, переживающее перезагрузку вкладки (sessionStorage).
+ *  Без него после перезагрузки клиент не сможет ни раскрыть заявку, ни подать новую — комната держит старую. */
+export interface PlaceStore {
+  load(seed: number): Commitment<Layout> | null;
+  save(seed: number, c: Commitment<Layout> | null): void;
+}
+
 /** столько ждём подтверждения своего действия, прежде чем сверяться с комнатой */
 const INFLIGHT_TIMEOUT_MS = 10_000;
 
@@ -64,6 +71,7 @@ export class RoomClient {
   constructor(
     transport: Transport<ClientMsg, ServerMsg>,
     private me: ClientIdentity,
+    private placeStore?: PlaceStore,
   ) {
     this.attach(transport);
   }
@@ -132,6 +140,7 @@ export class RoomClient {
       if (this.myPlace) return;
       this.myPlace = c;
       this.revealed = false;
+      if (this.gameSeed !== null) this.placeStore?.save(this.gameSeed, c);
       this.send({ t: 'placeCommit', hash: c.hash });
     } finally {
       this.placing = false;
@@ -250,9 +259,10 @@ export class RoomClient {
     // гость проверяет, что seed — честная смесь долей (если только что проходил commit-reveal)
     if (this.seat === 1 && this.expectedSeed !== null && m.seed !== this.expectedSeed) return this.cheat('Seed партии не совпадает с договорённым');
     if (m.seed !== this.gameSeed) {
-      // новая партия (первая или реванш): прошлая расстановка не в счёт
+      // новая партия (первая или реванш): прошлая расстановка не в счёт.
+      // Та же партия после перезагрузки вкладки: своя заявка — из хранилища вкладки
       this.gameSeed = m.seed;
-      this.myPlace = null;
+      this.myPlace = this.placeStore?.load(m.seed) ?? null;
       this.revealed = false;
       this.commits = [null, null];
     }
