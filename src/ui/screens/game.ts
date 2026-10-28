@@ -777,6 +777,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, look: GameLayout | nul
       piecesLeft: s.pieces.filter((pc) => pc.owner === 0).length,
       fatalPlayed: st.fatal[0],
       squarePromotions: st.squarePromotions[0],
+      oppWiped: s.pieces.every((pc) => pc.owner === 0),
     });
     fresh.forEach((em, i) => setTimeout(() => toast(`Новая эмблема: ${em.name}`, 'amber'), 900 + i * 700));
     const deltaEl = h('div', { class: `delta ${delta >= 0 ? 'good' : 'bad'}` }, '0');

@@ -13,6 +13,8 @@ export interface MatchOutcome {
   fatalPlayed: number;
   /** повышений квадрата до круга */
   squarePromotions: number;
+  /** у соперника не осталось фигур (победа уничтожением, а не сдачей или по времени) */
+  oppWiped: boolean;
 }
 
 export interface Emblem {
@@ -27,16 +29,18 @@ export interface Emblem {
 const POINTS: Record<EmblemTier, 1 | 2 | 3> = { знак: 1, печать: 2, клеймо: 3 };
 const e = (id: string, name: string, desc: string, tier: EmblemTier, check: Emblem['check']): Emblem => ({ id, name, desc, tier, points: POINTS[tier], check });
 const won = (o: MatchOutcome) => o.rec.result === 'win';
+/** победа на поле: армия соперника уничтожена — для эмблем, которые нельзя получить сдачей соперника */
+const wonOnBoard = (o: MatchOutcome) => won(o) && o.oppWiped;
 
 export const EMBLEMS: Emblem[] = [
   e('firstStone', 'Первый камень', 'Выиграть первую партию', 'знак', (o) => won(o)),
   e('wandererWrong', 'Странник ошибся', 'Выиграть у Странника', 'знак', (o) => won(o) && o.rec.kind === 'bot'),
   e('twoAtTable', 'Двое за столом', 'Доиграть партию за одним компьютером', 'знак', (o) => o.rec.kind === 'hotseat'),
   e('balance', 'Равновесие', 'Довести партию до ничьей', 'печать', (o) => o.rec.result === 'draw'),
-  e('flawless', 'Безупречная кладка', 'Выиграть, не потеряв ни одной фигуры', 'клеймо', (o) => won(o) && (o.rec.piecesLost ?? 1) === 0),
-  e('lastStone', 'Последний камень', 'Выиграть, когда у вас осталась одна фигура', 'клеймо', (o) => won(o) && o.piecesLeft === 1),
+  e('flawless', 'Безупречная кладка', 'Выиграть, не потеряв ни одной фигуры', 'клеймо', (o) => wonOnBoard(o) && (o.rec.piecesLost ?? 1) === 0),
+  e('lastStone', 'Последний камень', 'Выиграть, когда у вас осталась одна фигура', 'клеймо', (o) => wonOnBoard(o) && o.piecesLeft === 1),
   e('longBuild', 'Долгая стройка', 'Выиграть партию длиннее 40 ваших ходов', 'знак', (o) => won(o) && (o.rec.ownTurns ?? 0) > 40),
-  e('demolition', 'Снос', 'Выиграть быстрее чем за 15 ваших ходов', 'печать', (o) => won(o) && (o.rec.ownTurns ?? 99) < 15),
+  e('demolition', 'Снос', 'Выиграть быстрее чем за 15 ваших ходов', 'печать', (o) => wonOnBoard(o) && (o.rec.ownTurns ?? 99) < 15),
   e('sixSigns', 'Шесть знаков', 'Получить Карму 6 раз за партию', 'печать', (o) => (o.rec.karmaReceived ?? 0) >= 6),
   e('careerist', 'Карьерист', 'Повысить фигуры 3 раза за партию', 'печать', (o) => (o.rec.promotions ?? 0) >= 3),
   // «довести треугольник до круга двумя повышениями»: движок пересоздаёт фигуру при повышении, поэтому

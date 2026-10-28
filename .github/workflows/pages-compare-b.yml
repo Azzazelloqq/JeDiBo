@@ -1,0 +1,63 @@
+# Сравнение визуала (задача B): при пуше в ветку редизайна B публикует на GitHub Pages три версии рядом —
+# main в корень сайта, редизайн A (ветка req/redesign-a-49cf2f) в /redesign-a/, текущую ветку в /redesign-b/.
+# Pages хранит один сайт целиком, поэтому собираются все три; пуш в main (pages.yml) или в ветку A
+# (pages-compare.yml) перезапишет сайт без /redesign-b/ — тогда перезапустить этот workflow (workflow_dispatch).
+name: Deploy compare B to GitHub Pages
+
+on:
+  push:
+    branches: ['req/redesign-b-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          ref: req/redesign-a-49cf2f
+          path: redesign-a
+      - uses: actions/checkout@v4
+        with:
+          path: redesign-b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci && npm run build
+        working-directory: main
+      - run: npm ci && npm run build
+        working-directory: redesign-a
+      - run: npm ci && npm run build
+        working-directory: redesign-b
+      - run: |
+          mkdir -p site
+          cp -r main/dist/. site/
+          cp -r redesign-a/dist site/redesign-a
+          cp -r redesign-b/dist site/redesign-b
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
