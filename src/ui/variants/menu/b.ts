@@ -18,13 +18,13 @@ export function menuB(root: HTMLElement) {
     return el;
   };
   const iconBtn = (icon: MenuIcon, label: string, id: Parameters<typeof open>[0]) =>
-    press(h('button', { class: 'bm-icon' }, canvasEl(menuIcon(icon), 4, 'bm-icon-art'), h('span', {}, label)), () => open(id));
+    press(h('button', { class: 'bm-icon' }, canvasEl(menuIcon(icon), 3, 'bm-icon-art'), h('span', {}, label)), () => open(id));
 
   const classic = press(
     h(
       'button',
       { class: 'bm-tile' },
-      h('div', { class: 'bm-tile-art' }, canvasEl(classicArt(), 3)),
+      h('div', { class: 'bm-tile-art' }, canvasEl(classicArt(), 2)),
       h('div', { class: 'bm-tile-title' }, 'КЛАССИКА'),
       h('div', { class: 'bm-tile-sub' }, 'БОТ • ОДИН ПК • СЕТЬ'),
     ),
@@ -37,7 +37,7 @@ export function menuB(root: HTMLElement) {
       { class: 'b-menu' },
       shapeFrame(cssVar('--b-frame')),
       h('div', { class: 'bm-version' }, VERSION),
-      h('div', { class: 'bm-logo' }, logoEl({ variant: 'full', color: 'brand', scale: 1.05 })),
+      h('div', { class: 'bm-logo' }, logoEl({ variant: 'full', color: 'brand', scale: 1.2 })),
       h(
         'div',
         { class: 'bm-panel' },

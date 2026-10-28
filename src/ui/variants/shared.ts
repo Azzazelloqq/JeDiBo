@@ -72,23 +72,25 @@ export function menuIcon(k: MenuIcon): Canvas {
 
 /** Иллюстрация плитки «Классика»: кусок поля с фигурами и карта Кармы. */
 export function classicArt(): Canvas {
-  const W = 196, H = 84;
+  const W = 286, H = 92; // ×2 = внутренняя ширина плитки (ряд из 4 кнопок по 136 px)
   const [c, g] = makeCanvas(W, H);
-  for (let y = 0; y < 6; y++) for (let x = 0; x < 13; x++) g.drawImage(cellTile(x, y), x * 16 - 4, y * 16 - 12);
-  const put = (r: Rank, col: 'red' | 'black', cx: number, cy: number, up: boolean) => g.drawImage(pieceSprite(r, col, up), cx * 16 - 4, cy * 16 - 14);
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 19; x++) g.drawImage(cellTile(x, y), x * 16 - 6, y * 16 - 10);
+  const put = (r: Rank, col: 'red' | 'black', cx: number, cy: number, up: boolean) => g.drawImage(pieceSprite(r, col, up), cx * 16 - 6, cy * 16 - 12);
   put(Rank.Square, 'black', 1, 1, false);
   put(Rank.Triangle, 'black', 3, 1, false);
   put(Rank.Circle, 'black', 5, 1, false);
   put(Rank.Triangle, 'black', 7, 1, false);
-  put(Rank.Triangle, 'black', 2, 2, false);
-  put(Rank.Triangle, 'red', 3, 3, true);
-  put(Rank.Square, 'red', 5, 4, true);
-  put(Rank.Circle, 'red', 1, 4, true);
-  put(Rank.Triangle, 'red', 7, 4, true);
+  put(Rank.Square, 'black', 9, 1, false);
+  put(Rank.Triangle, 'black', 4, 2, false);
+  put(Rank.Triangle, 'red', 6, 3, true);
+  put(Rank.Circle, 'red', 2, 4, true);
+  put(Rank.Square, 'red', 8, 4, true);
+  put(Rank.Triangle, 'red', 10, 4, true);
+  put(Rank.Triangle, 'red', 4, 5, true);
   // карта Кармы «вылетает» над полем
   g.fillStyle = 'rgba(0,0,0,0.35)';
-  g.fillRect(142, 10, 52, 72);
-  g.drawImage(cardFace('immortal'), 138, 6);
+  g.fillRect(222, 14, 52, 72);
+  g.drawImage(cardFace('immortal'), 218, 9);
   return c;
 }
 

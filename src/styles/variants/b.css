@@ -187,15 +187,16 @@ body.ui-b .bm-version {
 body.ui-b .bm-logo { margin-top: 7vh; animation: logoBob 4.5s ease-in-out infinite; }
 body.ui-b .bm-logo .logo-art { filter: drop-shadow(0 6px 0 rgba(20, 8, 30, 0.55)); }
 body.ui-b .bm-panel {
-  margin-top: auto; margin-bottom: 58px; width: min(1180px, calc(100% - 120px));
-  background: var(--b-panel); border-radius: 10px; padding: 22px 26px 22px;
+  /* подложка по размеру содержимого: плитка той же ширины, что ряд кнопок, — без пустых полей */
+  margin: auto 0; width: fit-content;
+  background: var(--b-panel); border-radius: 10px; padding: 18px;
   box-shadow: 0 6px 0 var(--b-panel-edge), 0 18px 40px var(--b-shadow);
-  display: flex; flex-direction: column; gap: 20px;
+  display: flex; flex-direction: column; gap: 16px;
 }
 body.ui-b .bm-tiles { display: flex; justify-content: center; }
 body.ui-b .bm-tile {
   position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;
-  width: 600px; padding: 0; overflow: hidden; border-radius: 8px;
+  width: 100%; padding: 0; overflow: hidden; border-radius: 8px;
   background: var(--b-tile); border: 4px solid var(--b-on);
   box-shadow: 0 5px 0 var(--b-tile-edge); transition: transform 0.12s var(--bounce);
 }
@@ -203,19 +204,19 @@ body.ui-b .bm-tile:hover:not(:disabled) { transform: translateY(-3px); }
 body.ui-b .bm-tile-art { width: 100%; display: flex; justify-content: center; background: var(--b-track); line-height: 0; }
 body.ui-b .bm-tile-art canvas { display: block; }
 body.ui-b .bm-tile-title {
-  margin-top: -34px; position: relative; font-family: var(--b-f-head); font-size: 40px; letter-spacing: 0.02em; color: #fff;
+  margin-top: -26px; position: relative; font-family: var(--b-f-head); font-size: 30px; letter-spacing: 0.02em; color: #fff;
   text-shadow: 2px 0 0 #101418, -2px 0 0 #101418, 0 2px 0 #101418, 0 -2px 0 #101418, 2px 2px 0 #101418, 0 5px 0 #101418;
 }
 body.ui-b .bm-tile-sub {
   width: calc(100% - 20px); margin: 8px 10px 10px; padding: 8px; border-radius: 4px;
-  background: var(--b-tile-band); color: var(--b-text); font-weight: 700; font-size: 17px; letter-spacing: 0.12em;
+  background: var(--b-tile-band); color: var(--b-text); font-weight: 700; font-size: 14px; letter-spacing: 0.12em;
 }
-body.ui-b .bm-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 0 30px; }
+body.ui-b .bm-bar { display: grid; grid-template-columns: repeat(4, 136px); gap: 12px; }
 body.ui-b .bm-icon {
   display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
   padding: 12px 8px 10px; border-radius: 8px; border: 3px solid transparent;
   background: var(--b-tile); color: var(--b-text); box-shadow: 0 4px 0 var(--b-tile-edge);
-  font-family: var(--b-f-text); font-weight: 700; font-size: 22px;
+  font-family: var(--b-f-text); font-weight: 700; font-size: 18px;
   transition: transform 0.12s var(--bounce);
 }
 body.ui-b .bm-icon:hover, body.ui-b .bm-icon:focus-visible { transform: translateY(-2px); border-color: var(--b-accent); color: var(--b-title); outline: none; }
