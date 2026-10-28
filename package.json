@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pure.json",
     "netsim": "esbuild scripts/netsim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/netsim.mjs --log-level=warning && node node_modules/.sim/netsim.mjs",
-    "sim": "esbuild scripts/sim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/sim.mjs --log-level=warning && node node_modules/.sim/sim.mjs"
+    "sim": "esbuild scripts/sim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/sim.mjs --log-level=warning && node node_modules/.sim/sim.mjs",
+    "arena": "esbuild scripts/arena.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/arena.mjs --log-level=warning && node node_modules/.sim/arena.mjs",
+    "aicheck": "esbuild scripts/aicheck.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/aicheck.mjs --log-level=warning && node node_modules/.sim/aicheck.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "1.2.0",
