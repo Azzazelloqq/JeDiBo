@@ -290,6 +290,8 @@ body.no-crt #crt { display: none; }
 .held { display: flex; gap: 12px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--slab-600); }
 .held-info { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .held-info b { font-family: var(--f-pix); font-size: 16px; }
+.held.burning { border-top-color: var(--signal); }
+.held-burn { color: var(--signal); font-weight: 700; animation: blink 0.8s steps(2) infinite; }
 
 .effects { display: flex; flex-direction: column; gap: 6px; }
 .effect { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; background: rgba(0, 0, 0, 0.35); border-left: 4px solid var(--slab-500); font-family: var(--f-pix); }

@@ -8,7 +8,7 @@ import { searchTurn } from '../src/ai/search';
 import { clocksAfter, expiredClock, newClocks, spendTime, type Clocks } from '../src/core/clocks';
 import { createGame, dispatch } from '../src/core/engine';
 import { CLASSIC } from '../src/core/modes';
-import { homeRows, legalTargets } from '../src/core/rules';
+import { heldExpiresThisTurn, homeRows, legalTargets } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
@@ -477,6 +477,23 @@ test('Смена поля: повышение, ждущее выбора кле�
   assert(dispatch(s, { type: 'choose', by: 1, option: s.pending.options[0] }).ok, 'выбор клетки отклонён');
   assert(!piecesNamed(s, 1).includes('TL12'), `треугольник остался на последнем ряду: ${piecesNamed(s, 1).join(' ')}`);
   assert(piecesNamed(s, 1).some((n) => n.startsWith('S')), `у нового владельца нет квадрата: ${piecesNamed(s, 1).join(' ')}`);
+});
+
+test('отложенная карта: «сгорит» только на последнем ходу Периода (13-м), после него — сброс', () => {
+  const s = position([[0, Rank.Circle, 'A1'], [1, Rank.Circle, 'L12']], 1);
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = ['jumper'];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  assert(s.players[0].held?.card === 'jumper', 'игрок 0 не получил Прыгуна на 7-м ходу');
+  for (let own = 7; own <= 13; own++) {
+    assert(s.current === 0 && s.players[0].ownTurns === own, `ожидался ход ${own} игрока 0`);
+    assert(heldExpiresThisTurn(s, 0) === (own === 13), `ход ${own}: признак «сгорит» = ${heldExpiresThisTurn(s, 0)}`);
+    assert(!heldExpiresThisTurn(s, 1), 'у соперника нет карты');
+    anyMoveAndEnd(s);
+    if (own < 13) anyMoveAndEnd(s);
+  }
+  assert(s.players[0].held === null && s.discard.includes('jumper'), 'после 13-го хода карта должна сгореть');
 });
 
 test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {

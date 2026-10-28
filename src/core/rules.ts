@@ -159,6 +159,12 @@ export function spawnCells(s: GameState, owner: PlayerId): Pos[] {
 
 export const opponentOf = (s: GameState) => other(s.current);
 
+/** Последний ход Периода у игрока с отложенной картой на руках: не сыграет сейчас — карта сгорит. */
+export function heldExpiresThisTurn(s: GameState, p: PlayerId): boolean {
+  const h = s.players[p].held;
+  return s.phase === 'play' && s.current === p && !!h && h.untilOwnTurn <= s.players[p].ownTurns;
+}
+
 /** Соперник отвечает на вопрос карты в чужой ход (Двойная смерть, Девальвация, Предательство) — кто именно. */
 export function choosingOpponent(s: GameState): PlayerId | null {
   return s.phase === 'play' && s.pending && s.pending.chooser !== s.current ? s.pending.chooser : null;

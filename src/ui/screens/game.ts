@@ -4,7 +4,7 @@ import { sfx } from '../../audio/sfx';
 import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
-import { anyLegalAction, canAct, choosingOpponent, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
+import { anyLegalAction, canAct, choosingOpponent, heldExpiresThisTurn, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
 import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
 import { ABANDON_MS } from '../../net/protocol';
 import { getProfile, recordMatch } from '../../profile/profile';
@@ -313,6 +313,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           if (i !== lastTurn) break;
           if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'red' : 'stone', 450);
           else if (e.player === me) await banner('Ваш ход', `ход ${e.ownTurn}`, 'red', 380);
+          if (match.isHuman(e.player) && heldExpiresThisTurn(st, e.player))
+            toast(`Последний ход Периода: сыграйте «${CARDS[st.players[e.player].held!.card].name}» до атаки и конца хода, иначе карта сгорит`, 'red');
           break;
         case 'cardDrawn':
           drawnNow.add(e.card);
@@ -496,6 +498,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const until = karmaNow ? 0 : k - inCycle;
     const up = pl.side === 0;
     const held = pl.held;
+    const burning = heldExpiresThisTurn(s, p);
     const canPlayHeld = held && match.isHuman(p) && s.current === p && !s.pending && !match.isBusy && (!CARDS[held.card].canPlay || CARDS[held.card].canPlay!(s, p));
     return h(
       'section',
@@ -523,13 +526,13 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       held
         ? h(
             'div',
-            { class: 'held' },
+            { class: `held ${burning ? 'burning' : ''}` },
             cardEl(held.card, { scale: 1.4, idle: true }).el,
             h(
               'div',
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
-              h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
+              burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
               match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-red btn-small', { disabled: !canPlayHeld }) : null,
             ),
           )
