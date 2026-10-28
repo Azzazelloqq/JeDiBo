@@ -25,6 +25,8 @@ export interface CardDef {
   play(c: Ctx, p: PlayerId): boolean;
   /** ответ на вопрос карты; option === null — игрок закончил досрочно */
   onChoice?(c: Ctx, pend: Pending, option: string | null): void;
+  /** варианты вопроса заново по текущей позиции: вопрос мог ждать в очереди, пока доска менялась */
+  refresh?(s: GameState, pend: Pending): string[];
 }
 
 export const tierOf = (d: CardDef): Tier => (d.takesTurn ? 'fatal' : d.count === 1 ? 'rare' : 'simple');
@@ -45,7 +47,7 @@ function pickPieces(
     prompt: (n: number, max: number) => string;
     apply: (c: Ctx, p: PlayerId, pc: NonNullable<ReturnType<typeof pieceAt>>, data: Record<string, unknown>) => void;
   },
-): Pick<CardDef, 'play' | 'onChoice'> {
+): Pick<CardDef, 'play' | 'onChoice' | 'refresh'> {
   const askNext = (c: Ctx, p: PlayerId, step: number, data: Record<string, unknown>) => {
     if (step >= cfg.max) return;
     const pool = cfg.pool(c.s, p, data);
@@ -76,6 +78,7 @@ function pickPieces(
       cfg.apply(c, pend.beneficiary, pc, data);
       askNext(c, pend.beneficiary, pend.step + 1, data);
     },
+    refresh: (s, pend) => cellOptions(cfg.pool(s, pend.beneficiary, pend.data)),
   };
 }
 
@@ -255,6 +258,12 @@ const defs: CardDef[] = [
       addEffect(c, { kind: 'barrier', owner: pend.beneficiary, untilOwnTurn: periodEnd(c.s, pend.beneficiary), cells });
       c.ev.push({ type: 'barrier', cells });
     },
+    refresh(s, pend) {
+      if (pend.step === 0) return cellOptions(barrierFirstCells(s));
+      const first = unkey(pend.data.first as string);
+      if (!isFree(s, first)) return [];
+      return cellOptions([{ x: first.x - 1, y: first.y }, { x: first.x + 1, y: first.y }].filter((q) => isFree(s, q)));
+    },
   },
   {
     id: 'careerUp',
@@ -386,6 +395,11 @@ const defs: CardDef[] = [
       checkPromotion(c, pc, false);
       const moveNo = (pend.step + 1) / 2;
       if (moveNo < 3) askBetrayalPiece(c, p, pend.step + 1);
+    },
+    refresh(s, pend) {
+      if (pend.step % 2 === 0) return cellOptions(posOf(betrayalPool(s, pend.beneficiary)));
+      const pc = pieceById(s, pend.data.pieceId as number);
+      return pc && pc.owner === pend.beneficiary ? cellOptions(plainMoves(s, pc)) : [];
     },
   },
   {
@@ -532,8 +546,10 @@ function plainMoves(s: GameState, pc: NonNullable<ReturnType<typeof pieceAt>>): 
     .map((t) => t.to);
 }
 
+const betrayalPool = (s: GameState, p: PlayerId) => piecesOf(s, p).filter((q) => plainMoves(s, q).length > 0);
+
 function askBetrayalPiece(c: Ctx, p: PlayerId, step: number): boolean {
-  const pool = piecesOf(c.s, p).filter((q) => plainMoves(c.s, q).length > 0);
+  const pool = betrayalPool(c.s, p);
   if (!pool.length) return false;
   ask(c, {
     source: 'betrayal',

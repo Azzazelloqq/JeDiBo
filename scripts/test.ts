@@ -11,6 +11,7 @@ import { Rank, type Action, type GameState, type Piece, type PlayerId } from '..
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
 import { checkBoard, collectPositions, lcg } from './lib/boardcheck';
+import { fuzz } from './lib/fuzz';
 
 // ── мини-раннер ─────────────────────────────────────────────────────────────
 const tests: { name: string; fn: () => void }[] = [];
@@ -23,34 +24,15 @@ const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
 const botOf = (level: LevelId, seed: number): BotFn => createAgent({ ...levelById(level).config, budgetMs: undefined }, seed);
 const actor = (s: GameState): PlayerId => (s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current);
 
-/** Все варианты вопроса ломают движок или отклоняются — известный баг устаревших вопросов в очереди. */
-function pendingBroken(s: GameState): boolean {
-  const p = s.pending!;
-  const opts: Action[] = p.options.map((o) => ({ type: 'choose', by: p.chooser, option: o }));
-  if (p.canSkip) opts.push({ type: 'skip', by: p.chooser });
-  return opts.every((a) => {
-    try {
-      return !dispatch(clone(s), a).ok;
-    } catch {
-      return true;
-    }
-  });
-}
-
-/** Партия двух ботов; бросает ошибку, если бот не дал действия без причины или движок его отклонил. */
+/** Партия двух ботов; бросает ошибку, если бот не дал действия или движок его отклонил. */
 function playGame(bots: [BotFn, BotFn], seed: number, opts: { limit?: number; noKarma?: boolean } = {}) {
   const s = createGame(CLASSIC, seed, ['A', 'B']);
   if (opts.noKarma) s.deck = [];
   const log: Action[] = [];
-  let stuck = false;
   while (s.phase !== 'over' && s.turn <= (opts.limit ?? 1500)) {
     const who = actor(s);
     const a = bots[who](s, who);
-    if (!a) {
-      assert(s.pending && pendingBroken(s), `seed ${seed}, ход ${s.turn}: бот ${who} не дал действия`);
-      stuck = true;
-      break;
-    }
+    assert(a, `seed ${seed}, ход ${s.turn}: бот ${who} не дал действия`);
     let r;
     try {
       r = dispatch(s, a);
@@ -60,7 +42,7 @@ function playGame(bots: [BotFn, BotFn], seed: number, opts: { limit?: number; no
     assert(r.ok, `seed ${seed}, ход ${s.turn}: недопустимое действие ${JSON.stringify(a)}: ${r.error}`);
     log.push(a);
   }
-  return { s, log, stuck };
+  return { s, log };
 }
 
 const REF: Weights = { ...DEFAULT_WEIGHTS, val: [1, 3, 5], xray: true };
@@ -111,8 +93,8 @@ for (const l of LEVELS) {
   test(`${l.name}: только допустимые действия, партии доигрываются (${games} партий)`, () => {
     for (let g = 0; g < games; g++) {
       const seed = 1000 + g * 31;
-      const { s, stuck } = playGame([botOf(l.id, seed), botOf(l.id, seed + 1)], seed);
-      assert(stuck || s.phase === 'over', `seed ${seed}: партия не закончилась за ${s.turn} ходов`);
+      const { s } = playGame([botOf(l.id, seed), botOf(l.id, seed + 1)], seed);
+      assert(s.phase === 'over', `seed ${seed}: партия не закончилась за ${s.turn} ходов`);
     }
   });
 }
@@ -228,6 +210,50 @@ test('тактика: не менять круг на защищённый тр�
     assert(!desc.includes('cxE7'), `${level}: отдал круг за треугольник, план: ${desc.join(' ')}`);
     assert(hanging === 0, `${level}: после хода висит ${hanging}, план: ${desc.join(' ')}`);
   }
+});
+
+// ── движок ──────────────────────────────────────────────────────────────────
+
+/** Каждый вариант открытого вопроса принимается движком (на копии). */
+function assertPendingAnswerable(s: GameState, what: string) {
+  const p = s.pending;
+  assert(p, `${what}: нет вопроса`);
+  assert(p.options.length || p.canSkip, `${what}: вопрос без вариантов`);
+  for (const option of p.options) {
+    let r;
+    try {
+      r = dispatch(clone(s), { type: 'choose', by: p.chooser, option });
+    } catch (e) {
+      throw new Error(`${what}: движок упал на варианте ${option}: ${(e as Error).message}`);
+    }
+    assert(r.ok, `${what}: вариант ${option} отклонён: ${r.error}`);
+  }
+}
+
+test('вопрос из очереди не предлагает фигуру, которой уже нет (Предательство + повышение)', () => {
+  // соперник «Предательством» выводит квадрат игрока 0 на последний ряд; пока игрок 0 ставит повышенную фигуру,
+  // следующий вопрос «Предательства» ждёт в очереди — квадрат к его открытию уже снят с доски
+  const s = position([[0, Rank.Square, 'D11'], [0, Rank.Triangle, 'G4'], [1, Rank.Triangle, 'L1']], 1);
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = ['betrayal'];
+  dispatch(s, { type: 'endTurn', by: 1 });
+  assert(s.pending?.source === 'betrayal', `ожидалось Предательство, вопрос: ${s.pending?.source}`);
+  const square = `${at('D11').x},${at('D11').y}`;
+  const lastRow = `${at('D12').x},${at('D12').y}`;
+  assert(dispatch(s, { type: 'choose', by: 1, option: square }).ok, 'соперник не смог выбрать квадрат');
+  assert(dispatch(s, { type: 'choose', by: 1, option: lastRow }).ok, 'соперник не смог сдвинуть квадрат на последний ряд');
+  assert(s.pending?.source === 'promotion', `ожидалось повышение, вопрос: ${s.pending?.source}`);
+  assert(dispatch(s, { type: 'choose', by: 0, option: s.pending.options[0] }).ok, 'повышение не применилось');
+  assert(s.pending?.source === 'betrayal', `ожидалось продолжение Предательства, вопрос: ${s.pending?.source}`);
+  assert(!s.pending.options.includes(lastRow), `в вариантах осталась снятая фигура ${lastRow}`);
+  assertPendingAnswerable(s, 'Предательство после повышения');
+});
+
+test('фаззер: случайные допустимые действия не ломают движок (120 партий)', () => {
+  const r = fuzz({ games: 120, seed: 7 });
+  assert(!r.error, r.error!);
+  assert(r.questions > 300, `мало вопросов карт и повышений: ${r.questions}`);
 });
 
 test('Мастер обыгрывает старого жадного бота без Кармы (10 партий)', () => {

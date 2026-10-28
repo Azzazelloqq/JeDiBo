@@ -5,7 +5,7 @@ import { RANK_NAME, checkPromotion, destroy, log, spawn, startPromotion, type Ct
 import { randInt, shuffle } from './rng';
 import { anyLegalAction, canAct, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
 import { START_ARMY } from './modes';
-import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type PlayerId } from './types';
+import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type Pending, type PlayerId } from './types';
 
 export interface Result {
   ok: boolean;
@@ -232,16 +232,14 @@ function afterAction(c: Ctx) {
   if (checkWin(c)) return;
   let guard = 0;
   while (guard++ < 64) {
-    if (!s.pending && s.queue.length) {
-      const next = s.queue.shift()!;
-      if (next.data.spawnRank !== undefined) {
-        const cells = spawnCells(s, next.beneficiary);
-        if (!cells.length) continue;
-        next.options = cells.map(key);
-      }
-      s.pending = next;
+    if (!s.pending && s.queue.length) s.pending = s.queue.shift()!;
+    if (s.pending) {
+      // вопрос мог ждать в очереди или устареть в том же действии — варианты по текущей позиции
+      s.pending.options = liveOptions(s, s.pending);
+      if (s.pending.options.length) return;
+      s.pending = null;
+      continue;
     }
-    if (s.pending) return;
     if (s.endAfterPending) {
       endTurn(c);
       continue;
@@ -256,6 +254,19 @@ function afterAction(c: Ctx) {
     }
     return;
   }
+}
+
+function liveOptions(s: GameState, p: Pending): string[] {
+  if (p.source === 'promotion') {
+    const pc = s.pieces.find((q) => q.id === p.data.promoteId);
+    if (!pc || pc.owner !== p.beneficiary) return [];
+  }
+  if (p.data.spawnRank !== undefined) return spawnCells(s, p.beneficiary).map(key);
+  if (p.kind === 'grave') {
+    const uids = new Set(s.players[p.beneficiary].graveyard.map((g) => String(g.uid)));
+    return p.options.filter((o) => uids.has(o));
+  }
+  return p.source === 'promotion' ? p.options : CARDS[p.source].refresh?.(s, p) ?? p.options;
 }
 
 const heldPlayable = (s: GameState) => {
