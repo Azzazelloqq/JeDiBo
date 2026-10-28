@@ -291,7 +291,8 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
   let disruptions = 0;
   const STRESS = !!process.env.STRESS;
   const evlog: string[] = [];
-  const leaveAt = 2 + Math.floor(Math.random() * 120);
+  // новый бот доигрывает партию за ~50 ходов — гость уходит раньше, чтобы сценарий успел сработать
+  const leaveAt = 2 + Math.floor(Math.random() * 25);
   const disrupt = () => {
     const s = host.room.state;
     guest = bots.find((b) => b.c.seat === 1) ?? guest;

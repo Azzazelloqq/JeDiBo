@@ -25,6 +25,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # тесты: упавший тест не даёт выложить сборку
+      - run: npm test
+      - run: npm run sim -- 50
+      - run: npm run netsim -- 20
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

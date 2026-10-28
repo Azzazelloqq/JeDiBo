@@ -15,7 +15,8 @@
     "aicheck": "esbuild scripts/aicheck.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/aicheck.mjs --log-level=warning && node node_modules/.sim/aicheck.mjs",
     "tune": "esbuild scripts/tune.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/tune.mjs --log-level=warning && node node_modules/.sim/tune.mjs",
     "clock": "esbuild scripts/clock.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/clock.mjs --log-level=warning && node node_modules/.sim/clock.mjs",
-    "quality": "esbuild scripts/quality.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/quality.mjs --log-level=warning && node node_modules/.sim/quality.mjs"
+    "quality": "esbuild scripts/quality.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/quality.mjs --log-level=warning && node node_modules/.sim/quality.mjs",
+    "test": "esbuild scripts/test.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/test.mjs --log-level=warning && node node_modules/.sim/test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "1.2.0",
