@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lan": "vite --host --mode lan",
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.pure.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pure.json",
@@ -12,6 +13,7 @@
     "sim": "esbuild scripts/sim.ts --bundle --platform=node --format=esm --outfile=node_modules/.sim/sim.mjs --log-level=warning && node node_modules/.sim/sim.mjs"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "1.2.0",
     "typescript": "5.6.3",
     "vite": "5.4.10"
   },
