@@ -817,7 +817,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         res();
       };
       const label = def.timing === 'period' && mode === 'drawn' ? 'В руку' : 'Принять';
-      btnHost.append(btn(label, done, 'btn-brand btn-big'));
+      // кнопка — только тому, кому выпала карта; чужая закрывается сама или кликом
+      if (human) btnHost.append(btn(label, done, 'btn-brand btn-big'));
       if (!human || kind !== 'hotseat') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });

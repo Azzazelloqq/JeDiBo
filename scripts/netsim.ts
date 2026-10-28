@@ -222,6 +222,103 @@ async function clientChecks() {
   }
 }
 
+// Перезагрузка вкладки посреди расстановки: клиент создаётся заново с тем же token и тем же
+// хранилищем вкладки (sessionStorage) — экран снова показывает редактор, если клиент не помнит заявку.
+async function reloadChecks() {
+  console.log('Перезагрузка вкладки в расстановке:');
+  const settle = () => sleep(20);
+  type Tab = { c: RoomClient; t: LoopbackTransport; store: Map<string, string>; token: string; errors: string[] };
+  const placeStore = (m: Map<string, string>) => ({
+    load: (seed: number) => {
+      const v = JSON.parse(m.get('place') ?? 'null');
+      return v?.seed === seed ? v.c : null;
+    },
+    save: (seed: number, c: unknown) => void (c ? m.set('place', JSON.stringify({ seed, c })) : m.delete('place')),
+  });
+  const open = (host: RoomHost, token: string, store = new Map<string, string>()): Tab => {
+    const t = new LoopbackTransport(host);
+    const tab: Tab = { c: new RoomClient(t, me(token), placeStore(store)), t, store, token, errors: [] };
+    tab.c.listen({ error: (code, text) => tab.errors.push(`${code}: ${text}`) });
+    tab.c.hello();
+    return tab;
+  };
+  const reload = (host: RoomHost, tab: Tab) => {
+    tab.t.drop();
+    return open(host, tab.token, tab.store);
+  };
+  /** переподключение без перезагрузки: клиент тот же, транспорт новый */
+  const reattach = (host: RoomHost, tab: Tab) => {
+    tab.t.drop();
+    tab.t = new LoopbackTransport(host);
+    tab.c.attach(tab.t);
+    tab.c.hello();
+  };
+  const layoutFor = (tab: Tab) => (botPlacement(tab.c.state!, tab.c.seat!) as Extract<Action, { type: 'place' }>).layout;
+  // так экран решает, показать редактор расстановки или «ждём соперника»; человек расставляет заново
+  const placeIfAsked = async (tab: Tab) => {
+    if (!tab.c.placeCommitted && !tab.c.state!.players[tab.c.seat!].placed) await tab.c.place(layoutFor(tab));
+  };
+  const started = (name: string, host: RoomHost, tabs: Tab[]) => {
+    const errs = tabs.flatMap((t) => t.errors);
+    check(name, host.room.state?.phase === 'play' && tabs.every((t) => t.c.state?.phase === 'play') && !errs.length, errs.join('; ') || `комната: ${host.room.state?.phase}, клиенты: ${tabs.map((t) => t.c.state?.phase).join('/')}`);
+    host.dispose();
+  };
+
+  {
+    // A заявил и перезагрузился; B заявил (комната раскрыла заявки) и перезагрузился; оба вернулись
+    const host = new RoomHost('RELOAD', { ratePerSec: Infinity });
+    let a = open(host, 'reload-a-token');
+    let b = open(host, 'reload-b-token');
+    await settle();
+    await a.c.place(layoutFor(a));
+    await settle();
+    a = reload(host, a);
+    await settle();
+    await b.c.place(layoutFor(b));
+    await settle();
+    b = reload(host, b);
+    await settle();
+    await placeIfAsked(a);
+    await placeIfAsked(b);
+    await settle();
+    started('оба по очереди перезагрузились после заявки расстановки → партия началась', host, [a, b]);
+  }
+  {
+    // A заявил и перезагрузился, пока B ещё расставляется
+    const host = new RoomHost('RELOAD', { ratePerSec: Infinity });
+    let a = open(host, 'reload-a-token');
+    const b = open(host, 'reload-b-token');
+    await settle();
+    await a.c.place(layoutFor(a));
+    await settle();
+    a = reload(host, a);
+    await settle();
+    await placeIfAsked(a);
+    await b.c.place(layoutFor(b));
+    await settle();
+    started('перезагрузка после заявки, соперник ещё расставляется → партия началась', host, [a, b]);
+  }
+  {
+    // перезагрузка вкладки хоста: комната поднимается из снимка, гость переподключается тем же клиентом
+    let host = new RoomHost('RELOAD', { ratePerSec: Infinity });
+    let a = open(host, 'reload-a-token');
+    const b = open(host, 'reload-b-token');
+    await settle();
+    await a.c.place(layoutFor(a));
+    await settle();
+    const data = host.room.snapshot();
+    host.dispose();
+    host = new RoomHost('RELOAD', { ratePerSec: Infinity }, data);
+    a = reload(host, a);
+    reattach(host, b);
+    await settle();
+    await placeIfAsked(a);
+    await b.c.place(layoutFor(b));
+    await settle();
+    started('перезагрузка хоста после его заявки (комната из снимка) → партия началась', host, [a, b]);
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // 2. Партии ботов
 // ════════════════════════════════════════════════════════════════════════════
@@ -381,6 +478,7 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
 async function main() {
   await roomChecks();
   await clientChecks();
+  await reloadChecks();
   console.log(`\nПартии ботов через комнату (${N}):`);
   const agg: Record<string, { n: number; fail: number; turns: number; ms: number; drops: number; timeouts: number; choiceTimeouts: number }> = {};
   for (let g = 0; g < N; g++) {
