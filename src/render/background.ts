@@ -1,5 +1,6 @@
 // Фон: закрученный «дым над бетоном» во фрагментном шейдере, рендер в низком разрешении.
-// Цвета — из палитры «Дневной бетон»: средний бетон, дым оранжевый/янтарный, без «крови».
+// Вид зависит от темы: тёмная — исходный красный дым, светлая — мягкий тёплый дым, плоская — ровная заливка.
+import { FLAT, THEME } from './palette';
 import { onFrame } from './tween';
 
 const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -9,12 +10,10 @@ uniform vec2 res;
 uniform float time;
 uniform float heat;   // 0 — холодный бетон, 1 — раскалённый (Карма)
 uniform float spin;
-uniform float style;  // 0 — дым (текущий), 1 — стена опалубки, 2 — ровный бетон, 3 — тёмный стол, 4 — спокойный дым
+uniform float style;  // 0 — дым (тёмная, камень), 1 — спокойный дым (светлая, камень), 2 — заливка (плоская)
 uniform vec3 colA;
 uniform vec3 colB;
 uniform vec3 colC;
-
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
 vec3 smoke(vec2 uv, float r, float calm){
   float a = atan(uv.y, uv.x);
@@ -31,75 +30,54 @@ vec3 smoke(vec2 uv, float r, float calm){
   return mix(col, colC, smoothstep(0.62, 0.98, w*v) * (0.35 + heat*0.65) * (1.0 - calm * 0.5));
 }
 
-// литая стена из щитов опалубки: швы, стяжки, следы досок, каждый щит своего тона; свет сверху ступенями
-vec3 formwork(vec2 p, float r){
-  vec2 P = vec2(48.0, 28.0);
-  vec2 cell = floor(vec2(p.x + mod(floor(p.y / P.y), 2.0) * 24.0, p.y) / P);
-  vec2 q = mod(vec2(p.x + mod(floor(p.y / P.y), 2.0) * 24.0, p.y), P);
-  float h = hash(cell);
-  vec3 col = mix(colA, colB, 0.62 + 0.22 * h);
-  if (mod(q.y, 7.0) < 1.0) col *= 0.955;                 // отпечатки досок
-  if (hash(floor(p)) > 0.986) col *= 0.82;               // поры
-  if (q.x < 1.0 || q.y < 1.0) col *= 0.72;               // шов
-  else if (q.y < 2.0 || q.x < 2.0) col *= 1.06;          // фаска щита
-  vec2 tq = mod(q - vec2(7.0, 7.0), vec2(34.0, 14.0));
-  if (tq.x < 2.0 && tq.y < 2.0 && q.x > 4.0 && q.y > 4.0) col *= 0.55; // стяжки
-  float light = floor((1.0 - smoothstep(0.2, 1.4, r)) * 4.0) / 4.0;
-  return col * (0.82 + 0.22 * light) + colC * heat * 0.08;
-}
-
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*res) / min(res.x,res.y);
   float r = length(uv);
   vec3 col;
   if (style < 0.5) {
+    // тёмная, камень: исходный закрученный дым с зерном и виньеткой
     col = smoke(uv, r, 0.0);
     float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)) + time) * 43758.5453);
     col += (grain - 0.5) * 0.035;
-    col *= 1.0 - 0.55 * smoothstep(0.6, 1.5, r);
+    col *= 1.0 - smoothstep(0.45, 1.25, r);
     col = floor(col * 18.0) / 18.0;
   } else if (style < 1.5) {
-    col = formwork(floor(gl_FragCoord.xy), r);
-  } else if (style < 2.5) {
-    // ровный бетон: тон colB, мягкий свет сверху крупными ступенями, без зерна
-    float y = gl_FragCoord.y / res.y;
-    float band = floor((0.35 + 0.65 * y - 0.25 * smoothstep(0.5, 1.4, r)) * 5.0) / 5.0;
-    col = mix(colA, colB, 0.55 + 0.45 * band) + colC * heat * 0.06;
-  } else if (style < 3.5) {
-    // тёмный стол: тёплый базальт и круг света от лампы над полем, кольцами
-    float ring = floor((1.0 - smoothstep(0.15, 0.95, r)) * 5.0) / 5.0;
-    vec3 dark = colA * 0.62;
-    col = mix(dark, colB * 0.95, ring * 0.85) + colC * heat * 0.1 * ring;
-  } else {
+    // светлая, камень: медленный крупный дым без зерна, ступени по яркости (без цветной «радуги»)
     col = smoke(uv, r, 1.0);
-    col *= 1.0 - 0.3 * smoothstep(0.7, 1.6, r);
-    // ступени по яркости, а не по каналам — без цветной «радуги» на стыках
+    col *= 1.0 - 0.12 * smoothstep(0.7, 1.6, r);
     float l = max(dot(col, vec3(0.299, 0.587, 0.114)), 0.001);
-    col *= (floor(l * 10.0) / 10.0 + 0.05) / l;
+    col *= (floor(l * 14.0) / 14.0 + 0.035) / l;
+  } else {
+    // плоская поверхность: ровная заливка основным тоном настроения
+    col = colB;
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
-
 
 const hex = (h: string) => {
   const n = parseInt(h.slice(1), 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 };
 
-// a — тени, b — основной тон, c — «дым». Значения совпадают с цветами палитры (PAL) или лежат между ними.
-const MOODS = {
-  menu: { a: '#3b3935', b: '#6e6a63', c: '#ff5a1f', heat: 0.25, spin: 0.9 },
-  game: { a: '#46433f', b: '#6a6762', c: '#a9a499', heat: 0.08, spin: 0.4 },
-  karma: { a: '#4f4a44', b: '#8a8378', c: '#f0b45a', heat: 0.9, spin: 1.4 },
-  win: { a: '#5c5248', b: '#938e84', c: '#f0b45a', heat: 0.6, spin: 1.0 },
-  lose: { a: '#3d3f42', b: '#5d6164', c: '#8a9196', heat: 0.15, spin: 0.25 },
+// a — тени, b — основной тон, c — «дым».
+const DARK_MOODS = {
+  menu: { a: '#121214', b: '#2a2a2f', c: '#7a1515', heat: 0.35, spin: 0.9 },
+  game: { a: '#0d0d0f', b: '#1f1f23', c: '#4a0d0d', heat: 0.1, spin: 0.5 },
+  karma: { a: '#150606', b: '#2b1010', c: '#d4862a', heat: 1, spin: 1.6 },
+  win: { a: '#141210', b: '#3a3226', c: '#d4862a', heat: 0.7, spin: 1.1 },
+  lose: { a: '#0a0a0b', b: '#18181b', c: '#2a0707', heat: 0.2, spin: 0.3 },
 };
+const LIGHT_MOODS: typeof DARK_MOODS = {
+  menu: { a: '#e3d6ca', b: '#f6eee5', c: '#ec6a55', heat: 0.3, spin: 0.9 },
+  game: { a: '#e2d7cc', b: '#f1e9e0', c: '#dcbfae', heat: 0.05, spin: 0.4 },
+  karma: { a: '#eadbc6', b: '#f8ecd8', c: '#f2b95e', heat: 0.8, spin: 1.3 },
+  win: { a: '#ecdfcf', b: '#fbf3e8', c: '#f2b95e', heat: 0.6, spin: 1.0 },
+  lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
+};
+const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
+const STYLE = FLAT ? 2 : THEME.scheme === 'dark' ? 0 : 1;
 export type Mood = keyof typeof MOODS;
 
-/** Пробные стили фона партии (выбор владельца, ?bg=N): действуют во всех настроениях, кроме 'menu'. */
-export const BG_STYLES = ['дым (текущий)', 'стена опалубки', 'ровный бетон', 'тёмный стол', 'спокойный дым'];
-let gameStyle = 0;
-export const setBackgroundStyle = (n: number) => (gameStyle = n);
 type Colors = { a: string; b: string; c: string };
 
 let target: Mood = 'menu';
@@ -194,7 +172,7 @@ export function startBackground(canvas: HTMLCanvasElement) {
     gl.uniform1f(uTime, now / 1000);
     gl.uniform1f(uHeat, cur.heat);
     gl.uniform1f(uSpin, cur.spin);
-    gl.uniform1f(uStyle, target === 'menu' ? 0 : gameStyle);
+    gl.uniform1f(uStyle, STYLE);
     gl.uniform3fv(uA, cur.a);
     gl.uniform3fv(uB, cur.b);
     gl.uniform3fv(uC, cur.c);

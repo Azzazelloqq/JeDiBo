@@ -1,6 +1,6 @@
 // Программные спрайты: фигуры из гранита/базальта, бетонные плиты поля, рубашка Кармы, аватары.
 import { Rank } from '../core/types';
-import { PAL, STONE, type StoneColor } from './palette';
+import { FLAT, PAL, STONE, THEME, type StoneColor } from './palette';
 import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, seeded, type Canvas, type Mask } from './pixel';
 
 export const CELL = 16;
@@ -47,6 +47,14 @@ export function pieceSprite(rank: Rank, color: StoneColor, up: boolean, variant:
     return out;
   }
 
+  if (FLAT) {
+    // плоская фигура: заливка основой, полоска тени снизу, контур — без крапин, фасок и бликов
+    for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (inFace(x, y)) px(g, ox + x, oy + y + 1, st.side);
+    for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (inFace(x, y)) px(g, ox + x, oy + y, st.base);
+    const flat = outline(c, st.outline);
+    spriteCache.set(k, flat);
+    return flat;
+  }
   // боковая грань
   for (let d = DEPTH; d >= 1; d--)
     for (let y = 0; y < FACE_H; y++)
@@ -92,6 +100,13 @@ export function cellTile(x: number, y: number): Canvas {
   const base = hexToRgb(PAL.concrete200).map((v) => v + shade + Math.floor(rnd() * 6 - 3)) as [number, number, number];
   const t = concreteTile(CELL, CELL, base, seed, { pores: 3 + Math.floor(rnd() * 3), amp: 9 });
   const g = t.getContext('2d')!;
+  if (FLAT) {
+    // плоская клетка: только тонкий шов
+    g.fillStyle = 'rgba(40,36,32,0.18)';
+    g.fillRect(0, CELL - 1, CELL, 1);
+    g.fillRect(CELL - 1, 0, 1, CELL);
+    return t;
+  }
   // фаска плиты: свет сверху/слева, тень справа/снизу
   g.fillStyle = 'rgba(255,255,255,0.18)';
   g.fillRect(0, 0, CELL, 1);
@@ -129,7 +144,7 @@ const markCache = new Map<string, Canvas>();
 
 /** Пиксельный знак логотипа для мелких размеров: модуль = k пикселей, сторона 7k.
  *  Пиксель закрашен, если его центр внутри векторной формы — кривые становятся «лесенкой» на сетке модуля. */
-export function logoMark(k = 3, color: string = PAL.brand500): Canvas {
+export function logoMark(k = 3, color: string = PAL.logo): Canvas {
   const key = `${k}${color}`;
   const hit = markCache.get(key);
   if (hit) return hit;
@@ -141,13 +156,23 @@ export function logoMark(k = 3, color: string = PAL.brand500): Canvas {
   return c;
 }
 
-/** Рубашка Карты Кармы: светлая бетонная плита в базальтовой раме, по центру — пиксельный знак. */
+/** Рубашка Карты Кармы: плита в раме, по центру — пиксельный знак логотипа.
+ *  Тёмная тема — базальт в базальтовой раме, светлая — светлый бетон в бетонной раме. */
 export function cardBack(w = 52, h = 72): Canvas {
   const [c, g] = makeCanvas(w, h);
-  g.drawImage(concreteTile(w, h, hexToRgb(PAL.slab700), 77, { pores: 30, amp: 6 }), 0, 0);
-  // внутренняя бетонная плита
+  const dark = THEME.scheme === 'dark';
+  g.drawImage(concreteTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77, { pores: 30, amp: 6 }), 0, 0);
+  // внутренняя плита
   const ix = 4, iy = 4, iw = w - 8, ih = h - 8;
-  g.drawImage(concreteTile(iw, ih, hexToRgb(PAL.concrete200), 78, { pores: 40, seams: true, amp: 10 }), ix, iy);
+  g.drawImage(concreteTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, seams: true, amp: 10 }), ix, iy);
+  const k = w >= 48 ? 4 : 3;
+  const mark = logoMark(k, PAL.logo);
+  const mx = Math.floor((w - mark.width) / 2);
+  const my = Math.floor((h - mark.height) / 2);
+  if (FLAT) {
+    g.drawImage(mark, mx, my);
+    return c;
+  }
   // фаски: рама — свет сверху/слева, тень снизу/справа; плита «утоплена» наоборот
   g.fillStyle = PAL.slab500;
   g.fillRect(1, 1, w - 2, 1);
@@ -155,23 +180,19 @@ export function cardBack(w = 52, h = 72): Canvas {
   g.fillStyle = PAL.void;
   g.fillRect(1, h - 2, w - 2, 1);
   g.fillRect(w - 2, 1, 1, h - 2);
-  g.fillStyle = PAL.concrete500;
+  g.fillStyle = dark ? PAL.void : PAL.concrete500;
   g.fillRect(ix, iy, iw, 1);
   g.fillRect(ix, iy, 1, ih);
-  g.fillStyle = PAL.concrete100;
+  g.fillStyle = dark ? PAL.slab500 : PAL.concrete100;
   g.fillRect(ix, iy + ih - 1, iw, 1);
   g.fillRect(ix + iw - 1, iy, 1, ih);
   // стяжки опалубки в углах плиты
   for (const [x, y] of [[ix + 3, iy + 3], [ix + iw - 5, iy + 3], [ix + 3, iy + ih - 5], [ix + iw - 5, iy + ih - 5]]) {
-    px(g, x, y, PAL.slab600, 2, 2);
-    px(g, x, y + 2, PAL.bone, 2, 1);
+    px(g, x, y, dark ? PAL.void : PAL.slab600, 2, 2);
+    px(g, x, y + 2, dark ? PAL.slab500 : PAL.bone, 2, 1);
   }
-  // знак: жёсткая тень + бренд-оранжевый
-  const k = w >= 48 ? 4 : 3;
-  const mark = logoMark(k, PAL.brand500);
-  const mx = Math.floor((w - mark.width) / 2);
-  const my = Math.floor((h - mark.height) / 2);
-  g.drawImage(logoMark(k, PAL.brand800), mx + 1, my + 2);
+  // знак: жёсткая тень + цвет логотипа
+  g.drawImage(logoMark(k, dark ? PAL.void : PAL.brand800), mx + 1, my + 2);
   g.drawImage(mark, mx, my);
   return c;
 }
@@ -257,50 +278,8 @@ export function tint(src: Canvas, color: string): Canvas {
   return c;
 }
 
-/** Плитка «камня» UI для пробных вариантов (выбор владельца):
- *  'cast' — литой бетон с заполнителем (щебень, поры, раковины); 'board' — бетон, отлитый в дощатой опалубке. */
-export function stoneTile(kind: 'cast' | 'board', hex: string, seed: number, w = 96, h = 96): Canvas {
-  const base = hexToRgb(hex);
-  const c = concreteTile(w, h, base, seed, { pores: kind === 'cast' ? 140 : 90, amp: kind === 'cast' ? 14 : 9 });
-  const g = c.getContext('2d')!;
-  const rnd = seeded(seed * 7 + 1);
-  const shade = (k: number) => `rgb(${base.map((v) => Math.max(0, Math.min(255, Math.round(v + k)))).join(',')})`;
-  if (kind === 'board') {
-    // доски по 8 px: свой тон у каждой, волокна дерева, шов между досками
-    for (let y = 0; y < h; y += 8) {
-      const tone = Math.round((rnd() - 0.5) * 14);
-      g.fillStyle = tone > 0 ? `rgba(255,255,255,${tone / 120})` : `rgba(0,0,0,${-tone / 90})`;
-      g.fillRect(0, y, w, 8);
-      g.fillStyle = 'rgba(0,0,0,0.22)';
-      g.fillRect(0, y + 7, w, 1);
-      g.fillStyle = 'rgba(255,255,255,0.10)';
-      g.fillRect(0, y, w, 1);
-      for (let i = 0; i < 7; i++) {
-        const gx = Math.floor(rnd() * w), gy = y + 1 + Math.floor(rnd() * 6), gl = 4 + Math.floor(rnd() * 14);
-        g.fillStyle = 'rgba(0,0,0,0.10)';
-        g.fillRect(gx, gy, gl, 1);
-      }
-    }
-  } else {
-    // заполнитель: светлые и тёмные камешки 1–2 px
-    for (let i = 0; i < (w * h) / 40; i++) {
-      const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h), big = rnd() < 0.35;
-      g.fillStyle = rnd() < 0.5 ? shade(-28 - rnd() * 16) : shade(18 + rnd() * 14);
-      g.fillRect(x, y, big ? 2 : 1, big && rnd() < 0.5 ? 2 : 1);
-    }
-    // раковины: тёмная точка с подсветкой снизу
-    for (let i = 0; i < 6; i++) {
-      const x = Math.floor(rnd() * (w - 3)), y = Math.floor(rnd() * (h - 3));
-      g.fillStyle = 'rgba(0,0,0,0.45)';
-      g.fillRect(x, y, 2, 2);
-      g.fillStyle = 'rgba(255,255,255,0.18)';
-      g.fillRect(x, y + 2, 2, 1);
-    }
-  }
-  return c;
-}
-
 /** Плитка бетона для CSS-фона панелей (data URL). */
-export function concreteCss(hex: string, seed: number, w = 96, h = 96): string {
-  return concreteTile(w, h, hexToRgb(hex), seed, { pores: 70, seams: true, amp: 7 }).toDataURL();
+export function concreteCss(hex: string, seed: number, w = 96, h = 96, soft = false): string {
+  // soft — лёгкий рельеф (светлая тема): меньше пор и шума, швы опалубки остаются
+  return concreteTile(w, h, hexToRgb(hex), seed, soft ? { pores: 26, seams: true, amp: 4 } : { pores: 70, seams: true, amp: 7 }).toDataURL();
 }

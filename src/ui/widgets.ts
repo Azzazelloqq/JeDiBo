@@ -19,7 +19,7 @@ export function logoEl(opts: { variant?: 'full' | 'mark'; color?: 'brand' | 'ink
   let art: Element;
   if (variant === 'mark' && opts.pixel) {
     const k = Math.max(2, Math.round(scale * 3));
-    const tone = color === 'brand' ? PAL.brand500 : color === 'ink' ? PAL.void : PAL.bone;
+    const tone = color === 'brand' ? PAL.logo : color === 'ink' ? PAL.void : PAL.bone;
     art = canvasEl(logoMark(k, tone), 1, 'logo-art');
   } else {
     const holder = document.createElement('div');

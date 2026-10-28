@@ -1,7 +1,7 @@
 // Лицевые стороны Карт Кармы: каменная плита по «тиру» + пиксельная иконка 14×14 (×2).
 import { CARDS, tierOf, type Tier } from '../core/karma/cards';
 import type { CardId } from '../core/types';
-import { PAL } from './palette';
+import { FLAT, PAL, THEME } from './palette';
 import { concreteTile, fromAscii, hexToRgb, makeCanvas, outline, px, scaleCanvas, type Canvas } from './pixel';
 
 const K: Record<string, string> = {
@@ -144,7 +144,9 @@ const ICONS: Record<CardId, string[]> = {
 
 export const TIER_STYLE: Record<Tier, { face: string; rim: string; dark: string; label: string; glow: string }> = {
   // простая — светлый бетон, редкая — бронза, роковая — бренд-оранжевый гранит
-  simple: { face: PAL.concrete200, rim: PAL.bone, dark: PAL.concrete500, label: 'простая', glow: PAL.concrete100 },
+  simple: THEME.scheme === 'dark'
+    ? { face: PAL.concrete300, rim: PAL.concrete100, dark: PAL.concrete600, label: 'простая', glow: PAL.concrete200 }
+    : { face: PAL.concrete200, rim: PAL.bone, dark: PAL.concrete500, label: 'простая', glow: PAL.concrete100 },
   rare: { face: PAL.bronze500, rim: PAL.amber300, dark: PAL.amber700, label: 'редкая', glow: PAL.amber300 },
   fatal: { face: PAL.brand700, rim: PAL.brand400, dark: PAL.brand800, label: 'роковая', glow: PAL.brand400 },
 };
@@ -163,6 +165,16 @@ export function cardFace(id: CardId): Canvas {
   const tier = TIER_STYLE[tierOf(CARDS[id])];
   const [c, g] = makeCanvas(CARD_W, CARD_H);
   g.drawImage(concreteTile(CARD_W, CARD_H, hexToRgb(tier.face), id.length * 31, { pores: 50, amp: 12, seams: true }), 0, 0);
+  const wx = 5, wy = 5, ww = CARD_W - 10, wh = 38;
+  if (FLAT) {
+    // плоская карта: заливка плиты, окно, иконка — без фасок, свечения и стяжек
+    g.fillStyle = PAL.slab800;
+    g.fillRect(wx, wy, ww, wh);
+    const ic = scaleCanvas(iconCanvas(id), 2);
+    g.drawImage(ic, Math.floor(wx + (ww - ic.width) / 2), Math.floor(wy + (wh - ic.height) / 2));
+    faceCache.set(id, c);
+    return c;
+  }
   // фаска плиты
   g.fillStyle = tier.rim;
   g.fillRect(1, 1, CARD_W - 2, 1);
@@ -171,7 +183,6 @@ export function cardFace(id: CardId): Canvas {
   g.fillRect(1, CARD_H - 2, CARD_W - 2, 1);
   g.fillRect(CARD_W - 2, 1, 1, CARD_H - 2);
   // окно иллюстрации, «утопленное» в плиту
-  const wx = 5, wy = 5, ww = CARD_W - 10, wh = 38;
   g.fillStyle = tier.dark;
   g.fillRect(wx - 1, wy - 1, ww + 2, wh + 2);
   const win = concreteTile(ww, wh, hexToRgb(PAL.slab800), 11 + id.length, { pores: 20, amp: 6 });

@@ -1,6 +1,7 @@
 import { setVolume } from '../../audio/sfx';
 import { getSettings, saveSettings, type Settings } from '../../profile/profile';
 import { setMood } from '../../render/background';
+import { THEME } from '../../render/palette';
 import { setShakeEnabled } from '../../render/fx';
 import { setAnimSpeed } from '../../render/tween';
 import { go } from '../app';
@@ -28,6 +29,13 @@ export function settingsScreen(root: HTMLElement) {
       h('div', { class: 'set-row' }, h('span', {}, label), btn(v ? 'ВКЛ' : 'ВЫКЛ', on, v ? 'btn-brand btn-small' : 'btn-dark btn-small'));
     const choice = (label: string, opts: [string, number][], v: number, on: (x: number) => void) =>
       h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
+    const choiceStr = (label: string, opts: [string, string][], v: string, on: (x: string) => void) =>
+      h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => x !== v && on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
+    // тема собирается при загрузке (палитра, спрайты, стили) — сохраняем и перезагружаем без параметров в адресе
+    const reloadWith = (p: Partial<Settings>) => {
+      saveSettings({ theme: THEME.scheme, surface: THEME.surface, ...p });
+      location.href = location.pathname;
+    };
     root.replaceChildren(
       h(
         'div',
@@ -52,6 +60,8 @@ export function settingsScreen(root: HTMLElement) {
               onChange: (v) => saveSettings({ volume: v / 100 }),
             }),
           ),
+          choiceStr('Тема', [['Тёмная', 'dark'], ['Светлая', 'light']], THEME.scheme, (x) => reloadWith({ theme: x as Settings['theme'] })),
+          choiceStr('Поверхность', [['Камень', 'stone'], ['Плоская', 'flat']], THEME.surface, (x) => reloadWith({ surface: x as Settings['surface'] })),
           toggle('ЭЛТ-эффект', s.crt, () => set({ crt: !s.crt })),
           toggle('Тряска экрана', s.shake, () => set({ shake: !s.shake })),
           choice('Скорость анимаций', [['×1', 1], ['×1.5', 1.5], ['×2', 2]], s.animSpeed, (x) => set({ animSpeed: x })),
