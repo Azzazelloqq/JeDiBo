@@ -164,7 +164,7 @@ export function cardFace(id: CardId): Canvas {
   if (hit) return hit;
   const tier = TIER_STYLE[tierOf(CARDS[id])];
   const [c, g] = makeCanvas(CARD_W, CARD_H);
-  g.drawImage(concreteTile(CARD_W, CARD_H, hexToRgb(tier.face), id.length * 31, { pores: 50, amp: 12, seams: true }), 0, 0);
+  g.drawImage(concreteTile(CARD_W, CARD_H, hexToRgb(tier.face), id.length * 31, { pores: 50, amp: 12, cracks: true }), 0, 0);
   const wx = 5, wy = 5, ww = CARD_W - 10, wh = 38;
   // фаска плиты
   g.fillStyle = tier.rim;

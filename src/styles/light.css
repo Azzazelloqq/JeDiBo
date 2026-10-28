@@ -1,10 +1,10 @@
 /* JeDiBo — светлая тема: тёплый светлый камень × красный акцент × пиксель-джус.
    Цвета приходят из render/palette.ts (applyCssPalette), фактуры — из concreteCss() в main.ts.
    Поверхности: светлая бетонная плита (.slab) с графитовым текстом; вложенные — «утопленный» светлый камень
-   (--inset-bg). Акцент — красный (--brand-500), логотип — цвет гайда (--logo), Карма — янтарь, «хорошо» — патина. */
+   (--inset-bg). Акцент — красный (--brand-500), логотип — красный гранит (--logo + logoTexture), Карма — янтарь, «хорошо» — патина. */
 
 :root {
-  --f-pix: 'Tiny5', 'Courier New', monospace;
+  --f-pix: 'JeDiBo Digits', 'Tiny5', 'Courier New', monospace;
   --f-mono: 'IBM Plex Mono', 'Consolas', monospace;
   --shade: color-mix(in srgb, var(--void) 45%, transparent);
   --edge: 0 5px 0 var(--shade);
@@ -26,8 +26,8 @@ html, body {
   overflow: hidden;
   background: var(--concrete-200);
   color: var(--void);
-  font-family: var(--f-mono);
-  font-size: 14px;
+  font-family: var(--f-pix); /* пиксельный везде; моноширинный — только Хроника партии (.log-list) */
+  font-size: 16px;
   user-select: none;
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
@@ -417,7 +417,7 @@ body.no-crt #crt { display: none; }
 .deck-n { font-family: var(--f-pix); font-size: 16px; }
 .deck-n b { font-size: 40px; line-height: 1; }
 .log { flex: 1; min-height: 140px; display: flex; flex-direction: column; }
-.log-list {
+.log-list { font-family: var(--f-mono);
   --muted: var(--inset-muted);
   flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 32vh;
   padding: 6px 4px; background: var(--tex-inset), var(--inset-bg); border: 2px solid var(--void);

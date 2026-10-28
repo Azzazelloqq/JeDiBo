@@ -1,7 +1,7 @@
 // Программные спрайты: фигуры из гранита/базальта, бетонные плиты поля, рубашка Кармы, аватары.
 import { Rank } from '../core/types';
 import { PAL, STONE, THEME, type StoneColor } from './palette';
-import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, seeded, type Canvas, type Mask } from './pixel';
+import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, scaleCanvas, seeded, type Canvas, type Mask } from './pixel';
 
 export const CELL = 16;
 const FACE_W = 12;
@@ -136,7 +136,7 @@ export function cardBack(w = 52, h = 72): Canvas {
   g.drawImage(concreteTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77, { pores: 30, amp: 6 }), 0, 0);
   // внутренняя плита
   const ix = 4, iy = 4, iw = w - 8, ih = h - 8;
-  g.drawImage(concreteTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, seams: true, amp: 10 }), ix, iy);
+  g.drawImage(concreteTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, cracks: true, amp: 10 }), ix, iy);
   const k = w >= 48 ? 4 : 3;
   const mark = logoMark(k, PAL.logo);
   const mx = Math.floor((w - mark.width) / 2);
@@ -202,7 +202,7 @@ export function avatar(seedStr: string, size = 10): Canvas {
 export function stoneTitle(text: string, opts: { size?: number; depth?: number; face?: string; side?: string; edge?: string; font?: string } = {}): Canvas {
   const size = opts.size ?? 22;
   const depth = opts.depth ?? 3;
-  const font = opts.font ? `700 ${size}px "${opts.font}", monospace` : `${size}px "Tiny5", monospace`;
+  const font = opts.font ? `700 ${size}px "${opts.font}", monospace` : `${size}px "JeDiBo Digits", "Tiny5", monospace`;
   const [, mg] = makeCanvas(4, 4);
   mg.font = font;
   const w = Math.ceil(mg.measureText(text).width) + 4;
@@ -246,8 +246,27 @@ export function tint(src: Canvas, color: string): Canvas {
   return c;
 }
 
-/** Плитка бетона для CSS-фона панелей (data URL). */
+let logoTex = '';
+/** Фактура логотипа (data URL): красный гранит, как камень фигур — пятна, крапинки и поры.
+ *  Пиксель фактуры = 2 CSS px. Плитка бесшовная, накладывается на векторную форму логотипа. */
+export function logoTexture(): string {
+  if (logoTex) return logoTex;
+  const n = 64;
+  const [c, g] = makeCanvas(n, n);
+  g.drawImage(concreteTile(n, n, hexToRgb(PAL.logo), 41, { pores: 40, amp: 12 }), 0, 0);
+  const rnd = seeded(43);
+  const st = STONE.red;
+  for (let i = 0; i < 60; i++) {
+    const r = rnd();
+    px(g, Math.floor(rnd() * n), Math.floor(rnd() * n), r < 0.12 ? st.speckLight : r < 0.4 ? st.hi : r < 0.75 ? st.light : st.speckDark);
+  }
+  logoTex = scaleCanvas(c, 2).toDataURL();
+  return logoTex;
+}
+
+/** Плитка бетона для CSS-фона панелей (data URL). Пиксель фактуры = 2 CSS px — та же сетка, что у рамок и шрифта.
+ *  Контраст низкий: поверх лежит текст. */
 export function concreteCss(hex: string, seed: number, w = 96, h = 96, soft = false): string {
-  // soft — лёгкий рельеф (светлая тема): меньше пор и шума, швы опалубки остаются
-  return concreteTile(w, h, hexToRgb(hex), seed, soft ? { pores: 26, seams: true, amp: 4 } : { pores: 70, seams: true, amp: 7 }).toDataURL();
+  // soft — лёгкий рельеф (светлая тема); без трещин — на повторяющейся плитке они складываются в узор
+  return scaleCanvas(concreteTile(w, h, hexToRgb(hex), seed, soft ? { pores: 40, amp: 8 } : { pores: 60, amp: 9 }), 2).toDataURL();
 }

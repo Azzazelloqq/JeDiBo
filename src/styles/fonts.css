@@ -1,0 +1,8 @@
+/* Цифры для пиксельного шрифта: у Tiny5 они шириной 3 px (8 ≈ $, 0 перечёркнут).
+   Свои 4×5 на той же сетке — scripts/pixel-digits.mjs; в --f-pix стоят перед Tiny5, буквы берутся из Tiny5. */
+@font-face {
+  font-family: 'JeDiBo Digits';
+  src: url('../assets/fonts/jedibo-digits.ttf') format('truetype');
+  unicode-range: U+0030-0039;
+  font-display: block;
+}

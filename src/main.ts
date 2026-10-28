@@ -9,6 +9,7 @@ import { bootScreen } from './ui/screens/lobby';
 import { initialScreen, screen } from './ui/variants/registry';
 import { mountSwitcher } from './ui/variants/switcher';
 import './styles/game-layout.css';
+import './styles/fonts.css';
 import './styles/variants/switcher.css';
 import './styles/variants/a.css';
 import './styles/variants/b.css';
@@ -52,6 +53,7 @@ async function boot() {
   try {
     // Press Start 2P и Rubik — шрифты варианта «б» (кириллица грузится отдельным диапазоном)
     const fonts = ['24px "Tiny5"', '24px "Press Start 2P"', '500 16px "Rubik"', '700 16px "Rubik"'].map((f) => document.fonts.load(f, 'Аа'));
+    fonts.push(document.fonts.load('24px "JeDiBo Digits"', '0'));
     await Promise.race([Promise.all(fonts), new Promise((r) => setTimeout(r, 1500))]);
   } catch {
     /* офлайн — останется моноширинный запасной */

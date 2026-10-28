@@ -3,7 +3,7 @@ import { Rank } from '../core/types';
 import { getProfile, titleOf } from '../profile/profile';
 import { PAL, type StoneColor } from '../render/palette';
 import { concreteTile, hexToRgb, makeCanvas } from '../render/pixel';
-import { avatar, logoMark, pieceSprite, rubbleIcon, stoneTitle } from '../render/sprites';
+import { avatar, logoMark, logoTexture, pieceSprite, rubbleIcon, stoneTitle } from '../render/sprites';
 import { sfx } from '../audio/sfx';
 import { canvasEl, h } from './dom';
 import logoSvg from '../assets/logo/jedibo-logo.svg?raw';
@@ -31,8 +31,33 @@ export function logoEl(opts: { variant?: 'full' | 'mark'; color?: 'brand' | 'ink
     const H = 151 * scale;
     art.setAttribute('height', String(Math.round(H)));
     art.setAttribute('width', String(Math.round(variant === 'full' ? (H * 438) / 151 : H)));
+    if (color === 'brand') graniteFill(art as SVGSVGElement, H);
   }
   return h('div', { class: `logo logo-${variant} logo-c-${color} ${opts.plate ? 'logo-plate-slab' : ''}` }, art);
+}
+
+let logoSeq = 0;
+/** Заливка логотипа красным гранитом: форма остаётся векторной и уходит в маску, поверх — плитка фактуры
+ *  в собственных единицах SVG (иначе у знака, масштабированного внутри SVG, пиксели фактуры были бы крупнее). */
+function graniteFill(svg: SVGSVGElement, heightPx: number) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag: string, attrs: Record<string, string | number>) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  };
+  const [, , vw, vh] = (svg.getAttribute('viewBox') ?? '0 0 1 1').split(/\s+/).map(Number);
+  const id = `logo-granite-${++logoSeq}`;
+  const tile = (128 * vh) / heightPx; // плитка 64 px фактуры ×2 = 128 CSS px
+  const shape = mk('g', { fill: '#fff' });
+  shape.append(...[...svg.childNodes].filter((n) => n.nodeType === Node.ELEMENT_NODE));
+  const mask = mk('mask', { id: `${id}-m`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: vw, height: vh });
+  mask.append(shape);
+  const pattern = mk('pattern', { id: `${id}-p`, patternUnits: 'userSpaceOnUse', width: tile, height: tile });
+  pattern.append(mk('image', { href: logoTexture(), width: tile, height: tile, preserveAspectRatio: 'none', style: 'image-rendering: pixelated' }));
+  const defs = mk('defs', {});
+  defs.append(mask, pattern);
+  svg.replaceChildren(defs, mk('rect', { width: vw, height: vh, fill: `url(#${id}-p)`, mask: `url(#${id}-m)` }));
 }
 
 /** Пиксельный слайдер: нативный range (клавиатура, доступность) + дорожка-паз и ползунок-плита.
@@ -93,7 +118,7 @@ export function profileChip(onClick: () => void) {
 export function tileArt(kind: 'bot' | 'hotseat' | 'net'): HTMLCanvasElement {
   const W = 84, H = 46;
   const [c, g] = makeCanvas(W, H);
-  g.drawImage(concreteTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, seams: true, amp: 10 }), 0, 0);
+  g.drawImage(concreteTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, cracks: true, amp: 10 }), 0, 0);
   // сетка клеток
   g.fillStyle = 'rgba(0,0,0,0.12)';
   for (let x = 2; x < W; x += 16) g.fillRect(x, 0, 1, H);

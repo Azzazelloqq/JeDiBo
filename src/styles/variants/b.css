@@ -219,7 +219,7 @@ body.ui-b .vm-play-text {
     3px 3px 0 var(--b-play-ink), -3px 3px 0 var(--b-play-ink), 0 7px 0 var(--b-play-ink);
 }
 /* треугольник из партии с жёсткой тенью; на наведении — подпрыгивает ступенями */
-body.ui-b .vm-play-piece { position: relative; width: 80px; height: 80px; margin-top: -10px; filter: drop-shadow(0 4px 0 rgba(16, 20, 24, 0.5)); }
+body.ui-b .vm-play-piece { position: relative; width: 80px; height: 80px; margin-top: -10px; }
 body.ui-b .vm-play-tri { display: block; }
 body.ui-b .vm-play:hover .vm-play-piece { animation: playHop 0.5s steps(4) infinite; }
 @keyframes playHop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }

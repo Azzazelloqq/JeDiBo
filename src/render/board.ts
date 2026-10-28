@@ -512,6 +512,8 @@ export class BoardView {
     // сортировка по экранной высоте: при повороте поля дальний ряд — с большим y
     const list = [...this.vis.values()].sort((a, b) => this.Y(a.y) - this.Y(b.y) || a.z - b.z);
     for (const v of list) {
+      // у треугольника тень на земле торчит из-под острия грязной полосой — только в прыжке
+      if (v.rank === Rank.Triangle && v.z < 1) continue;
       const bx = this.X(v.x);
       const by = this.Y(v.y);
       const shrink = Math.max(0.4, 1 - v.z / 30);
