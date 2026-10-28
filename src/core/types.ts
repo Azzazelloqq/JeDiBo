@@ -32,8 +32,9 @@ export interface Piece {
 export interface GraveEntry {
   uid: number;
   rank: Rank;
-  /** номер Периода Кармы владельца в момент гибели (floor(ownTurns / 7)) */
-  period: number;
+  /** общий номер хода (s.turn), в который фигура погибла. Общий, а не ход владельца: после «Смены поля»
+   *  кладбище достаётся другому игроку, и сравнивать нужно с началом уже его Периода */
+  turn: number;
 }
 
 export type CardId =
@@ -55,6 +56,8 @@ export interface PlayerState {
   color: 'red' | 'black';
   side: Side;
   ownTurns: number;
+  /** общий номер хода, с которого идёт текущий Период Кармы игрока (0 — до первой карты) */
+  periodStart: number;
   graveyard: GraveEntry[];
   held: HeldCard | null;
   placed: boolean;
@@ -96,6 +99,8 @@ export interface ModeConfig {
   matchDeckSize: number;
   turnMs: number;
   totalMs: number;
+  /** время соперника на выбор по карте в чужой ход (целиком на весь выбор); часы ходящего в это время стоят */
+  choiceMs: number;
 }
 
 export interface GameState {
@@ -135,7 +140,8 @@ export type Action =
   | { type: 'skip'; by: PlayerId }
   /** left — игрок покинул сетевую партию (выставляет только комната) */
   | { type: 'resign'; by: PlayerId; left?: boolean }
-  | { type: 'timeout'; by: PlayerId; total: boolean };
+  /** choice — у соперника кончилось время на выбор по карте (by — выбирающий) */
+  | { type: 'timeout'; by: PlayerId; total: boolean; choice?: boolean };
 
 /** События — то, что видит слой представления (анимации, звук, хроника). */
 export type GameEvent =

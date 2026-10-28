@@ -133,18 +133,12 @@ function choosePending(s: GameState, me: PlayerId, w: Weights): Action | null {
   if (p.canSkip) candidates.push({ type: 'skip', by: me });
   if (candidates.length <= 1) return candidates[0] ?? null;
   const b = new FastBoard(s.mode.size);
-  // null — все варианты сломаны (устаревший вопрос движка): отвечать нечем
   let best: Action | null = null;
   let bestSc = -Infinity;
   for (const a of candidates) {
     const c = clone(s);
     c.deck = [];
-    // вариант может оказаться устаревшим (движок падает на нём) — такой не выбираем
-    try {
-      if (!dispatch(c, a).ok) continue;
-    } catch {
-      continue;
-    }
+    dispatch(c, a);
     const sc = scoreState(c, me, w, b);
     if (sc > bestSc) {
       bestSc = sc;

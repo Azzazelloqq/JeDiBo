@@ -155,14 +155,15 @@ export class RoomClient {
   }
 
   /** Часы на сейчас: интерполяция последнего снимка комнаты. */
-  clockView(now = Date.now()): { turnLeft: number; total: [number, number]; running: PlayerId | null } | null {
+  clockView(now = Date.now()): { turnLeft: number; total: [number, number]; choiceLeft: number; running: PlayerId | null } | null {
     const c = this.clocks;
     if (!c) return null;
     const total: [number, number] = [c.total[0], c.total[1]];
-    if (c.running === null) return { turnLeft: c.turnLeft, total, running: null };
     const dt = Math.max(0, now - this.clocksAt);
+    const choiceLeft = c.choice !== null ? c.choiceLeft - dt : c.choiceLeft;
+    if (c.running === null) return { turnLeft: c.turnLeft, total, choiceLeft, running: null };
     total[c.running] -= dt;
-    return { turnLeft: c.turnLeft - dt, total, running: c.running };
+    return { turnLeft: c.turnLeft - dt, total, choiceLeft, running: c.running };
   }
 
   // ── входящие ───────────────────────────────────────────────────────────────

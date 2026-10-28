@@ -4,7 +4,7 @@ import { sfx } from '../../audio/sfx';
 import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
-import { anyLegalAction, canAct, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
+import { anyLegalAction, canAct, choosingOpponent, heldExpiresThisTurn, homeRows, legalTargets, pieceAt, piecesOf } from '../../core/rules';
 import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
 import { ABANDON_MS } from '../../net/protocol';
 import { getProfile, recordMatch, type MatchRecord } from '../../profile/profile';
@@ -367,6 +367,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           if (i !== lastTurn) break;
           if (kind === 'hotseat') await banner(`Ход: ${st.players[e.player].name}`, `ход ${e.ownTurn}`, e.player === 0 ? 'brand' : 'stone', 450);
           else if (e.player === me) await banner('Ваш ход', `ход ${e.ownTurn}`, 'brand', 380);
+          if (match.isHuman(e.player) && heldExpiresThisTurn(st, e.player))
+            toast(`Последний ход Периода: сыграйте «${CARDS[st.players[e.player].held!.card].name}» до атаки и конца хода, иначе карта сгорит`, 'brand');
           break;
         case 'cardDrawn':
           drawnNow.add(e.card);
@@ -496,6 +498,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const turnClock = h('div', { class: 'tb-clock' });
   const turnBar = h('div', { class: 'clock-bar' }, h('div', { class: 'clock-fill' }));
   const totals = h('div', { class: 'tb-totals' });
+  const choiceLabel = h('div', { class: 'tb-choice' });
 
   function updatePips() {
     apPips.replaceChildren(...Array.from({ length: s.mode.ap }, (_, i) => h('div', { class: `pip ${i < s.ap ? 'on' : ''}` })));
@@ -509,16 +512,21 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     top.replaceChildren(
       h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${cur.color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
       h('div', { class: 'tb-ap' }, h('span', { class: 'h-label' }, 'Очки действий'), apPips, apNum),
-      h('div', { class: 'tb-time' }, turnClock, turnBar, totals),
+      h('div', { class: 'tb-time' }, choiceLabel, turnClock, turnBar, totals),
     );
     tickClocks();
   }
 
   function tickClocks() {
-    turnClock.textContent = fmt(match.clocks.turnLeft);
-    const k = match.clocks.turnLeft / s.mode.turnMs;
+    // пока соперник выбирает по карте, часы хода стоят — показываем его таймер выбора
+    const ch = choosingOpponent(s);
+    const left = ch !== null ? match.clocks.choiceLeft : match.clocks.turnLeft;
+    const k = left / (ch !== null ? s.mode.choiceMs : s.mode.turnMs);
+    turnClock.textContent = fmt(left);
     (turnBar.firstChild as HTMLElement).style.width = `${k * 100}%`;
     turnBar.classList.toggle('low', k < 0.2);
+    turnBar.classList.toggle('choice', ch !== null);
+    choiceLabel.textContent = ch !== null ? `выбор: ${s.players[ch].name}` : '';
     totals.textContent = `${fmt(match.clocks.total[0])} · ${fmt(match.clocks.total[1])}`;
   }
   const clockTimer = setInterval(tickClocks, 250);
@@ -570,6 +578,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const until = karmaNow ? 0 : k - inCycle;
     const up = pl.side === 0;
     const held = pl.held;
+    const burning = heldExpiresThisTurn(s, p);
     const canPlayHeld = held && match.isHuman(p) && s.current === p && !s.pending && !match.isBusy && (!CARDS[held.card].canPlay || CARDS[held.card].canPlay!(s, p));
     return h(
       'section',
@@ -597,13 +606,13 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       held
         ? h(
             'div',
-            { class: 'held' },
+            { class: `held ${burning ? 'burning' : ''}` },
             cardEl(held.card, { scale: 1.4, idle: true }).el,
             h(
               'div',
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
-              h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
+              burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
               match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-brand btn-small', { disabled: !canPlayHeld }) : null,
             ),
           )

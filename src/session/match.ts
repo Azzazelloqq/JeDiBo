@@ -3,6 +3,7 @@
 // только подтверждённые ею — в том же порядке и с теми же анимациями, что и офлайн.
 import { BotClient } from '../ai/botClient';
 import { DEFAULT_LEVEL, type LevelId } from '../ai/levels';
+import { clocksAfter, expiredClock, newClocks, spendTime, type Clocks } from '../core/clocks';
 import { createGame, dispatch } from '../core/engine';
 import { CLASSIC } from '../core/modes';
 import { CARDS, tierOf } from '../core/karma/cards';
@@ -24,11 +25,6 @@ export interface MatchConfig {
   botAct?: (s: GameState, p: PlayerId, clockMs?: number) => Action | null | Promise<Action | null>;
   /** сетевая партия: клиент комнаты, уже получивший start. Место соперника — 'remote'. */
   net?: RoomClient;
-}
-
-export interface Clocks {
-  turnLeft: number;
-  total: [number, number];
 }
 
 export interface MatchStats {
@@ -74,7 +70,7 @@ export class Match {
     if (net) {
       if (!net.state) throw new Error('Match: клиент комнаты ещё не получил start');
       this.state = clone(net.state);
-      this.clocks = { turnLeft: this.state.mode.turnMs, total: [this.state.mode.totalMs, this.state.mode.totalMs] };
+      this.clocks = newClocks(this.state.mode);
       this.syncClocks();
       this.unlisten = net.listen({
         action: (a) => {
@@ -90,7 +86,7 @@ export class Match {
     } else {
       const mode = cfg.mode ?? CLASSIC;
       this.state = createGame(mode, cfg.seed ?? (Math.random() * 2 ** 31) | 0, cfg.names);
-      this.clocks = { turnLeft: mode.turnMs, total: [mode.totalMs, mode.totalMs] };
+      this.clocks = newClocks(mode);
     }
   }
 
@@ -162,7 +158,7 @@ export class Match {
       }
       this.version++;
       this.count(r.events);
-      if (!this.cfg.net && r.events.some((e) => e.type === 'turnStart')) this.clocks.turnLeft = this.state.mode.turnMs;
+      if (!this.cfg.net) clocksAfter(this.state, this.clocks, r.events);
       await this.onEvents(r.events, this.state);
       this.lastTick = performance.now();
     }
@@ -245,6 +241,7 @@ export class Match {
     if (!v) return;
     this.clocks.turnLeft = v.turnLeft;
     this.clocks.total = v.total;
+    this.clocks.choiceLeft = v.choiceLeft;
   }
 
   private tick() {
@@ -254,13 +251,12 @@ export class Match {
     this.lastTick = now;
     const s = this.state;
     if (this.paused || this.busy || s.phase !== 'play') return;
-    const p = s.current;
-    this.clocks.turnLeft -= dt;
-    this.clocks.total[p] -= dt;
-    if (this.clocks.total[p] <= 0) this.submit({ type: 'timeout', by: p, total: true });
-    else if (this.clocks.turnLeft <= 0) {
-      this.clocks.turnLeft = s.mode.turnMs;
-      this.submit({ type: 'timeout', by: p, total: false });
-    }
+    spendTime(s, this.clocks, dt);
+    const a = expiredClock(s, this.clocks);
+    if (!a) return;
+    // часы заводятся заново сразу: до применения таймаута тик не должен отправить его повторно
+    if (a.choice) this.clocks.choiceLeft = s.mode.choiceMs;
+    else if (!a.total) this.clocks.turnLeft = s.mode.turnMs;
+    this.submit(a);
   }
 }

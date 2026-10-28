@@ -9,6 +9,7 @@ export const CLASSIC: ModeConfig = {
   matchDeckSize: 21,
   turnMs: 5 * 60_000,
   totalMs: 60 * 60_000,
+  choiceMs: 15_000,
 };
 
 export const START_ARMY = { triangles: 12, squares: 6, circles: 3 } as const;

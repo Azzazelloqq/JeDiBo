@@ -354,7 +354,10 @@ body.no-crt #crt { display: none; }
 .tb-clock { font-family: var(--f-pix); font-size: 22px; font-weight: 700; }
 .clock-bar { width: 120px; height: 8px; background: var(--inset-bg); border: 2px solid var(--void); }
 .clock-fill { height: 100%; background: var(--patina-500); transition: width 0.25s linear; }
+.clock-bar.choice .clock-fill { background: var(--amber-500); }
 .clock-bar.low .clock-fill { background: var(--brand-500); animation: blink 0.5s steps(2) infinite; }
+.tb-choice { font-size: 11px; color: var(--amber-700); text-transform: uppercase; letter-spacing: 0.05em; }
+.tb-choice:empty { display: none; }
 @keyframes blink { 50% { opacity: 0.3; } }
 .tb-totals { font-size: 11px; color: var(--muted); }
 
@@ -395,6 +398,8 @@ body.no-crt #crt { display: none; }
 .held { display: flex; gap: 12px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--slab-500); }
 .held-info { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .held-info b { font-family: var(--f-pix); font-size: 16px; }
+.held.burning { border-top-color: var(--brand-500); }
+.held-burn { color: var(--brand-700); font-weight: 700; animation: blink 0.8s steps(2) infinite; }
 
 .effects { display: flex; flex-direction: column; gap: 6px; }
 .effect {

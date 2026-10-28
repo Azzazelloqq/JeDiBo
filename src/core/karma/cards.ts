@@ -2,7 +2,7 @@
 // Чтобы добавить карту: id в CardId (types.ts), запись здесь, иконку в render/cardArt.ts.
 import { RANK_NAME_ACC, ask, askSpawn, cellOptions, checkPromotion, destroy, log, setRank, type Ctx } from '../ops';
 import { randInt } from '../rng';
-import { forward, inBoard, isFree, periodEnd, periodIndex, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
+import { forward, inBoard, isFree, periodEnd, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
 import { Rank, other, unkey, type CardId, type GameState, type Pending, type PlayerId, type Pos } from '../types';
 
 export type Timing = 'onReceive' | 'period';
@@ -25,6 +25,8 @@ export interface CardDef {
   play(c: Ctx, p: PlayerId): boolean;
   /** ответ на вопрос карты; option === null — игрок закончил досрочно */
   onChoice?(c: Ctx, pend: Pending, option: string | null): void;
+  /** варианты вопроса заново по текущей позиции: вопрос мог ждать в очереди, пока доска менялась */
+  refresh?(s: GameState, pend: Pending): string[];
 }
 
 export const tierOf = (d: CardDef): Tier => (d.takesTurn ? 'fatal' : d.count === 1 ? 'rare' : 'simple');
@@ -45,7 +47,7 @@ function pickPieces(
     prompt: (n: number, max: number) => string;
     apply: (c: Ctx, p: PlayerId, pc: NonNullable<ReturnType<typeof pieceAt>>, data: Record<string, unknown>) => void;
   },
-): Pick<CardDef, 'play' | 'onChoice'> {
+): Pick<CardDef, 'play' | 'onChoice' | 'refresh'> {
   const askNext = (c: Ctx, p: PlayerId, step: number, data: Record<string, unknown>) => {
     if (step >= cfg.max) return;
     const pool = cfg.pool(c.s, p, data);
@@ -76,6 +78,7 @@ function pickPieces(
       cfg.apply(c, pend.beneficiary, pc, data);
       askNext(c, pend.beneficiary, pend.step + 1, data);
     },
+    refresh: (s, pend) => cellOptions(cfg.pool(s, pend.beneficiary, pend.data)),
   };
 }
 
@@ -121,9 +124,9 @@ const defs: CardDef[] = [
     text: 'Восстановите любую свою фигуру, уничтоженную в текущем Периоде Кармы.',
     rule: 'Вернуть одну свою фигуру, уничтоженную в текущем Периоде Кармы, в стартовую зону (или 4-й ряд). Возвращённая фигура может действовать в тот же ход.',
     canPlay: (s, p) =>
-      s.players[p].graveyard.some((g) => g.period === periodIndex(s, p)) && spawnCells(s, p).length > 0,
+      s.players[p].graveyard.some((g) => g.turn >= s.players[p].periodStart) && spawnCells(s, p).length > 0,
     play(c, p) {
-      const opts = c.s.players[p].graveyard.filter((g) => g.period === periodIndex(c.s, p));
+      const opts = c.s.players[p].graveyard.filter((g) => g.turn >= c.s.players[p].periodStart);
       if (!opts.length || !spawnCells(c.s, p).length) return false;
       askGrave(c, 'immortal', p, opts.map((g) => g.uid));
       return true;
@@ -255,6 +258,12 @@ const defs: CardDef[] = [
       addEffect(c, { kind: 'barrier', owner: pend.beneficiary, untilOwnTurn: periodEnd(c.s, pend.beneficiary), cells });
       c.ev.push({ type: 'barrier', cells });
     },
+    refresh(s, pend) {
+      if (pend.step === 0) return cellOptions(barrierFirstCells(s));
+      const first = unkey(pend.data.first as string);
+      if (!isFree(s, first)) return [];
+      return cellOptions([{ x: first.x - 1, y: first.y }, { x: first.x + 1, y: first.y }].filter((q) => isFree(s, q)));
+    },
   },
   {
     id: 'careerUp',
@@ -357,14 +366,15 @@ const defs: CardDef[] = [
     count: 1,
     timing: 'onReceive',
     takesTurn: true,
-    text: 'Противник может выполнить 3 передвижения вашими фигурами.',
-    rule: 'Соперник выполняет до трёх перемещений фигурами игрока. Направления их движения сохраняются, эффекты Кармы на них не действуют. Занимает ход.',
+    text: 'Противник может передвинуть три разные ваши фигуры.',
+    rule: 'Соперник выполняет до трёх перемещений разными фигурами игрока. Направления их движения сохраняются, эффекты Кармы на них не действуют. Занимает ход.',
     play(c, p) {
-      return askBetrayalPiece(c, p, 0);
+      return askBetrayalPiece(c, p, 0, []);
     },
     onChoice(c, pend, opt) {
       if (opt === null) return;
       const p = pend.beneficiary;
+      const moved = movedBy(pend);
       if (pend.step % 2 === 0) {
         const pc = pieceFromOpt(c.s, opt)!;
         ask(c, {
@@ -373,7 +383,7 @@ const defs: CardDef[] = [
           canSkip: false,
           options: cellOptions(plainMoves(c.s, pc)),
           prompt: `Предательство: куда сдвинуть (${pend.step / 2 + 1}/3)`,
-          data: { pieceId: pc.id },
+          data: { pieceId: pc.id, moved },
         });
         return;
       }
@@ -385,7 +395,12 @@ const defs: CardDef[] = [
       c.ev.push({ type: 'move', pieceId: pc.id, from, to, forced: true });
       checkPromotion(c, pc, false);
       const moveNo = (pend.step + 1) / 2;
-      if (moveNo < 3) askBetrayalPiece(c, p, pend.step + 1);
+      if (moveNo < 3) askBetrayalPiece(c, p, pend.step + 1, [...moved, pc.id]);
+    },
+    refresh(s, pend) {
+      if (pend.step % 2 === 0) return cellOptions(posOf(betrayalPool(s, pend.beneficiary, movedBy(pend))));
+      const pc = pieceById(s, pend.data.pieceId as number);
+      return pc && pc.owner === pend.beneficiary ? cellOptions(plainMoves(s, pc)) : [];
     },
   },
   {
@@ -450,6 +465,9 @@ const defs: CardDef[] = [
         pc.owner = other(pc.owner);
         pc.acted = false;
       }
+      // повышение, ждущее выбора клетки, уходит вместе с фигурой к новому владельцу
+      for (const q of [c.s.pending, ...c.s.queue])
+        if (q?.source === 'promotion') q.chooser = q.beneficiary = other(q.beneficiary);
       c.ev.push({ type: 'sidesSwap' });
       return true;
     },
@@ -532,8 +550,13 @@ function plainMoves(s: GameState, pc: NonNullable<ReturnType<typeof pieceAt>>): 
     .map((t) => t.to);
 }
 
-function askBetrayalPiece(c: Ctx, p: PlayerId, step: number): boolean {
-  const pool = piecesOf(c.s, p).filter((q) => plainMoves(c.s, q).length > 0);
+/** Каждую фигуру Предательство двигает один раз: id уже сдвинутых. */
+const movedBy = (pend: Pending) => (pend.data.moved as number[] | undefined) ?? [];
+const betrayalPool = (s: GameState, p: PlayerId, moved: number[]) =>
+  piecesOf(s, p).filter((q) => !moved.includes(q.id) && plainMoves(s, q).length > 0);
+
+function askBetrayalPiece(c: Ctx, p: PlayerId, step: number, moved: number[]): boolean {
+  const pool = betrayalPool(c.s, p, moved);
   if (!pool.length) return false;
   ask(c, {
     source: 'betrayal',
@@ -544,6 +567,7 @@ function askBetrayalPiece(c: Ctx, p: PlayerId, step: number): boolean {
     canSkip: step > 0,
     prompt: `Предательство: выберите фигуру соперника (${step / 2 + 1}/3)`,
     step,
+    data: { moved },
   });
   return true;
 }

@@ -151,7 +151,7 @@ class FakeTransport implements Transport<ClientMsg, ServerMsg> {
   }
 }
 
-const CLK: ClockSnap = { turnLeft: 0, total: [0, 0], running: null, now: 0 };
+const CLK: ClockSnap = { turnLeft: 0, total: [0, 0], running: null, choiceLeft: 0, choice: null, now: 0 };
 const me = (token: string) => ({ token, name: 'Я', avatarSeed: '', rating: 1000 });
 
 async function clientChecks() {
@@ -239,9 +239,10 @@ interface Bot {
   rejects: string[];
 }
 
-async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: string; turns: number; ms: number; drops: number; timeouts: number }> {
+async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: string; turns: number; ms: number; drops: number; timeouts: number; choiceTimeouts: number }> {
   const t0 = Date.now();
-  const mode: ModeConfig = sc === 'timeout' ? { ...CLASSIC, turnMs: 30, totalMs: 1500 } : CLASSIC;
+  // в сценарии timeout Карма чаще — чтобы истекал и таймер выбора соперника по карте
+  const mode: ModeConfig = sc === 'timeout' ? { ...CLASSIC, turnMs: 30, totalMs: 1500, choiceMs: 30, karmaEvery: 2, matchDeckSize: 34 } : CLASSIC;
   const hostOpts = { mode, abandonMs: 60, ratePerSec: Infinity };
   let host = new RoomHost(`G${g}`, hostOpts);
   // задержка у части сообщений: перемешивает моменты прихода, сохраняя порядок
@@ -372,21 +373,23 @@ async function game(g: number, sc: Scenario): Promise<{ ok: boolean; why?: strin
     else if (!guest.alive && !rs?.endReason?.includes('покинул')) why = `гость ушёл, но партия кончилась иначе: ${rs?.endReason}`;
   }
   if (!why && sc !== 'abandon' && host.room.status !== 'over') why = `статус ${host.room.status}`;
-  const timeouts = host.room.snapshot().log.filter((a) => a.type === 'timeout').length;
-  return { ok: !why, why, turns: rs?.turn ?? 0, ms: Date.now() - t0, drops: disruptions, timeouts };
+  const tos = host.room.snapshot().log.filter((a) => a.type === 'timeout');
+  const choiceTimeouts = tos.filter((a) => a.type === 'timeout' && a.choice).length;
+  return { ok: !why, why, turns: rs?.turn ?? 0, ms: Date.now() - t0, drops: disruptions, timeouts: tos.length, choiceTimeouts };
 }
 
 async function main() {
   await roomChecks();
   await clientChecks();
   console.log(`\nПартии ботов через комнату (${N}):`);
-  const agg: Record<string, { n: number; fail: number; turns: number; ms: number; drops: number; timeouts: number }> = {};
+  const agg: Record<string, { n: number; fail: number; turns: number; ms: number; drops: number; timeouts: number; choiceTimeouts: number }> = {};
   for (let g = 0; g < N; g++) {
     const sc = SCENARIOS[g % SCENARIOS.length];
     const r = await game(g, sc);
-    const a = (agg[sc] ??= { n: 0, fail: 0, turns: 0, ms: 0, drops: 0, timeouts: 0 });
+    const a = (agg[sc] ??= { n: 0, fail: 0, turns: 0, ms: 0, drops: 0, timeouts: 0, choiceTimeouts: 0 });
     a.drops += r.drops;
     a.timeouts += r.timeouts;
+    a.choiceTimeouts += r.choiceTimeouts;
     a.n++;
     a.turns += r.turns;
     a.ms += r.ms;
@@ -405,7 +408,7 @@ async function main() {
     }
   }
   for (const [sc, a] of Object.entries(agg))
-    console.log(`  ${sc.padEnd(8)} партий ${a.n}, провалов ${a.fail}, ходов в среднем ${Math.round(a.turns / a.n)}, обрывов ${a.drops}, таймаутов ${a.timeouts}, ${Math.round(a.ms / a.n)} мс/партия`);
+    console.log(`  ${sc.padEnd(8)} партий ${a.n}, провалов ${a.fail}, ходов в среднем ${Math.round(a.turns / a.n)}, обрывов ${a.drops}, таймаутов ${a.timeouts} (выбора ${a.choiceTimeouts}), ${Math.round(a.ms / a.n)} мс/партия`);
   console.log(failures ? `\nПРОВАЛОВ: ${failures}` : '\nвсё ok');
   process.exit(failures ? 1 : 0);
 }

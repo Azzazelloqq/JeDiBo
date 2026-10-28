@@ -1,8 +1,10 @@
 // Комната сетевой партии (docs/network/README.md §4–5). Чистая логика: без таймеров, сокетов и DOM.
 // На вход — сообщения подключений и «текущее время», на выход — сообщения через RoomIO и nextWake().
 // Источник истины — seed + лог действий; GameState держится в памяти и всегда восстановим переигрыванием.
+import { clocksAfter, expiredClock, msUntilExpiry, newClocks, spendTime, type Clocks } from '../core/clocks';
 import { createGame, dispatch } from '../core/engine';
 import { CLASSIC } from '../core/modes';
+import { choosingOpponent } from '../core/rules';
 import type { Action, GameState, ModeConfig, PlayerId } from '../core/types';
 import { commitHash, mixSeed, randomSalt, randomSeedShare, verify } from './commit';
 import { stateHash } from './hash';
@@ -48,7 +50,7 @@ export interface RoomData {
   names: [string, string];
   log: Action[];
   place: [PlaceSlot, PlaceSlot];
-  clocks: { turnLeft: number; total: [number, number]; runningSince: number | null };
+  clocks: Clocks & { runningSince: number | null };
   rematch: [boolean, boolean];
 }
 
@@ -85,6 +87,9 @@ export class Room {
       // после восстановления все считаются отключёнными «с этого момента»
       for (const st of this.d.seats) if (st) Object.assign(st, { conn: null, lastSeen: now });
       if (this.d.clocks.runningSince !== null) this.d.clocks.runningSince = now;
+      // снимок до таймера выбора
+      this.d.mode.choiceMs ??= CLASSIC.choiceMs;
+      this.d.clocks.choiceLeft ??= this.d.mode.choiceMs;
       this.rebuild();
     } else {
       const mode = opts.mode ?? CLASSIC;
@@ -98,7 +103,7 @@ export class Room {
         names: ['Игрок 1', 'Игрок 2'],
         log: [],
         place: [emptySlot(), emptySlot()],
-        clocks: { turnLeft: mode.turnMs, total: [mode.totalMs, mode.totalMs], runningSince: null },
+        clocks: { ...newClocks(mode), runningSince: null },
         rematch: [false, false],
       };
     }
@@ -148,8 +153,7 @@ export class Room {
   nextWake(): number | null {
     let t = Infinity;
     const c = this.d.clocks;
-    if (this.s?.phase === 'play' && c.runningSince !== null)
-      t = Math.min(t, c.runningSince + Math.max(0, Math.min(c.turnLeft, c.total[this.s.current])));
+    if (this.s?.phase === 'play' && c.runningSince !== null) t = Math.min(t, c.runningSince + Math.max(0, msUntilExpiry(this.s, c)));
     if (this.d.status === 'seeding' || this.d.status === 'placement' || this.d.status === 'play')
       for (const st of this.d.seats) if (st && st.conn === null) t = Math.min(t, st.lastSeen + this.abandonMs);
     return t === Infinity ? null : t;
@@ -267,7 +271,7 @@ export class Room {
     this.d.log = [];
     this.d.place = [emptySlot(), emptySlot()];
     this.d.rematch = [false, false];
-    this.d.clocks = { turnLeft: mode.turnMs, total: [mode.totalMs, mode.totalMs], runningSince: null };
+    this.d.clocks = { ...newClocks(mode), runningSince: null };
     this.d.status = 'placement';
     this.rebuild();
     for (const p of SEATS) {
@@ -354,7 +358,7 @@ export class Room {
     if (!r.ok) return r.error ?? 'Ошибка';
     this.d.log.push(a);
     const c = this.d.clocks;
-    if (r.events.some((e) => e.type === 'turnStart')) c.turnLeft = this.d.mode.turnMs;
+    clocksAfter(s, c, r.events);
     c.runningSince = s.phase === 'play' ? now : null;
     if (s.phase === 'play') this.d.status = 'play';
     if (s.phase === 'over') this.d.status = 'over';
@@ -365,9 +369,7 @@ export class Room {
   private settle(now: number) {
     const c = this.d.clocks;
     if (this.s?.phase !== 'play' || c.runningSince === null) return;
-    const dt = Math.max(0, now - c.runningSince);
-    c.turnLeft -= dt;
-    c.total[this.s.current] -= dt;
+    spendTime(this.s, c, Math.max(0, now - c.runningSince));
     c.runningSince = now;
   }
 
@@ -375,11 +377,9 @@ export class Room {
   private expire(now: number) {
     for (let guard = 0; guard < 8 && this.s?.phase === 'play'; guard++) {
       this.settle(now);
-      const p = this.s.current;
-      const c = this.d.clocks;
-      if (c.total[p] <= 0) this.apply({ type: 'timeout', by: p, total: true }, now);
-      else if (c.turnLeft <= 0) this.apply({ type: 'timeout', by: p, total: false }, now);
-      else break;
+      const a = expiredClock(this.s, this.d.clocks);
+      if (!a) break;
+      this.apply(a, now);
     }
     const st = this.d.status;
     if (st === 'play' && this.s) {
@@ -396,10 +396,14 @@ export class Room {
   private snap(now: number): ClockSnap {
     this.settle(now);
     const c = this.d.clocks;
+    const ticking = !!this.s && this.s.phase === 'play' && c.runningSince !== null;
+    const choice = ticking ? choosingOpponent(this.s!) : null;
     return {
       turnLeft: c.turnLeft,
       total: [c.total[0], c.total[1]],
-      running: this.s?.phase === 'play' && c.runningSince !== null ? this.s.current : null,
+      running: ticking && choice === null ? this.s!.current : null,
+      choiceLeft: c.choiceLeft,
+      choice,
       now,
     };
   }

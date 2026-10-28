@@ -3,9 +3,9 @@
 import { CARDS, fullDeck } from './karma/cards';
 import { RANK_NAME, checkPromotion, destroy, log, spawn, startPromotion, type Ctx } from './ops';
 import { randInt, shuffle } from './rng';
-import { anyLegalAction, canAct, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
+import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
 import { START_ARMY } from './modes';
-import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type PlayerId } from './types';
+import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type Pending, type PlayerId } from './types';
 
 export interface Result {
   ok: boolean;
@@ -19,6 +19,7 @@ const newPlayer = (id: PlayerId, name: string): GameState['players'][number] => 
   color: 'red',
   side: id,
   ownTurns: 0,
+  periodStart: 0,
   graveyard: [],
   held: null,
   placed: false,
@@ -89,10 +90,13 @@ export function dispatch(s: GameState, a: Action): Result {
       break;
     case 'timeout':
       if (a.total) finish(c, other(a.by), `У ${s.players[a.by].name} закончилось общее время`);
-      else {
+      else if (a.choice) {
+        // доигрываются только вопросы выбирающего; ход продолжается (или кончается, если карта занимает ход)
+        log(c, 'Время на выбор истекло', a.by);
+        autoResolve(c, a.by);
+      } else {
         log(c, 'Время хода истекло', a.by);
-        s.pending = null;
-        s.queue = [];
+        autoResolve(c);
         endTurn(c);
       }
       break;
@@ -122,7 +126,10 @@ function validate(s: GameState, a: Action): string | null {
   }
   if (s.phase !== 'play') return 'Партия ещё не началась';
   if (a.type === 'resign') return null;
-  if (a.type === 'timeout') return a.by === s.current || a.total ? null : 'Не ваш ход';
+  if (a.type === 'timeout') {
+    if (a.choice) return choosingOpponent(s) === a.by ? null : 'Нет выбора соперника';
+    return a.by === s.current || a.total ? null : 'Не ваш ход';
+  }
   if (a.type === 'choose' || a.type === 'skip') {
     const p = s.pending;
     if (!p || p.chooser !== a.by) return 'Нет выбора';
@@ -167,7 +174,8 @@ function startTurn(c: Ctx, p: PlayerId) {
     } else pc.promoteNextTurn = false;
   }
 
-  // Карма: в начале последнего хода каждого цикла
+  // Карма: в начале последнего хода каждого цикла; с него же идёт новый Период
+  if (pl.ownTurns % s.mode.karmaEvery === 0) pl.periodStart = s.turn;
   if (pl.ownTurns % s.mode.karmaEvery === 0 && s.deck.length) {
     const card = s.deck.splice(randInt(s, s.deck.length), 1)[0];
     c.ev.push({ type: 'cardDrawn', player: p, card });
@@ -232,16 +240,14 @@ function afterAction(c: Ctx) {
   if (checkWin(c)) return;
   let guard = 0;
   while (guard++ < 64) {
-    if (!s.pending && s.queue.length) {
-      const next = s.queue.shift()!;
-      if (next.data.spawnRank !== undefined) {
-        const cells = spawnCells(s, next.beneficiary);
-        if (!cells.length) continue;
-        next.options = cells.map(key);
-      }
-      s.pending = next;
+    if (!s.pending && s.queue.length) s.pending = s.queue.shift()!;
+    if (s.pending) {
+      // вопрос мог ждать в очереди или устареть в том же действии — варианты по текущей позиции
+      s.pending.options = liveOptions(s, s.pending);
+      if (s.pending.options.length) return;
+      s.pending = null;
+      continue;
     }
-    if (s.pending) return;
     if (s.endAfterPending) {
       endTurn(c);
       continue;
@@ -256,6 +262,40 @@ function afterAction(c: Ctx) {
     }
     return;
   }
+}
+
+/**
+ * Время вышло, а вопросы открыты: они не отменяются, а доигрываются. Обязательный выбор (куда поставить
+ * фигуру, чью фигуру уничтожить…) делается случайно, необязательный (Отступление, Предательство) пропускается.
+ * only — доиграть только вопросы этого игрока (кончилось время на выбор соперника).
+ */
+function autoResolve(c: Ctx, only?: PlayerId) {
+  const s = c.s;
+  for (let guard = 0; guard < 64; guard++) {
+    if (!s.pending && s.queue.length) s.pending = s.queue.shift()!;
+    const p = s.pending;
+    if (!p || (only !== undefined && p.chooser !== only)) return;
+    p.options = liveOptions(s, p);
+    if (!p.options.length) {
+      s.pending = null;
+      continue;
+    }
+    const skip = p.canSkip || p.source === 'betrayal';
+    resolvePending(c, skip ? null : p.options[randInt(s, p.options.length)]);
+  }
+}
+
+function liveOptions(s: GameState, p: Pending): string[] {
+  if (p.source === 'promotion') {
+    const pc = s.pieces.find((q) => q.id === p.data.promoteId);
+    if (!pc || pc.owner !== p.beneficiary) return [];
+  }
+  if (p.data.spawnRank !== undefined) return spawnCells(s, p.beneficiary).map(key);
+  if (p.kind === 'grave') {
+    const uids = new Set(s.players[p.beneficiary].graveyard.map((g) => String(g.uid)));
+    return p.options.filter((o) => uids.has(o));
+  }
+  return p.source === 'promotion' ? p.options : CARDS[p.source].refresh?.(s, p) ?? p.options;
 }
 
 const heldPlayable = (s: GameState) => {
