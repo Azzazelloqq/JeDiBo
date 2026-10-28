@@ -1,10 +1,9 @@
 // Мини-профиль: аватар, имя, звание, рейтинг, статистика, последние партии.
 import { getProfile, saveProfile, titleOf } from '../../profile/profile';
 import { setMood } from '../../render/background';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { btn, h } from '../dom';
 import { avatarEl } from '../widgets';
-import { menuScreen } from './menu';
 
 export function profileScreen(root: HTMLElement) {
   setMood('menu');
@@ -23,7 +22,7 @@ export function profileScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'Профиль'), h('div', { class: 'page-sub' }, 'Хранится в этом браузере'), btn('В меню', () => go(menuScreen))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'Профиль'), h('div', { class: 'page-sub' }, 'Хранится в этом браузере'), btn('В меню', () => open('menu'))),
         h(
           'div',
           { class: 'profile-grid' },

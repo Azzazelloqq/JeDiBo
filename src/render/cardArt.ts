@@ -199,3 +199,44 @@ export function cardFace(id: CardId): Canvas {
   faceCache.set(id, c);
   return c;
 }
+
+// ── иллюстрированная лицевая сторона (режим «Иллюстрации», задача B) ──
+// Пиксельные иллюстрации 48×68 из public/cards/pixel (scripts/pixelize-cards.py) в рамке-плите 2 px по тиру.
+export const ILLUS_X = 2;
+export const ILLUS_Y = 2;
+const illusImg = new Map<CardId, HTMLImageElement>();
+function illusImage(id: CardId) {
+  let img = illusImg.get(id);
+  if (!img) {
+    img = new Image();
+    img.src = `${import.meta.env.BASE_URL}cards/pixel/${id}.png`;
+    illusImg.set(id, img);
+  }
+  return img;
+}
+/** Заранее загрузить все иллюстрации (чтобы карта в руке не появлялась пустой). */
+export function preloadIllustrations() {
+  (Object.keys(CARDS) as CardId[]).forEach(illusImage);
+}
+
+/** Новый канвас 52×72: рамка по тиру и иллюстрация (дорисуется, когда картинка загрузится). */
+export function illusFace(id: CardId): Canvas {
+  const tier = TIER_STYLE[tierOf(CARDS[id])];
+  const [c, g] = makeCanvas(CARD_W, CARD_H);
+  g.fillStyle = tier.face;
+  g.fillRect(0, 0, CARD_W, CARD_H);
+  // фаска рамки: свет сверху/слева, тень снизу/справа
+  g.fillStyle = tier.rim;
+  g.fillRect(0, 0, CARD_W, 1);
+  g.fillRect(0, 0, 1, CARD_H);
+  g.fillStyle = tier.dark;
+  g.fillRect(0, CARD_H - 1, CARD_W, 1);
+  g.fillRect(CARD_W - 1, 0, 1, CARD_H);
+  g.fillStyle = PAL.slab800;
+  g.fillRect(ILLUS_X, ILLUS_Y, CARD_W - 4, CARD_H - 4);
+  const img = illusImage(id);
+  const draw = () => g.drawImage(img, ILLUS_X, ILLUS_Y);
+  if (img.complete && img.naturalWidth) draw();
+  else img.addEventListener('load', draw, { once: true });
+  return c;
+}

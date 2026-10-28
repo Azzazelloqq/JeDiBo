@@ -1,10 +1,9 @@
 // Сжатые правила режима «Классика».
 import { Rank } from '../../core/types';
 import { setMood } from '../../render/background';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { btn, h } from '../dom';
 import { pieceIcon } from '../widgets';
-import { menuScreen } from './menu';
 
 export function rulesScreen(root: HTMLElement) {
   setMood('menu');
@@ -15,7 +14,7 @@ export function rulesScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'page' },
-      h('div', { class: 'page-head' }, h('h1', {}, 'Правила · Классика'), h('div', { class: 'page-sub' }, 'Уничтожьте все фигуры соперника'), btn('В меню', () => go(menuScreen))),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Правила · Классика'), h('div', { class: 'page-sub' }, 'Уничтожьте все фигуры соперника'), btn('В меню', () => open('menu'))),
       h(
         'div',
         { class: 'rules-grid' },

@@ -2,15 +2,16 @@
 import { ALL_CARDS, tierOf, type CardDef } from '../../core/karma/cards';
 import { setMood } from '../../render/background';
 import { TIER_STYLE } from '../../render/cardArt';
-import { go } from '../app';
+import { open } from '../variants/registry';
 import { cardEl } from '../card';
 import { btn, h } from '../dom';
-import { menuScreen } from './menu';
+import { cardArtToggle, codexState } from '../variants/shared';
 
 export function codexScreen(root: HTMLElement) {
   setMood('karma');
   const detail = h('div', { class: 'codex-detail slab' });
   const show = (d: CardDef) => {
+    codexState.pick = ALL_CARDS.indexOf(d);
     const tier = tierOf(d);
     detail.replaceChildren(
       cardEl(d.id, { scale: 4 }).el,
@@ -42,12 +43,12 @@ export function codexScreen(root: HTMLElement) {
       return h('div', { class: 'codex-cell' }, c.el, h('div', { class: 'codex-count' }, `×${d.count}`));
     }),
   );
-  show(ALL_CARDS[0]);
+  show(ALL_CARDS[codexState.pick] ?? ALL_CARDS[0]);
   root.append(
     h(
       'div',
       { class: 'page' },
-      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), btn('В меню', () => go(menuScreen))),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), cardArtToggle('btn-dark btn-small'), btn('В меню', () => open('menu'))),
       h('div', { class: 'codex' }, grid, detail),
     ),
   );

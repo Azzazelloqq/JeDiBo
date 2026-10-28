@@ -2,7 +2,8 @@
 import { botAction } from '../ai/bot';
 import { createGame, dispatch } from '../core/engine';
 import { CLASSIC } from '../core/modes';
-import type { Action, GameEvent, GameState, ModeConfig, PlayerId } from '../core/types';
+import { CARDS, tierOf } from '../core/karma/cards';
+import { Rank, type Action, type GameEvent, type GameState, type ModeConfig, type PlayerId } from '../core/types';
 import type { Transport } from '../net/transport';
 
 export type ControllerKind = 'human' | 'bot' | 'remote';
@@ -24,13 +25,19 @@ export interface Clocks {
 export interface MatchStats {
   captures: [number, number];
   cards: [number, number];
+  /** для Летописи и эмблем: сколько раз пришла Карма, повышения (и из квадрата — до круга), потери, роковые карты */
+  karma: [number, number];
+  promotions: [number, number];
+  squarePromotions: [number, number];
+  lost: [number, number];
+  fatal: [number, number];
 }
 
 export class Match {
   readonly state: GameState;
   readonly cfg: MatchConfig;
   clocks: Clocks;
-  stats: MatchStats = { captures: [0, 0], cards: [0, 0] };
+  stats: MatchStats = { captures: [0, 0], cards: [0, 0], karma: [0, 0], promotions: [0, 0], squarePromotions: [0, 0], lost: [0, 0], fatal: [0, 0] };
   /** UI проигрывает события; сессия ждёт окончания анимаций перед следующим действием */
   onEvents: (events: GameEvent[], s: GameState) => Promise<void> = async () => {};
   onError: (msg: string) => void = () => {};
@@ -104,7 +111,16 @@ export class Match {
   private count(events: GameEvent[]) {
     for (const e of events) {
       if (e.type === 'capture') this.stats.captures[e.victim.owner === 0 ? 1 : 0]++;
-      if (e.type === 'cardPlayed') this.stats.cards[e.player]++;
+      if (e.type === 'cardPlayed') {
+        this.stats.cards[e.player]++;
+        if (tierOf(CARDS[e.card]) === 'fatal') this.stats.fatal[e.player]++;
+      }
+      if (e.type === 'cardDrawn') this.stats.karma[e.player]++;
+      if (e.type === 'capture' || e.type === 'destroy') this.stats.lost[e.victim.owner]++;
+      if (e.type === 'promoteRemove') {
+        this.stats.promotions[e.piece.owner]++;
+        if (e.piece.rank === Rank.Square) this.stats.squarePromotions[e.piece.owner]++;
+      }
     }
   }
 
