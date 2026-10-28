@@ -126,6 +126,9 @@ async function roomChecks() {
   check('кривые поля действия → reject без исключения', actor.last('reject')?.cseq === 12);
   await actor.send({ t: 'submit', cseq: 13, action: bot });
   check('свой легальный ход → применён', logLen() === before + 1);
+  const a2 = raw(host);
+  await a2.send(hello('token-host-aaaa', 'Другое имя', 2));
+  check('повторный hello с другим именем не меняет имена партии', a2.last('start')?.names[0] === 'Хост' && room.state!.players[0].name === 'Хост');
   host.dispose();
 }
 

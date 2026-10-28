@@ -30,7 +30,7 @@ export interface ClockSnap {
 
 /** клиент → комната */
 export type ClientMsg =
-  /** n — номер попытки подключения этого клиента: запоздавший hello старого соединения не отнимет место у нового */
+  /** n — растущий номер попытки подключения (от времени): запоздавший hello старого соединения не отнимет место у нового */
   | { t: 'hello'; v: number; n: number; token: string; name: string; avatarSeed: string; rating: number }
   | { t: 'seedShare'; value: number }
   | { t: 'placeCommit'; hash: string }

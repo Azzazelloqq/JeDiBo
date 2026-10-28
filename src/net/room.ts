@@ -44,6 +44,8 @@ export interface RoomData {
   /** доля seed со стороны комнаты (хоста) и обязательство по ней */
   seedSecret: { value: number; salt: string; hash: string } | null;
   seed: number | null;
+  /** имена в партии фиксируются при старте: они входят в GameState и не меняются от повторного hello */
+  names: [string, string];
   log: Action[];
   place: [PlaceSlot, PlaceSlot];
   clocks: { turnLeft: number; total: [number, number]; runningSince: number | null };
@@ -78,6 +80,8 @@ export class Room {
     this.abandonMs = opts.abandonMs ?? ABANDON_MS;
     if (data) {
       this.d = data;
+      // снимок старого формата (до фиксации имён) — берём имена с мест
+      this.d.names ??= [data.seats[0]?.name ?? 'Игрок 1', data.seats[1]?.name ?? 'Игрок 2'];
       // после восстановления все считаются отключёнными «с этого момента»
       for (const st of this.d.seats) if (st) Object.assign(st, { conn: null, lastSeen: now });
       if (this.d.clocks.runningSince !== null) this.d.clocks.runningSince = now;
@@ -91,6 +95,7 @@ export class Room {
         seats: [null, null],
         seedSecret: null,
         seed: null,
+        names: ['Игрок 1', 'Игрок 2'],
         log: [],
         place: [emptySlot(), emptySlot()],
         clocks: { turnLeft: mode.turnMs, total: [mode.totalMs, mode.totalMs], runningSince: null },
@@ -258,6 +263,7 @@ export class Room {
 
   private startGame(now: number) {
     const mode = this.d.mode;
+    this.d.names = [this.d.seats[0]?.name ?? 'Игрок 1', this.d.seats[1]?.name ?? 'Игрок 2'];
     this.d.log = [];
     this.d.place = [emptySlot(), emptySlot()];
     this.d.rematch = [false, false];
@@ -412,7 +418,7 @@ export class Room {
   }
 
   private names(): [string, string] {
-    return [this.d.seats[0]?.name ?? 'Игрок 1', this.d.seats[1]?.name ?? 'Игрок 2'];
+    return [this.d.names[0], this.d.names[1]];
   }
 
   // ── отправка ───────────────────────────────────────────────────────────────

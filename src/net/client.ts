@@ -53,6 +53,7 @@ export class RoomClient {
   private myPlace: Commitment<Layout> | null = null;
   private placing = false;
   private attempt = 0;
+  private desyncs: number[] = [];
   private revealed = false;
   private commits: [string | null, string | null] = [null, null];
 
@@ -85,7 +86,9 @@ export class RoomClient {
 
   hello() {
     const { token, name, avatarSeed, rating } = this.me;
-    this.send({ t: 'hello', v: PROTOCOL_VERSION, n: ++this.attempt, token, name, avatarSeed, rating });
+    // номер попытки растёт и через перезагрузки вкладки: от времени, строго возрастая
+    this.attempt = Math.max(Date.now(), this.attempt + 1);
+    this.send({ t: 'hello', v: PROTOCOL_VERSION, n: this.attempt, token, name, avatarSeed, rating });
   }
 
   /** Отправить действие. Применится, когда комната его подтвердит. */
@@ -280,6 +283,13 @@ export class RoomClient {
     this.setClocks(m.clocks);
     this.status = s.phase === 'over' ? 'over' : s.phase === 'play' ? 'play' : this.status;
     if (stateHash(s) !== m.hash) {
+      // рассинхрон лечится полной синхронизацией; если он повторяется сразу — дальше не крутимся
+      const now = Date.now();
+      this.desyncs = this.desyncs.filter((t) => now - t < 30_000).concat(now);
+      if (this.desyncs.length > 3) {
+        this.broken = true;
+        return this.emit('error', 'desync', 'Не удаётся синхронизироваться с комнатой');
+      }
       this.emit('error', 'desync', 'Рассинхрон состояния — восстанавливаемся');
       return this.resync();
     }

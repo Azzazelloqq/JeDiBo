@@ -25,6 +25,8 @@ async function boot() {
     /* офлайн — останется моноширинный запасной */
   }
   go(menuScreen);
+  // отладочный пульт сети: в прод-сборку не попадает
+  if (import.meta.env.DEV) void import('./net/devtools');
 }
 
 void boot();
