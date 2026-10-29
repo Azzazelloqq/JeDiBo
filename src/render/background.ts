@@ -97,8 +97,27 @@ const LIGHT_MOODS: typeof DARK_MOODS = {
   win: { a: '#ecdfcf', b: '#fbf3e8', c: '#f2b95e', heat: 0.6, spin: 1.0 },
   lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
 };
-const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
-const THEME_STYLE = THEME.scheme === 'dark' ? 0 : 1;
+// Концепт (временно, ?bg=calm | calm2): тёмная тема на основе фона светлой — тот же спокойный крупный дым
+// со ступенями по яркости, без зерна и тяжёлой виньетки; цвета — зеркально светлым (тень ↔ основа, тот же красный дым).
+const DARK_CALM: typeof DARK_MOODS = {
+  menu: { a: '#131316', b: '#2c2c31', c: '#a3271d', heat: 0.3, spin: 0.9 },
+  game: { a: '#0f0d0e', b: '#2e2526', c: '#b8301f', heat: 0.9, spin: 0.6 },
+  karma: { a: '#1a120b', b: '#33281c', c: '#d4862a', heat: 0.8, spin: 1.3 },
+  win: { a: '#16130f', b: '#342c22', c: '#d4862a', heat: 0.6, spin: 1.0 },
+  lose: { a: '#121213', b: '#232325', c: '#3a3739', heat: 0.1, spin: 0.25 },
+};
+// вариант 2: приглушённее — меньше красного, основа темнее
+const DARK_CALM2: typeof DARK_MOODS = {
+  menu: { a: '#111113', b: '#232327', c: '#5c1813', heat: 0.3, spin: 0.9 },
+  game: { a: '#0c0c0d', b: '#211d1e', c: '#6e1a12', heat: 0.9, spin: 0.6 },
+  karma: { a: '#17100a', b: '#2b2218', c: '#a86a22', heat: 0.8, spin: 1.3 },
+  win: { a: '#14110d', b: '#2c251d', c: '#a86a22', heat: 0.6, spin: 1.0 },
+  lose: { a: '#101011', b: '#1d1d1f', c: '#2e2c2d', heat: 0.1, spin: 0.25 },
+};
+const BG_CONCEPT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('bg') : null;
+const DARK_SET = BG_CONCEPT === 'calm' ? DARK_CALM : BG_CONCEPT === 'calm2' ? DARK_CALM2 : DARK_MOODS;
+const MOODS = THEME.scheme === 'dark' ? DARK_SET : LIGHT_MOODS;
+const THEME_STYLE = THEME.scheme === 'dark' && DARK_SET === DARK_MOODS ? 0 : 1;
 /** Стиль фона: свой у темы или пиксельный вихрь варианта «б» (крупнее «пиксель»). */
 let style = THEME_STYLE;
 let pix = 5;
