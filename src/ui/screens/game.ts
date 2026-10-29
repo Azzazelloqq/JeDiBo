@@ -894,7 +894,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const ov = h(
       'div',
       { class: 'overlay karma-overlay' },
-      h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: `kr-who who-${s.players[p].color}` }, s.players[p].name)),
+      h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: `kr-who who-${seatOf(p).color}` }, s.players[p].name)),
       note ? h('div', { class: 'tut-karma-note' }, h('div', {}, note.title), h('div', { class: 'muted' }, note.sub)) : null,
       h('div', { class: 'kr-card fly-in' }, c.el),
       desc,
