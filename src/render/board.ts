@@ -2,7 +2,7 @@
 // Получает состояние + события движка, проигрывает анимации и рисует подсказки.
 import { sfx } from '../audio/sfx';
 import { canAct, forward, homeRows, isBarrier } from '../core/rules';
-import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
+import { Rank, type CardId, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
 import { PAL, STONE } from './palette';
 import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
@@ -46,6 +46,12 @@ interface Particle {
   ground: boolean;
 }
 
+/** Слой эффекта: рисуется каждый кадр, пока его не снимут; under — под фигурами. */
+interface Layer {
+  draw: (now: number) => void;
+  under: boolean;
+}
+
 export interface Overlay {
   selected: number | null;
   moves: Pos[];
@@ -79,6 +85,10 @@ export class BoardView {
   /** Линия смерти «прочёсывает» поле: pos — экранный столбец (дробный), lock — вспышки на выбранном столбце */
   private scan: { pos: number; lock: number } | null = null;
   private barrierDrop = new Map<string, number>();
+  private layers: Layer[] = [];
+  /** Карта, чьи события сейчас проигрываются: от неё зависит «почерк» появления, смерти, смены ранга.
+   *  game.ts ставит её на розыгрыш карты и на ответы на её вопросы. */
+  cardCtx: CardId | null = null;
   private unsub: () => void;
   scale = 3;
   /** Обучение: Линия смерти сначала «замирает» на этом столбце и лишь потом щёлкает на выбранный */
@@ -235,7 +245,7 @@ export class BoardView {
   /** Дождаться, пока улягутся обломки удара и всплывающий текст (не дольше maxMs). */
   async settle(maxMs = 1000) {
     const end = performance.now() + maxMs;
-    const busy = () => this.beam || this.scan || this.parts.some((p) => !p.ground || p.z > 0.5) || document.querySelector('.float-text');
+    const busy = () => this.beam || this.scan || this.layers.length || this.parts.some((p) => !p.ground || p.z > 0.5) || document.querySelector('.float-text');
     while (busy() && performance.now() < end) await new Promise((r) => setTimeout(r, 50));
   }
 
@@ -252,7 +262,9 @@ export class BoardView {
       case 'move': {
         const v = this.vis.get(e.pieceId);
         if (!v) return;
-        await this.hop(v, e.to, e.forced ? 0.7 : 1, e.jump);
+        if (e.forced && this.cardCtx === 'retreat') await this.retreat(v, e.to);
+        else if (e.forced && this.cardCtx === 'betrayal') await this.puppet(v, e.to);
+        else await this.hop(v, e.to, e.forced ? 0.7 : 1, e.jump);
         this.ov.lastMove = [e.from, e.to];
         return;
       }
@@ -289,6 +301,7 @@ export class BoardView {
       case 'destroy': {
         const v = this.vis.get(e.victim.id);
         if (!v) return;
+        if (e.cause === 'doubleDeath' || e.cause === 'doubleDeathEnemy') return this.reap(v, e.victim);
         v.flash = 1;
         await wait(80);
         this.smash(v, e.victim, 12);
@@ -299,6 +312,10 @@ export class BoardView {
       }
       case 'spawn': {
         const v = this.newVis(e.piece);
+        if (this.cardCtx === 'gift') return this.giftSpawn(v);
+        if (this.cardCtx === 'freshBlood') return this.bloodSpawn(v);
+        if (this.cardCtx === 'resurrection') return this.holySpawn(v);
+        if (this.cardCtx === 'immortal') return this.soulSpawn(v);
         v.z = 48;
         v.alpha = 0;
         this.vis.set(v.id, v);
@@ -327,6 +344,9 @@ export class BoardView {
       case 'rankChange': {
         const v = this.vis.get(e.pieceId);
         if (!v) return;
+        if (this.cardCtx === 'careerUp') return this.liftUp(v, e.to);
+        if (this.cardCtx === 'careerDown' || this.cardCtx === 'devaluation')
+          return this.pressDown(v, e.to, this.cardCtx === 'devaluation' ? PAL.brand500 : PAL.bone);
         v.flash = 1;
         sfx.promote();
         this.sparkle(v.x, v.y, e.to > e.from ? PAL.amber300 : PAL.brand400, 10);
@@ -338,6 +358,7 @@ export class BoardView {
       case 'ownerChange': {
         const v = this.vis.get(e.pieceId);
         if (!v) return;
+        if (this.cardCtx === 'spy') return this.turncoat(v, e.to);
         v.flash = 1;
         this.sparkle(v.x, v.y, PAL.patina300, 12);
         sfx.cardFlip();
@@ -435,6 +456,13 @@ export class BoardView {
         });
         for (const c of e.cells) this.dust(c.x, c.y, 10);
         shake(4);
+        // от упавших плит по полу расходится пыльная волна
+        await this.layer(320, (t) => {
+          const xs = e.cells.map((c) => this.X(c.x));
+          const ys = e.cells.map((c) => this.Y(c.y));
+          const r = Math.round(2 + t * 7);
+          this.rectRing(Math.min(...xs) - r, Math.min(...ys) - r, Math.max(...xs) + CELL + r, Math.max(...ys) + CELL + r, withAlpha(PAL.amber300, 0.7 * (1 - t)));
+        });
         return;
       }
       default:
@@ -447,6 +475,22 @@ export class BoardView {
     const dist = Math.max(Math.abs(to.x - fx), Math.abs(to.y - fy));
     const h = (jump ? 14 : 4 + dist * 1.6) * k;
     sfx.click();
+    // Блицкриг: фигура-исполнитель оставляет за собой шлейф отражений
+    const blitz = this.s?.effects.some((q) => q.kind === 'blitz' && !q.done && q.owner === v.owner && (q.pieceId === null || q.pieceId === v.id));
+    const trail: { x: number; y: number; z: number }[] = [];
+    const stopTrail = blitz
+      ? this.persist(() => {
+          trail.push({ x: v.x, y: v.y, z: v.z });
+          if (trail.length > 7) trail.shift();
+          const sprite = pieceSprite(v.rank, this.seat(v.owner)?.color ?? 'red', this.s ? this.faceUp(v.owner, this.s) : true);
+          trail.forEach((q, i) => {
+            this.g.globalAlpha = 0.08 * i;
+            this.g.drawImage(sprite, Math.round(this.X(q.x)), Math.round(this.Y(q.y) - q.z + 1));
+          });
+          this.g.globalAlpha = 1;
+        }, true)
+      : null;
+    if (blitz) sfx.zap();
     // подготовка — небольшое приседание
     await tween(60, (t) => {
       v.sy = 1 - 0.18 * t;
@@ -465,7 +509,9 @@ export class BoardView {
     v.z = 0;
     sfx.move();
     this.dust(to.x, to.y, 6);
+    if (blitz) this.sparkle(to.x, to.y, PAL.amber300, 6);
     await this.squash(v);
+    stopTrail?.();
   }
 
   private squash(v: Vis) {
@@ -482,6 +528,668 @@ export class BoardView {
       v.sx = s;
       v.sy = s;
     });
+  }
+
+  // ── Карты Кармы: слои эффектов ──────────────────────────────────────────
+  /** Повесить рисовалку на каждый кадр; вернёт функцию «снять». */
+  private persist(draw: (now: number) => void, under = false): () => void {
+    const L: Layer = { draw, under };
+    this.layers.push(L);
+    return () => (this.layers = this.layers.filter((q) => q !== L));
+  }
+
+  /** Слой на время dur: draw получает прогресс 0..1. Время идёт по твинам — не зависит от того, виден ли канвас. */
+  private layer(dur: number, draw: (t: number, now: number) => void, under = false): Promise<void> {
+    let t = 0;
+    const off = this.persist((now) => draw(t, now), under);
+    return tween(dur, (k) => (t = k)).then(off);
+  }
+
+  private line(x0: number, y0: number, x1: number, y1: number, color: string, w = 1) {
+    x0 = Math.round(x0);
+    y0 = Math.round(y0);
+    x1 = Math.round(x1);
+    y1 = Math.round(y1);
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    this.g.fillStyle = color;
+    for (;;) {
+      this.g.fillRect(x0, y0, w, w);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+  }
+
+  private rectRing(x0: number, y0: number, x1: number, y1: number, color: string) {
+    const g = this.g;
+    g.fillStyle = color;
+    g.fillRect(x0, y0, x1 - x0, 1);
+    g.fillRect(x0, y1 - 1, x1 - x0, 1);
+    g.fillRect(x0, y0, 1, y1 - y0);
+    g.fillRect(x1 - 1, y0, 1, y1 - y0);
+  }
+
+  /** Пиксельный эллипс-кольцо на полу (rx×ry); dots — пунктир, spin — его вращение. */
+  private groundRing(cx: number, cy: number, rx: number, ry: number, color: string, dots = 0, spin = 0) {
+    const n = Math.max(12, Math.round(rx * 5));
+    this.g.fillStyle = color;
+    for (let i = 0; i < n; i++) {
+      if (dots && (i + Math.floor(spin)) % dots !== 0) continue;
+      const a = (i / n) * Math.PI * 2;
+      this.g.fillRect(Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), 1, 1);
+    }
+  }
+
+  /** Шеврон 5×3 с тёмной подложкой (читается и на светлых плитах, и на фигурах): dir −1 смотрит вверх, 1 — вниз. */
+  private chevron(x: number, y: number, dir: 1 | -1, color: string) {
+    const g = this.g;
+    const r = (i: number) => (dir < 0 ? i : 2 - i);
+    const mark = (dx: number, dy: number) => {
+      g.fillRect(x + dx + 2, y + dy + r(0), 1, 1);
+      g.fillRect(x + dx + 1, y + dy + r(1), 1, 1);
+      g.fillRect(x + dx + 3, y + dy + r(1), 1, 1);
+      g.fillRect(x + dx, y + dy + r(2), 1, 1);
+      g.fillRect(x + dx + 4, y + dy + r(2), 1, 1);
+    };
+    g.fillStyle = withAlpha(PAL.void, 0.75);
+    mark(0, 1);
+    mark(1, 0);
+    g.fillStyle = color;
+    mark(0, 0);
+  }
+
+  private emit(n: number, f: (i: number) => Partial<Particle> & { x: number; y: number }) {
+    for (let i = 0; i < n; i++)
+      this.parts.push({ z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 600, color: PAL.bone, size: 1, ground: false, ...f(i) });
+  }
+
+  private confetti(cx: number, cy: number, n: number, colors: string[], power = 1) {
+    this.emit(n, () => {
+      const a = Math.random() * Math.PI * 2;
+      const sp = (0.3 + Math.random() * 1.3) * power;
+      return {
+        x: cx + (Math.random() - 0.5) * 6,
+        y: cy + (Math.random() - 0.5) * 4,
+        z: 4,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp * 0.6,
+        vz: (2 + Math.random() * 2.5) * power,
+        max: 800 + Math.random() * 600,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: Math.random() < 0.35 ? 2 : 1,
+        ground: true,
+      };
+    });
+  }
+
+  private smoke(cx: number, cy: number, n: number, colors: string[]) {
+    this.emit(n, () => ({
+      x: cx + (Math.random() - 0.5) * 10,
+      y: cy + (Math.random() - 0.5) * 6,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.25 - Math.random() * 0.45,
+      max: 500 + Math.random() * 500,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: Math.random() < 0.5 ? 2 : 1,
+    }));
+  }
+
+  // ── появление фигуры ──
+  /** Подарок: коробка с бантом падает, вздрагивает и лопается конфетти, внутри — Круг. */
+  private async giftSpawn(v: Vis) {
+    v.alpha = 0;
+    this.vis.set(v.id, v);
+    let z = 56, wob = 0, lid = 0;
+    const off = this.persist(() => this.drawGift(v, z, wob, lid));
+    sfx.spawn();
+    await tween(440, (t) => (z = 56 * (1 - ease.outBounce(t))));
+    this.dust(v.x, v.y, 8);
+    await tween(300, (t) => (wob = Math.sin(t * Math.PI * 5) * (1 - t * 0.5)));
+    await tween(90, (t) => (lid = t));
+    off();
+    sfx.pop();
+    shake(3);
+    this.confetti(this.X(v.x) + 8, this.Y(v.y) + 8, 30, [PAL.amber300, PAL.amber100, PAL.brand500, PAL.patina300, PAL.bone], 1.1);
+    v.alpha = 1;
+    v.flash = 1;
+    await this.pop(v);
+  }
+
+  private drawGift(v: Vis, z: number, wob: number, lid: number) {
+    const g = this.g;
+    const x = this.X(v.x) + 3 + Math.round(wob * 1.5);
+    const base = this.Y(v.y) + 14;
+    g.fillStyle = withAlpha(PAL.void, 0.35 * Math.max(0.4, 1 - z / 40));
+    g.fillRect(this.X(v.x) + 3, base - 1, 10, 2);
+    const y = Math.round(base - 8 - z);
+    // короб
+    px(g, x - 1, y - 1, PAL.void, 12, 10);
+    px(g, x, y, PAL.amber500, 10, 8);
+    px(g, x, y, PAL.amber300, 10, 1);
+    px(g, x, y, PAL.amber300, 1, 8);
+    px(g, x + 9, y + 1, PAL.amber700, 1, 7);
+    px(g, x, y + 7, PAL.amber700, 10, 1);
+    px(g, x + 4, y, PAL.brand500, 2, 8);
+    // крышка с бантом — в момент «пах» отлетает вверх
+    const ly = y - 3 - Math.round(lid * 6);
+    px(g, x - 2, ly - 1, PAL.void, 14, 5);
+    px(g, x - 1, ly, PAL.amber300, 12, 3);
+    px(g, x - 1, ly + 2, PAL.amber500, 12, 1);
+    px(g, x + 4, ly, PAL.brand500, 2, 3);
+    px(g, x + 2, ly - 2, PAL.brand500, 2, 2);
+    px(g, x + 6, ly - 2, PAL.brand500, 2, 2);
+    px(g, x + 2, ly - 2, PAL.brand400, 1, 1);
+  }
+
+  /** Свежая кровь: тяжёлая капля падает, брызги и лужа, фигура вырастает из неё. */
+  private async bloodSpawn(v: Vis) {
+    v.alpha = 0;
+    v.sy = 0.05;
+    this.vis.set(v.id, v);
+    const cx = this.X(v.x) + 8;
+    const floor = this.Y(v.y) + 13;
+    let z = 90;
+    const off = this.persist(() => {
+      const y = Math.round(floor - 4 - z);
+      const g = this.g;
+      px(g, cx - 1, y - 8, withAlpha(PAL.granite500, 0.4), 1, 6);
+      px(g, cx - 1, y - 2, PAL.granite400, 1, 2);
+      px(g, cx - 2, y, PAL.granite500, 3, 3);
+      px(g, cx - 1, y + 3, PAL.granite600, 1, 1);
+      px(g, cx - 2, y, PAL.brand100, 1, 1);
+    });
+    await tween(260, (t) => (z = 90 * (1 - ease.inCubic(t))));
+    off();
+    sfx.splat();
+    shake(3);
+    this.confetti(cx, floor - 2, 18, [PAL.granite500, PAL.granite400, PAL.brand500, PAL.granite700], 0.8);
+    // лужа расползается и медленно уходит в камень
+    void this.layer(900, (t) => {
+      const r = 2 + ease.outCubic(Math.min(1, t * 3)) * 6;
+      const a = t < 0.4 ? 0.85 : 0.85 * (1 - (t - 0.4) / 0.6);
+      this.g.fillStyle = withAlpha(PAL.granite700, a);
+      for (let yy = -2; yy <= 2; yy++) {
+        const w = Math.round(r * Math.sqrt(1 - (yy / 2.6) ** 2));
+        this.g.fillRect(Math.round(cx - w), floor + yy, w * 2, 1);
+      }
+      this.groundRing(cx, floor, r + 1, (r + 1) / 2.6, withAlpha(PAL.granite500, a));
+    }, true);
+    v.alpha = 1;
+    v.flash = 1;
+    await tween(340, (t) => {
+      v.sy = 0.05 + 0.95 * ease.outBack(t);
+      v.sx = 1.35 - 0.35 * ease.outCubic(t);
+    });
+    v.sx = v.sy = 1;
+  }
+
+  /** Воскрешение: с неба бьёт столп света, фигура медленно опускается в нём на кольцо рун. */
+  private async holySpawn(v: Vis) {
+    v.alpha = 0;
+    v.z = 26;
+    this.vis.set(v.id, v);
+    sfx.rise();
+    const cx = this.X(v.x) + 8;
+    const floor = this.Y(v.y) + 13;
+    const pillar = this.layer(1150, (t, now) => {
+      const g = this.g;
+      const w = t < 0.18 ? (t / 0.18) * 12 : t > 0.78 ? ((1 - t) / 0.22) * 12 : 12;
+      const half = Math.round(w / 2);
+      if (half <= 0) return;
+      g.fillStyle = withAlpha(PAL.amber300, 0.22);
+      g.fillRect(cx - half - 2, M, half * 2 + 4, floor - M);
+      g.fillStyle = withAlpha(PAL.amber100, 0.55);
+      g.fillRect(cx - half, M, half * 2, floor - M);
+      const core = Math.max(1, half - 3);
+      g.fillStyle = withAlpha(PAL.bone, 0.85);
+      g.fillRect(cx - core, M, core * 2, floor - M);
+      this.groundRing(cx, floor, 9, 3.5, PAL.amber300, 3, now / 60);
+      this.groundRing(cx, floor, 6, 2.3, withAlpha(PAL.amber100, 0.8), 2, -now / 90);
+      if (Math.random() < 0.5)
+        this.emit(1, () => ({ x: cx - 5 + Math.random() * 10, y: floor - Math.random() * 6, vy: -0.6 - Math.random() * 0.5, color: Math.random() < 0.5 ? PAL.bone : PAL.amber100 }));
+    }, true);
+    await wait(220);
+    await tween(680, (t) => {
+      v.z = 26 * (1 - ease.outCubic(t));
+      v.alpha = Math.min(1, t * 2);
+    });
+    v.flash = 1;
+    this.dust(v.x, v.y, 6);
+    await pillar;
+  }
+
+  /** Бессмертие: души погибшей фигуры слетаются по спирали и собирают её заново. */
+  private async soulSpawn(v: Vis) {
+    v.alpha = 0;
+    this.vis.set(v.id, v);
+    sfx.soul();
+    const cx = this.X(v.x) + 8;
+    const cy = this.Y(v.y) + 8;
+    const motes = Array.from({ length: 16 }, () => ({ a: Math.random() * Math.PI * 2, r: 18 + Math.random() * 16, d: Math.random() * 0.25 }));
+    await this.layer(720, (t) => {
+      for (const m of motes) {
+        const k = Math.min(1, Math.max(0, (t - m.d) / (1 - m.d)));
+        const r = m.r * (1 - ease.inCubic(k));
+        const a = m.a + k * 4;
+        const x = Math.round(cx + Math.cos(a) * r), y = Math.round(cy + Math.sin(a) * r * 0.7);
+        px(this.g, Math.round(cx + Math.cos(a - 0.35) * r * 1.08), Math.round(cy + Math.sin(a - 0.35) * r * 0.75), PAL.patina500, 1, 1);
+        // тёмная подложка — душа видна и на светлых плитах
+        px(this.g, x, y + 1, withAlpha(PAL.void, 0.6), 2, 1);
+        px(this.g, x, y, k > 0.85 ? PAL.bone : PAL.patina300, 2, 1);
+      }
+      // ядро разгорается
+      const s = Math.round(t * 4);
+      if (s) px(this.g, cx - s, cy - s, withAlpha(PAL.patina300, 0.35 * t), s * 2, s * 2);
+    });
+    sfx.promote();
+    v.alpha = 1;
+    v.flash = 1;
+    this.sparkle(v.x, v.y, PAL.patina300, 14);
+    void this.layer(300, (t) => this.groundRing(cx, cy + 5, 4 + t * 10, (4 + t * 10) / 2.4, withAlpha(PAL.patina300, 1 - t)), true);
+    await this.pop(v);
+  }
+
+  // ── смерть ──
+  /** Двойная смерть: прицел стягивается на фигуре, крест-накрест удар косой, дым. */
+  private async reap(v: Vis, victim: Piece) {
+    sfx.lock();
+    await this.layer(300, (t) => this.brackets({ x: v.x, y: v.y }, PAL.brand500, Math.round((1 - ease.outCubic(t)) * 9), true));
+    const x0 = this.X(v.x), y0 = this.Y(v.y);
+    const cut = (t: number, second: number) => {
+      const k = Math.min(1, Math.max(0, t * 2 - second));
+      if (!k) return;
+      const [sx, sy, ex, ey] = second ? [x0 + 15, y0 - 1, x0, y0 + 14] : [x0, y0 - 1, x0 + 15, y0 + 14];
+      this.line(sx - 1, sy, sx + (ex - sx) * k - 1, sy + (ey - sy) * k, PAL.brand500, 2);
+      this.line(sx, sy, sx + (ex - sx) * k, sy + (ey - sy) * k, PAL.bone);
+    };
+    sfx.slash();
+    await this.layer(170, (t) => {
+      this.brackets({ x: v.x, y: v.y }, PAL.brand500, 0, true);
+      cut(t, 0);
+      cut(t, 1);
+    });
+    shake(6);
+    void this.layer(320, (t) => {
+      this.g.globalAlpha = 1 - t;
+      cut(1, 0);
+      cut(1, 1);
+      this.g.globalAlpha = 1;
+    });
+    this.smash(v, victim, 16);
+    this.smoke(x0 + 8, y0 + 8, 10, [PAL.void, PAL.slab600, PAL.brand800]);
+    await wait(140);
+  }
+
+  // ── ранг ──
+  /** Карьерный лифт вверх: столб света с бегущими вверх шевронами поднимает фигуру, наверху она перерождается. */
+  private async liftUp(v: Vis, to: Rank) {
+    sfx.rise();
+    const cx = this.X(v.x) + 8;
+    const floor = this.Y(v.y) + 14;
+    const column = this.layer(820, (t) => {
+      const fade = t < 0.15 ? t / 0.15 : t > 0.8 ? (1 - t) / 0.2 : 1;
+      const top = floor - 30;
+      this.g.fillStyle = withAlpha(PAL.amber300, 0.18 * fade);
+      this.g.fillRect(cx - 7, top, 14, floor - top);
+      for (let i = 0; i < 3; i++) {
+        const y = Math.round(floor - 4 - ((t * 60 + i * 10) % 30));
+        this.chevron(cx - 3, y, -1, withAlpha(PAL.amber100, fade * Math.min(1, 0.3 + (y - top) / 30)));
+      }
+    }, true);
+    await tween(260, (t) => {
+      v.z = 10 * ease.outCubic(t);
+      v.sy = 1 + 0.2 * Math.sin(Math.PI * t);
+      v.sx = 1 - 0.1 * Math.sin(Math.PI * t);
+    });
+    sfx.promote();
+    v.flash = 1;
+    v.rank = to;
+    this.sparkle(v.x, v.y, PAL.amber300, 12);
+    await this.pop(v);
+    await tween(180, (t) => (v.z = 10 * (1 - ease.inCubic(t))));
+    v.z = 0;
+    this.dust(v.x, v.y, 6);
+    await Promise.all([this.squash(v), column]);
+  }
+
+  /** Понижение (Карьерный лифт вниз, Девальвация): сверху обрушиваются шевроны и вдавливают фигуру. */
+  private async pressDown(v: Vis, to: Rank, color: string) {
+    const cx = this.X(v.x) + 8;
+    const top = this.Y(v.y) - v.z;
+    await this.layer(300, (t) => {
+      const k = ease.inCubic(t);
+      for (let i = 0; i < 3; i++) this.chevron(cx - 3, Math.round(top - 26 * (1 - k) - i * 4), 1, i ? withAlpha(color, 0.6 - i * 0.15) : color);
+    });
+    sfx.thud();
+    shake(4);
+    v.flash = 1;
+    v.rank = to;
+    this.confetti(cx, this.Y(v.y) + 12, 10, [PAL.concrete300, PAL.concrete500, PAL.void], 0.5);
+    this.dust(v.x, v.y, 10);
+    void this.layer(260, (t) => {
+      for (let i = 0; i < 3; i++) this.chevron(cx - 3 + (i - 1) * 6, Math.round(top + 1 + t * 4), 1, withAlpha(color, 1 - t));
+    });
+    await tween(360, (t) => {
+      const w = Math.sin(t * Math.PI) * (1 - t * 0.6);
+      v.sy = 1 - 0.38 * w;
+      v.sx = 1 + 0.26 * w;
+    });
+    v.sx = v.sy = 1;
+  }
+
+  // ── хозяин и перемещения ──
+  /** Шпион: фигуру охватывают помехи, цвет мерцает между сторонами — и она уже чужая. */
+  private async turncoat(v: Vis, to: PlayerId) {
+    sfx.glitch();
+    const from = v.owner;
+    const ox = v.x;
+    const x0 = this.X(v.x), y0 = this.Y(v.y);
+    this.smoke(x0 + 8, y0 + 10, 12, [PAL.void, PAL.slab600, PAL.slab500]);
+    const noise = this.persist(() => {
+      for (let i = 0; i < 4; i++) {
+        const w = 3 + Math.floor(Math.random() * 8);
+        const x = x0 + Math.floor(Math.random() * (16 - w)) + (Math.random() < 0.5 ? -2 : 2);
+        px(this.g, x, y0 + Math.floor(Math.random() * 16), Math.random() < 0.5 ? PAL.patina300 : PAL.void, w, 1);
+      }
+    });
+    for (let i = 0; i < 7; i++) {
+      v.owner = i % 2 ? from : to;
+      v.x = ox + (i < 6 ? (i % 2 ? 1 : -1) / CELL : 0);
+      await wait(55 + i * 12);
+    }
+    noise();
+    v.owner = to;
+    v.x = ox;
+    v.flash = 1;
+    sfx.cardFlip();
+    this.sparkle(v.x, v.y, PAL.patina300, 12);
+    await this.pop(v);
+  }
+
+  /** Отступление: фигура отъезжает назад низко, по полу, оставляя пыльный след. */
+  private async retreat(v: Vis, to: Pos) {
+    const fx = v.x, fy = v.y;
+    sfx.move();
+    await tween(90, (t) => {
+      v.sx = 1 + 0.1 * t;
+      v.sy = 1 - 0.1 * t;
+    });
+    await tween(300, (t) => {
+      const e = ease.outCubic(t);
+      v.x = fx + (to.x - fx) * e;
+      v.y = fy + (to.y - fy) * e;
+      v.z = Math.sin(Math.PI * t) * 2;
+      if (Math.random() < 0.6)
+        this.emit(1, () => ({ x: this.X(v.x) + 3 + Math.random() * 10, y: this.Y(v.y) + 14, vz: 0.4, vx: (Math.random() - 0.5) * 0.3, max: 400, color: Math.random() < 0.5 ? PAL.concrete300 : PAL.concrete100 }));
+    });
+    v.x = to.x;
+    v.y = to.y;
+    v.z = 0;
+    this.dust(to.x, to.y, 5);
+    await this.squash(v);
+  }
+
+  /** Предательство: сверху опускаются нити кукловода, фигуру поднимают и переставляют, она болтается. */
+  private async puppet(v: Vis, to: Pos) {
+    sfx.creak();
+    let len = 0;
+    const strings = this.persist(() => {
+      const bx = this.X(v.x);
+      const top = this.Y(v.y) + 2 - v.z;
+      const lean = Math.round((v.sx - 1) * 20);
+      for (const ax of [bx + 4, bx + 11]) {
+        const endY = M + (top - M) * len;
+        for (let y = M; y < endY; y += 2) {
+          const k = (y - M) / Math.max(1, top - M);
+          px(this.g, Math.round(ax + lean * k), y, withAlpha(PAL.brand400, 0.85), 1, 1);
+        }
+      }
+      px(this.g, bx + 3, M - 2, PAL.brand500, 10, 1);
+    });
+    await tween(180, (t) => (len = t));
+    const fx = v.x, fy = v.y;
+    await tween(160, (t) => (v.z = 9 * ease.outCubic(t)));
+    await tween(460, (t) => {
+      const e = ease.inOut(t);
+      v.x = fx + (to.x - fx) * e;
+      v.y = fy + (to.y - fy) * e;
+      v.z = 9 + Math.sin(t * Math.PI) * 3;
+      v.sx = 1 + Math.sin(t * Math.PI * 4) * 0.08;
+    });
+    v.x = to.x;
+    v.y = to.y;
+    v.sx = 1;
+    await tween(130, (t) => (v.z = 9 * (1 - ease.inCubic(t))));
+    v.z = 0;
+    sfx.move();
+    this.dust(to.x, to.y, 6);
+    void this.squash(v);
+    await tween(160, (t) => (len = 1 - t));
+    strings();
+  }
+
+  // ── розыгрыш карты без событий на поле ──
+  /** Эффект на всё поле в момент розыгрыша (после оверлея Кармы). */
+  async cast(card: CardId, p: PlayerId) {
+    if (!this.s || !this.el.isConnected) return;
+    const mine = [...this.vis.values()].filter((v) => !v.dead && v.owner === p);
+    const slowed = mine.filter((v) => v.rank !== Rank.Triangle);
+    switch (card) {
+      case 'blitzkrieg':
+        return this.castBlitz(mine);
+      case 'depression':
+        return this.castRain(slowed);
+      case 'snail':
+        return this.castSnail(slowed);
+      case 'roundProtection':
+        return this.castShield(mine.filter((v) => v.rank !== Rank.Circle));
+      case 'jumper':
+        return this.castJumper(slowed);
+    }
+  }
+
+  /** Блицкриг: поле прошивают молнии, у всех фигур игрока — искры. */
+  private async castBlitz(mine: Vis[]) {
+    const W = N * CELL;
+    const bolts = Array.from({ length: 3 }, (_, i) => {
+      const y0 = M + 20 + i * 62 + Math.random() * 30;
+      const pts: [number, number][] = [];
+      for (let x = M; x < M + W; x += 6 + Math.random() * 6) pts.push([x, y0 + (Math.random() - 0.5) * 14]);
+      pts.push([M + W, y0]);
+      return { pts, delay: i * 0.18 };
+    });
+    sfx.zap();
+    shake(5);
+    await this.layer(700, (t) => {
+      const flash = Math.max(0, 1 - t * 4);
+      if (flash) {
+        this.g.fillStyle = withAlpha(PAL.amber100, 0.3 * flash);
+        this.g.fillRect(M, M, W, W);
+      }
+      for (const b of bolts) {
+        const k = (t - b.delay) / 0.45;
+        if (k < 0 || k > 1 || Math.floor(k * 10) % 3 === 2) continue;
+        const n = Math.ceil(b.pts.length * Math.min(1, k * 2.5));
+        for (let i = 1; i < n; i++) {
+          const [ax, ay] = b.pts[i - 1], [bx, by] = b.pts[i];
+          this.line(ax, ay + 2, bx, by + 2, withAlpha(PAL.void, 0.6));
+          this.line(ax, ay - 1, bx, by - 1, PAL.amber300);
+          this.line(ax, ay + 1, bx, by + 1, PAL.amber500);
+          this.line(ax, ay, bx, by, PAL.bone);
+        }
+      }
+    });
+    for (const v of mine) {
+      this.sparkle(v.x, v.y, PAL.amber300, 4);
+      v.flash = 0.8;
+    }
+  }
+
+  /** Депрессия: поле темнеет, идёт дождь, над Квадратами и Кругами игрока собираются тучки, фигуры понуро оседают. */
+  private async castRain(slowed: Vis[]) {
+    const W = N * CELL;
+    sfx.rain();
+    slowed.forEach(
+      (v, i) =>
+        void tween(700, (t) => {
+          const w = Math.sin(t * Math.PI);
+          v.sy = 1 - 0.16 * w;
+          v.sx = 1 + 0.08 * w;
+        }, 150 + i * 40),
+    );
+    await this.layer(1300, (t) => {
+      const a = Math.sin(t * Math.PI);
+      this.g.fillStyle = withAlpha(PAL.void, 0.32 * a);
+      this.g.fillRect(M, M, W, W);
+      if (t < 0.8)
+        this.emit(4, () => ({ x: M + Math.random() * W, y: M + Math.random() * W * 0.6, vx: -0.35, vy: 2.6, max: 260 + Math.random() * 200, color: Math.random() < 0.7 ? PAL.concrete400 : PAL.patina300 }));
+      for (const v of slowed) this.drawCloud(this.X(v.x) + 1, this.Y(v.y) - 2 - v.z, Math.min(1, t * 3), Math.floor(t * 20));
+    });
+  }
+
+  /** Тучка над фигурой (Депрессия): k — непрозрачность, f — кадр капели. */
+  private drawCloud(x: number, y: number, k: number, f: number) {
+    const g = this.g;
+    g.globalAlpha = k;
+    px(g, x + 3, y - 1, PAL.slab500, 2, 1);
+    px(g, x + 1, y, PAL.slab500, 4, 1);
+    px(g, x, y + 1, PAL.slab500, 6, 2);
+    px(g, x, y + 3, PAL.slab700, 6, 1);
+    px(g, x + 1 + (f % 3) * 2, y + 4 + (f % 2), PAL.patina300, 1, 1);
+    g.globalAlpha = 1;
+  }
+
+  /** Тихоход: над фигурами раскручиваются спирали, фигуры вязко покачиваются. */
+  private async castSnail(slowed: Vis[]) {
+    sfx.slow();
+    slowed.forEach(
+      (v) =>
+        void tween(900, (t) => {
+          const w = Math.sin(t * Math.PI * 2) * (1 - t);
+          v.sx = 1 + 0.14 * w;
+          v.sy = 1 - 0.1 * w;
+        }),
+    );
+    await this.layer(950, (t) => {
+      for (const v of slowed) {
+        const cx = this.X(v.x) + 8, cy = this.Y(v.y) + 8 - v.z;
+        const n = 22;
+        for (let i = 0; i < n; i++) {
+          const k = i / n;
+          if (k > t * 1.6) break;
+          const a = k * Math.PI * 4 - t * 6;
+          const r = 2 + k * 9 * (1 - Math.max(0, t - 0.6) / 0.4);
+          px(this.g, Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.8), withAlpha(PAL.patina300, 1 - k * 0.6), 1, 1);
+        }
+      }
+    });
+  }
+
+  /** Круговая защита: вокруг Треугольников и Квадратов раскрывается щит, искры летят во все 8 сторон. */
+  private async castShield(guards: Vis[]) {
+    sfx.shield();
+    await this.layer(650, (t) => {
+      const k = ease.outCubic(t);
+      for (const v of guards) {
+        const x0 = this.X(v.x), y0 = this.Y(v.y);
+        const r = Math.round(k * 8);
+        this.rectRing(x0 - r, y0 - r, x0 + CELL + r, y0 + CELL + r, withAlpha(PAL.amber300, 1 - t));
+        for (let d = 0; d < 8; d++) {
+          const a = (d / 8) * Math.PI * 2;
+          const dist = 4 + k * 14;
+          px(this.g, Math.round(x0 + 8 + Math.cos(a) * dist) - 1, Math.round(y0 + 8 + Math.sin(a) * dist) - 1, withAlpha(PAL.amber100, 1 - t * 0.8), 2, 2);
+        }
+      }
+    });
+    for (const v of guards) v.flash = 0.7;
+  }
+
+  /** Прыгун: фигуры игрока (кроме Треугольников) волной подпрыгивают, как на пружинах. */
+  private async castJumper(jumpers: Vis[]) {
+    sfx.spring();
+    const order = [...jumpers].sort((a, b) => a.x - b.x || a.y - b.y);
+    await Promise.all(
+      order.map((v, i) =>
+        tween(300, (t) => {
+          v.z = Math.sin(Math.PI * t) * 10;
+          v.sy = 1 + 0.18 * Math.sin(Math.PI * t);
+          v.sx = 1 - 0.1 * Math.sin(Math.PI * t);
+        }, i * 45).then(() => {
+          v.z = 0;
+          v.sx = v.sy = 1;
+          this.dust(v.x, v.y, 4);
+        }),
+      ),
+    );
+  }
+
+  /** Пропуск хода: поле на миг гаснет, над фигурами игрока поднимаются «Z». */
+  async snooze(p: PlayerId) {
+    if (!this.el.isConnected) return;
+    const zs = [...this.vis.values()].filter((v) => !v.dead && v.owner === p).map((v) => ({ v, d: Math.random() * 0.4 }));
+    await this.layer(1100, (t) => {
+      this.g.fillStyle = withAlpha(PAL.void, 0.28 * Math.sin(t * Math.PI));
+      this.g.fillRect(M, M, N * CELL, N * CELL);
+      for (const { v, d } of zs) {
+        const k = (t - d) / 0.6;
+        if (k < 0 || k > 1) continue;
+        const x = this.X(v.x) + 10 + Math.round(Math.sin(k * 6) * 2);
+        const y = this.Y(v.y) - Math.round(k * 10);
+        this.g.globalAlpha = 1 - k;
+        px(this.g, x, y, PAL.bone, 3, 1);
+        px(this.g, x + 1, y + 1, PAL.bone, 1, 1);
+        px(this.g, x, y + 2, PAL.bone, 3, 1);
+        this.g.globalAlpha = 1;
+      }
+    });
+  }
+
+  // ── постоянные отметки действующих эффектов ──
+  /** Мелкие знаки на фигурах, пока действует эффект Кармы: тучка (Депрессия), раковина (Тихоход),
+   *  бегущие по краю клетки точки (Круговая защита), искры (Блицкриг). */
+  private drawAuras(s: GameState, now: number) {
+    const g = this.g;
+    for (const e of s.effects) {
+      if (e.kind === 'barrier' || e.kind === 'jumper') continue;
+      for (const v of this.vis.values()) {
+        if (v.dead || v.owner !== e.owner || v.alpha < 0.5) continue;
+        const x0 = this.X(v.x), y0 = this.Y(v.y) - Math.round(v.z);
+        if (e.kind === 'depression' && v.rank !== Rank.Triangle) this.drawCloud(x0 + 1, y0 - 2, 0.9, Math.floor(now / 160));
+        else if (e.kind === 'snail' && v.rank !== Rank.Triangle) {
+          // раковина 5×4 в правом верхнем углу
+          const x = x0 + 11, y = y0 - 1;
+          px(g, x, y, PAL.patina700, 5, 4);
+          px(g, x + 1, y, PAL.patina300, 3, 1);
+          px(g, x, y + 1, PAL.patina300, 1, 2);
+          px(g, x + 4, y + 1, PAL.patina300, 1, 2);
+          px(g, x + 2, y + 2, PAL.patina300, 1, 1);
+          px(g, x + 1, y + 3, PAL.patina500, 4, 1);
+        } else if (e.kind === 'roundProtection' && v.rank !== Rank.Circle) {
+          // две «кометы» бегут по краю клетки: щит смотрит во все стороны
+          const at = (p: number) => {
+            const q = ((p % 56) + 56) % 56;
+            return q < 14 ? [q, 0] : q < 28 ? [14, q - 14] : q < 42 ? [42 - q, 14] : [0, 56 - q];
+          };
+          for (const k of [0, 28]) {
+            const head = Math.floor(now / 55) + k;
+            const tail = [3, 2, 1, 0].map((i) => ({ i, p: at(head - i * 2) }));
+            for (const { p } of tail) px(g, x0 + p[0] - 1, this.Y(v.y) + p[1] - 1, withAlpha(PAL.void, 0.35), 4, 4);
+            for (const { i, p } of tail) px(g, x0 + p[0], this.Y(v.y) + p[1], i ? withAlpha(PAL.amber500, 1 - i * 0.25) : PAL.amber100, 2, 2);
+          }
+        } else if (e.kind === 'blitz' && !e.done && e.pieceId === v.id && Math.random() < 0.12) {
+          this.emit(1, () => ({ x: x0 + 2 + Math.random() * 12, y: y0 + 4 + Math.random() * 8, vy: -0.8, vx: (Math.random() - 0.5) * 0.6, max: 300, color: Math.random() < 0.5 ? PAL.amber300 : PAL.bone }));
+        }
+      }
+    }
   }
 
   // ── частицы ─────────────────────────────────────────────────────────────
@@ -573,6 +1281,7 @@ export class BoardView {
     // барьеры
     for (const e of s.effects)
       if (e.kind === 'barrier') for (const c of e.cells) this.drawBarrier(c, this.barrierDrop.get(`${c.x},${c.y}`) ?? 0);
+    for (const L of this.layers) if (L.under) L.draw(now);
 
     // разведка: куда может пойти и кого бьёт фигура под курсором (своя — янтарь, чужая — красный)
     const pv = this.ov.preview;
@@ -625,6 +1334,7 @@ export class BoardView {
       g.fillRect(Math.round(bx + 8 - sw / 2 + 1), Math.round(by + 15), sw - 2, 1);
     }
     for (const v of list) this.drawPiece(v, s, pulse);
+    this.drawAuras(s, now);
 
     // ghost при расстановке
     if (this.ov.ghost) {
@@ -694,6 +1404,7 @@ export class BoardView {
       if (Math.random() < 0.6) this.sparkle(b.x, Math.floor(Math.random() * N), PAL.amber300, 1);
     }
 
+    for (const L of this.layers) if (!L.under) L.draw(now);
     this.drawParticles(dt);
   }
 
