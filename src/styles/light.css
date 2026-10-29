@@ -56,10 +56,13 @@ body.no-crt #crt { display: none; }
 /* ── экраны ─────────────────────────────────────────────────────────────── */
 .screen {
   position: absolute; inset: 0;
-  transition: transform 0.38s var(--bounce), opacity 0.25s;
 }
-.screen-enter { transform: translateY(40px) scale(0.97); opacity: 0; }
-.screen-leave { transform: translateY(-30px) scale(1.02); opacity: 0; transition-duration: 0.22s; pointer-events: none; }
+/* вход/выход — CSS-анимациями, а не сменой класса по кадру: если кадры тормозят (фоновая вкладка,
+   тяжёлая отрисовка), экран не остаётся прозрачным с одним фоном */
+.screen-enter { animation: screenIn 0.38s var(--bounce) backwards; }
+.screen-leave { animation: screenOut 0.22s forwards; pointer-events: none; }
+@keyframes screenIn { from { transform: translateY(40px) scale(0.97); opacity: 0; } }
+@keyframes screenOut { to { transform: translateY(-30px) scale(1.02); opacity: 0; } }
 
 /* ── бетонная плита ─────────────────────────────────────────────────────── */
 .slab {
@@ -511,10 +514,10 @@ body.no-crt #crt { display: none; }
   position: fixed; inset: 0; z-index: 50;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   background: color-mix(in srgb, var(--slab-900) 80%, transparent);
-  opacity: 0; transition: opacity 0.25s;
+  animation: overlayIn 0.25s backwards; transition: opacity 0.25s;
 }
-.overlay.in { opacity: 1; }
 .overlay.out { opacity: 0; }
+@keyframes overlayIn { from { opacity: 0; } }
 .dialog { min-width: 360px; max-width: 520px; text-align: center; padding: 22px 26px; animation: dialogIn 0.35s var(--bounce); }
 @keyframes dialogIn { from { transform: translateY(40px) scale(0.9); opacity: 0; } }
 .dialog h2 { font-family: var(--f-pix); font-size: 30px; text-transform: uppercase; margin: 8px 0; }
@@ -575,14 +578,15 @@ body.no-crt #crt { display: none; }
   width: 100%; text-align: center; padding: 10px 0 12px; color: var(--bone);
   background: linear-gradient(var(--c) 0 70%, var(--c2) 70%);
   border-top: 4px solid var(--void); border-bottom: 4px solid var(--void);
-  transform: scaleY(0) skewY(-2deg);
-  transition: transform 0.28s var(--bounce);
+  transform: scaleY(1) skewY(-2deg);
+  animation: bannerIn 0.28s var(--bounce) backwards;
+  transition: transform 0.2s;
   box-shadow: 0 8px 0 var(--shade);
 }
 .banner-amber .banner-strip { --c: var(--amber-500); --c2: var(--amber-700); --sh: var(--void); }
 .banner-stone .banner-strip { --c: var(--slab-600); --c2: var(--slab-800); --sh: var(--void); }
-.banner.in .banner-strip { transform: scaleY(1) skewY(-2deg); }
-.banner.out .banner-strip { transform: scaleY(0) skewY(-2deg); transition-duration: 0.2s; }
+.banner.out .banner-strip { transform: scaleY(0) skewY(-2deg); }
+@keyframes bannerIn { from { transform: scaleY(0) skewY(-2deg); } }
 .banner-text { font-family: var(--f-pix); font-size: 54px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; text-shadow: 4px 4px 0 var(--sh); animation: bannerText 1.6s var(--snap); }
 @keyframes bannerText { from { letter-spacing: 0.6em; opacity: 0; } 30% { letter-spacing: 0.12em; opacity: 1; } }
 .banner-sub { font-family: var(--f-pix); font-size: 16px; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.95; text-shadow: 2px 2px 0 var(--sh); }

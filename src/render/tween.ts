@@ -28,6 +28,7 @@ interface Tween {
 const tweens: Tween[] = [];
 let speed = 1;
 export const setAnimSpeed = (k: number) => (speed = k);
+export const animSpeed = () => speed;
 
 export function tween(dur: number, fn: (t: number) => void, delay = 0): Promise<void> {
   return new Promise((res) => {

@@ -20,5 +20,12 @@ export function go(screen: Screen) {
   app.appendChild(root);
   current = root;
   cleanup = screen(root);
-  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('screen-enter')));
+  // вход — CSS-анимация (не ждёт кадров); класс снимаем, когда она отыграла
+  root.addEventListener('animationend', (e) => e.target === root && root.classList.remove('screen-enter'));
+  // страховка: если кадры не шли (фоновая вкладка), разовые анимации входа застревают в первом кадре —
+  // экран прозрачен, колонки за краем. Доводим их до конца; бесконечные (покачивания) не трогаем.
+  setTimeout(() => {
+    for (const a of root.getAnimations({ subtree: true }))
+      if (a.effect?.getTiming().iterations !== Infinity && a.playState !== 'finished') a.finish();
+  }, 1200);
 }

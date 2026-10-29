@@ -51,6 +51,8 @@ export interface Overlay {
   zone: { side: 0 | 1 } | null;
   ghost: { pos: Pos; rank: Rank; owner: PlayerId } | null;
   hoverEnabled: boolean;
+  /** Разведка (как в Balatro): ходы и атаки фигуры под курсором — своей или чужой. foe — фигура соперника смотрящего. */
+  preview: { id: number; moves: Pos[]; attacks: Pos[]; foe: boolean } | null;
 }
 
 export class BoardView {
@@ -64,12 +66,14 @@ export class BoardView {
   private s: GameState | null = null;
   private hover: Pos | null = null;
   private beam: { x: number; t: number } | null = null;
+  /** Линия смерти «прочёсывает» поле: pos — экранный столбец (дробный), lock — вспышки на выбранном столбце */
+  private scan: { pos: number; lock: number } | null = null;
   private barrierDrop = new Map<string, number>();
   private unsub: () => void;
   scale = 3;
   /** Чьими глазами смотрим: его сторона всегда внизу (сторона 1 — поле повёрнуто на 180°). null — без поворота. */
   viewer: PlayerId | null = null;
-  ov: Overlay = { selected: null, moves: [], attacks: [], options: [], optionsTone: 'amber', lastMove: [], zone: null, ghost: null, hoverEnabled: true };
+  ov: Overlay = { selected: null, moves: [], attacks: [], options: [], optionsTone: 'amber', lastMove: [], zone: null, ghost: null, hoverEnabled: true, preview: null };
   onCell: (p: Pos) => void = () => {};
   onHover: (p: Pos | null) => void = () => {};
 
@@ -212,6 +216,13 @@ export class BoardView {
     return { id: pc.id, x: pc.x, y: pc.y, z: 0, sx: 1, sy: 1, rank: pc.rank, owner: pc.owner, flash: 0, alpha: 1, dead: false };
   }
 
+  /** Дождаться, пока улягутся обломки удара и всплывающий текст (не дольше maxMs). */
+  async settle(maxMs = 1000) {
+    const end = performance.now() + maxMs;
+    const busy = () => this.beam || this.scan || this.parts.some((p) => !p.ground || p.z > 0.5) || document.querySelector('.float-text');
+    while (busy() && performance.now() < end) await new Promise((r) => setTimeout(r, 50));
+  }
+
   /** Сбросить все визуальные фигуры (смена расстановки → партия). */
   clear() {
     this.vis.clear();
@@ -332,6 +343,24 @@ export class BoardView {
         return;
       }
       case 'column': {
+        // линия проходит всё поле слева направо, возвращается и замирает на выбранном столбце
+        const target = this.flipped ? N - 1 - e.x : e.x;
+        const dist = N - 1 + (N - 1 - target);
+        this.scan = { pos: 0, lock: 0 };
+        let lastCol = -1;
+        await tween(900 + dist * 25, (t) => {
+          const d = ease.outCubic(t) * dist;
+          const pos = d <= N - 1 ? d : 2 * (N - 1) - d;
+          if (this.scan) this.scan.pos = pos;
+          const col = Math.round(pos);
+          if (col !== lastCol) {
+            lastCol = col;
+            sfx.tick();
+          }
+        });
+        sfx.stamp();
+        await tween(360, (t) => this.scan && (this.scan.lock = t));
+        this.scan = null;
         this.beam = { x: e.x, t: 0 };
         sfx.beam();
         await tween(700, (t) => this.beam && (this.beam.t = t));
@@ -486,6 +515,20 @@ export class BoardView {
     for (const e of s.effects)
       if (e.kind === 'barrier') for (const c of e.cells) this.drawBarrier(c, this.barrierDrop.get(`${c.x},${c.y}`) ?? 0);
 
+    // разведка: куда может пойти и кого бьёт фигура под курсором (своя — янтарь, чужая — красный)
+    const pv = this.ov.preview;
+    if (pv) {
+      const dot = pv.foe ? PAL.brand500 : PAL.amber300;
+      for (const c of pv.moves) {
+        const hx = this.X(c.x);
+        const hy = this.Y(c.y);
+        this.fillCell(c, withAlpha(dot, 0.14));
+        px(g, hx + 6, hy + 6, PAL.void, 4, 4);
+        px(g, hx + 7, hy + 7, dot, 2, 2);
+      }
+      for (const c of pv.attacks) this.fillCell(c, withAlpha(PAL.brand500, 0.16 + pulse * 0.12));
+    }
+
     // цели перемещения
     for (const c of this.ov.moves) {
       const hx = this.X(c.x);
@@ -532,10 +575,43 @@ export class BoardView {
       g.globalAlpha = 1;
     }
 
+    // разведка: рамки поверх фигур — под атакой и сама фигура
+    if (pv) {
+      for (const c of pv.attacks) this.brackets(c, PAL.brand500, 0);
+      const v = this.vis.get(pv.id);
+      if (v && pv.id !== this.ov.selected) this.brackets({ x: v.x, y: v.y }, pv.foe ? PAL.brand500 : PAL.amber300, 0, true);
+    }
+
     // выделение
     if (this.ov.selected !== null) {
       const v = this.vis.get(this.ov.selected);
       if (v) this.brackets({ x: v.x, y: v.y }, PAL.amber300, Math.round(pulse), true);
+    }
+
+    // Линия смерти прочёсывает поле: яркая черта с хвостом, на выбранном столбце — вспышки
+    if (this.scan) {
+      const sc = this.scan;
+      const x = Math.round(M + sc.pos * CELL + CELL / 2);
+      // столбец, над которым сейчас линия, тлеет красным
+      g.fillStyle = withAlpha(PAL.brand500, sc.lock > 0 ? 0.2 : 0.14);
+      g.fillRect(M + Math.round(sc.pos) * CELL, M, CELL, N * CELL);
+      for (let i = 1; i <= 3; i++) {
+        g.fillStyle = withAlpha(PAL.brand500, 0.42 - i * 0.11);
+        g.fillRect(x - 2 - i * 2, M, 2, N * CELL);
+        g.fillRect(x + i * 2, M, 2, N * CELL);
+      }
+      g.fillStyle = PAL.brand500;
+      g.fillRect(x - 2, M, 4, N * CELL);
+      g.fillStyle = PAL.amber100;
+      g.fillRect(x - 1, M, 2, N * CELL);
+      // засечки на раме — «прицел»
+      g.fillStyle = PAL.amber300;
+      g.fillRect(x - 3, M - 3, 6, 2);
+      g.fillRect(x - 3, M + N * CELL + 1, 6, 2);
+      if (sc.lock > 0 && Math.floor(sc.lock * 6) % 2 === 0) {
+        g.fillStyle = withAlpha(PAL.brand500, 0.4);
+        g.fillRect(M + Math.round(sc.pos) * CELL, M, CELL, N * CELL);
+      }
     }
 
     // луч Линии смерти

@@ -42,7 +42,6 @@ export async function banner(text: string, sub = '', tone: 'brand' | 'amber' | '
   el.className = `banner banner-${tone}`;
   el.innerHTML = `<div class="banner-strip"><div class="banner-text">${text}</div>${sub ? `<div class="banner-sub">${sub}</div>` : ''}</div>`;
   document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('in'));
   await wait(hold + 300);
   el.classList.add('out');
   await wait(320);
