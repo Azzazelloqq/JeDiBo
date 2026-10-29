@@ -109,6 +109,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const right = h('aside', { class: 'side side-right' });
   const bottom = h('div', { class: 'bottombar' });
   const boardSlot = h('div', { class: 'board-slot' }, board.el);
+  // часы хода — над полем; появляются вместе с партией (на расстановке их нет)
+  const clockPanel = h('div', { class: 'stage-clock slab' });
   const center = h('main', { class: 'center' }, boardSlot, bottom);
   const layout = h('div', { class: 'game' }, leftCol, center, right);
   root.append(layout);
@@ -601,12 +603,13 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     // своя панель всегда слева, соперник — справа
     const mine = viewer();
     // «На поле» — только когда что-то действует: пустая плита с «пока ничего» лишь занимала колонку
-    left.replaceChildren(...[playerPanel(mine), top, effectsPanel(), controls()].filter((n): n is HTMLElement => !!n));
+    if (!clockPanel.isConnected) center.prepend(clockPanel);
+    left.replaceChildren(...[playerPanel(mine), karmaPanel(), top, effectsPanel(), controls()].filter((n): n is HTMLElement => !!n));
     right.replaceChildren(playerPanel(other(mine)), deckPanel(), logPanel());
     if (!hudShown) {
       // первый кадр партии: всё, кроме профилей (они стояли тут и на расстановке), въезжает по очереди
       hudShown = true;
-      [...left.children, ...right.children, ...bottom.children]
+      [...left.children, ...right.children, ...bottom.children, clockPanel]
         .filter((el) => !el.classList.contains('player'))
         .forEach((el, i) => {
           el.classList.add('panel-in');
@@ -676,8 +679,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     top.replaceChildren(
       h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${seatOf(s.current).color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
       h('div', { class: 'tb-ap' }, h('span', { class: 'h-label' }, 'Действия'), apPips, apNum),
-      h('div', { class: 'tb-time' }, choiceLabel, h('div', { class: 'tb-clock-row' }, turnClock, totals), turnBar),
     );
+    clockPanel.replaceChildren(h('div', { class: 'sc-left' }, choiceLabel, turnClock), turnBar, totals);
     tickClocks();
   }
 
@@ -691,7 +694,9 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     turnBar.classList.toggle('low', k < 0.2);
     turnBar.classList.toggle('choice', ch !== null);
     choiceLabel.textContent = ch !== null ? `выбор: ${s.players[ch].name}` : '';
-    totals.textContent = `${fmt(match.clocks.total[0])} · ${fmt(match.clocks.total[1])}`;
+    totals.replaceChildren(
+      ...([0, 1] as PlayerId[]).map((q) => h('span', { class: 'sc-total' }, h('span', { class: `chip chip-${seatOf(q).color}` }), fmt(match.clocks.total[q]))),
+    );
   }
   const clockTimer = setInterval(tickClocks, 250);
 
@@ -735,10 +740,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const pcs = piecesOf(s, p);
     const cnt = [0, 1, 2].map((r) => pcs.filter((q) => q.rank === r).length);
     const active = s.current === p && s.phase === 'play';
-    const k = s.mode.karmaEvery;
-    const inCycle = pl.ownTurns % k;
-    const karmaNow = pl.ownTurns > 0 && inCycle === 0 && s.current === p;
-    const until = karmaNow ? 0 : k - inCycle;
     const up = facesUp(p);
     const color = seatOf(p).color;
     const held = pl.held;
@@ -761,13 +762,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         { class: 'pl-pieces' },
         ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, color, 2, up), h('b', {}, String(cnt[r])))),
       ),
-      h(
-        'div',
-        { class: 'karma-track' },
-        h('div', { class: 'h-label' }, 'Карма'),
-        h('div', { class: 'kt-cells' }, ...Array.from({ length: k }, (_, i) => h('div', { class: `kt ${i < (karmaNow ? k : inCycle) ? 'on' : ''} ${i === k - 1 ? 'last' : ''}` }))),
-        h('div', { class: `kt-label ${karmaNow ? 'now' : ''}` }, karmaNow ? 'сейчас' : s.deck.length ? `через ${until}` : 'колода пуста'),
-      ),
       held
         ? h(
             'div',
@@ -784,6 +778,23 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
             ),
           )
         : null,
+    );
+  }
+
+  /** Общий счётчик Кармы: клетка зажигается, когда сходили оба (круг). Карты оба получают в свой ход
+   *  на круге karmaEvery (движок: ownTurns % karmaEvery === 0) — на этом круге шкала полна и мигает «сейчас». */
+  function karmaPanel() {
+    const k = s.mode.karmaEvery;
+    const round = Math.max(s.players[0].ownTurns, s.players[1].ownTurns);
+    const inCycle = round % k;
+    const karmaNow = round > 0 && inCycle === 0;
+    const done = karmaNow ? k : Math.max(0, inCycle - 1);
+    return h(
+      'section',
+      { class: 'slab karma-track karma-panel' },
+      h('div', { class: 'kp-head' }, h('div', { class: 'h-label' }, 'Карма'), h('div', { class: 'muted small' }, `круг ${round}`)),
+      h('div', { class: 'kt-cells' }, ...Array.from({ length: k }, (_, i) => h('div', { class: `kt ${i < done ? 'on' : ''} ${i === k - 1 ? 'last' : ''}` }))),
+      h('div', { class: `kt-label ${karmaNow ? 'now' : ''}` }, karmaNow ? 'сейчас — обоим' : s.deck.length ? `через ${k - inCycle}` : 'колода пуста'),
     );
   }
 

@@ -31,9 +31,20 @@ body .game .topbar .tb-turn { font-size: 20px; overflow: hidden; text-overflow: 
 body .game .topbar .tb-title { font-size: 16px; letter-spacing: 0.14em; }
 body .game .topbar .tb-ap { justify-content: space-between; gap: 8px; }
 body .game .topbar .ap-num { min-width: 0; text-align: right; }
-body .game .topbar .tb-time { align-items: stretch; min-width: 0; gap: 4px; }
-body .game .tb-clock-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-body .game .topbar .clock-bar { width: 100%; height: 8px; }
+
+/* ── общий счётчик Кармы (левая колонка, под своим профилем) ─────────────── */
+body .game .karma-panel { flex: none; margin-top: 0; padding: 12px 14px; }
+body .game .karma-panel .kp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+body .game .karma-panel .kp-head .h-label { margin: 0; }
+body .game .karma-panel .kt { height: 16px; }
+
+/* ── часы хода над полем ─────────────────────────────────────────────────── */
+body .game .stage-clock { flex: none; align-self: center; width: min(100%, 680px); display: flex; align-items: center; gap: 16px; padding: 8px 16px; margin-top: 6px; }
+body .game .stage-clock .sc-left { flex: none; display: flex; align-items: baseline; gap: 10px; }
+body .game .stage-clock .tb-clock { font-size: 28px; line-height: 1; }
+body .game .stage-clock .clock-bar { flex: 1; width: auto; height: 10px; }
+body .game .stage-clock .tb-totals { flex: none; display: flex; gap: 12px; font-family: var(--f-pix); font-size: 14px; }
+body .game .sc-total { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ── панель действий под полем ──────────────────────────────────────────── */
 /* по центру под полем: сверху кнопки действий, под ними — подсказка (одной ширины во всех состояниях) */
