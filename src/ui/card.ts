@@ -23,6 +23,17 @@ export type Rect = { x: number; y: number; w: number; h: number };
 /** Лицевая сторона: плашка названия и строка тира. Рамка по бокам остаётся «глянцевой». */
 const ICON_FACE_SAFE: Rect[] = [{ x: 3, y: 44, w: CARD_W - 6, h: CARD_H - 44 }];
 
+/** Название и срок действия на лице карты. Срок — на сплошной плашке: поверх крапчатого бетона мелкий текст не читался. */
+function faceLabels(id: CardId) {
+  const def = CARDS[id];
+  const when = h(
+    'div',
+    { class: 'kcard-tier' },
+    h('div', { class: 'kcard-when' }, h('span', {}, def.timing === 'period' ? 'в течение периода' : 'после получения'), def.takesTurn ? h('span', { class: 'kcard-turn' }, 'занимает ход') : null),
+  );
+  return [h('div', { class: 'kcard-name' }, def.name), when];
+}
+
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 /** Блик «лампа по глянцу», нарисованный в разрешении карты: узкая диагональная полоса (~115°), искры на рамке
@@ -106,8 +117,7 @@ export function cardEl(
       { class: `kcard-face kcard-front tier-${tier}` },
       art,
       frontShine,
-      h('div', { class: 'kcard-name' }, def.name),
-      h('div', { class: 'kcard-tier' }, def.takesTurn ? '◆ занимает ход' : def.timing === 'period' ? '◆ период' : '◆ сразу'),
+      ...faceLabels(id),
     );
   }
   const backFace = h('div', { class: 'kcard-face kcard-back' }, back, backShine);

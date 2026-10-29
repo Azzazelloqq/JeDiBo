@@ -894,7 +894,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const ov = h(
       'div',
       { class: 'overlay karma-overlay' },
-      h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: 'kr-who' }, `${s.players[p].name}`)),
+      h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: `kr-who who-${s.players[p].color}` }, s.players[p].name)),
       note ? h('div', { class: 'tut-karma-note' }, h('div', {}, note.title), h('div', { class: 'muted' }, note.sub)) : null,
       h('div', { class: 'kr-card fly-in' }, c.el),
       desc,
@@ -912,16 +912,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     sfx.stamp();
     shake(5);
-    desc.append(
-      h('div', { class: 'kr-name stamp' }, def.name),
-      h(
-        'div',
-        { class: 'tags' },
-        h('span', { class: 'tag' }, def.timing === 'period' ? 'в течение периода' : 'после получения'),
-        def.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
-      ),
-      h('p', { class: 'kr-text' }, def.text),
-    );
+    // название и срок действия уже на самой карте — под ней только эффект, на сплошной плашке
+    desc.append(h('p', { class: 'kr-text stamp' }, def.text));
     const human = match.isHuman(p);
     await new Promise<void>((res) => {
       const done = () => {
