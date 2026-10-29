@@ -151,21 +151,45 @@ export const TIER_STYLE: Record<Tier, { face: string; rim: string; dark: string;
   fatal: { face: PAL.brand700, rim: PAL.brand400, dark: PAL.brand800, label: 'роковая', glow: PAL.brand400 },
 };
 
-const faceCache = new Map<CardId, Canvas>();
+/** Раскладка лица: classic — как было; plate — под названием сплошная утопленная плашка (вариант A);
+ *  text — окно иллюстрации ниже, внизу светлое поле под текст эффекта (вариант D). */
+export type FaceLayout = 'classic' | 'plate' | 'text';
+
+const faceCache = new Map<string, Canvas>();
 export const CARD_W = 52;
 export const CARD_H = 72;
+/** Поле текста у раскладки text (в пикселях карты) — card.ts кладёт поверх него DOM-текст. */
+export const TEXT_BOX = { x: 4, y: 45, w: CARD_W - 8, h: 23 };
+/** Плашка названия у раскладки plate. */
+export const NAME_PLATE = { x: 3, y: 45, w: CARD_W - 6, h: 15 };
+/** Лента названия у раскладки text — между окном иллюстрации и полем эффекта. */
+export const NAME_STRIP = { x: 4, y: 35, w: CARD_W - 8, h: 8 };
 
 export function iconCanvas(id: CardId): Canvas {
   return outline(fromAscii(ICONS[id], K, 1), PAL.void);
 }
 
-export function cardFace(id: CardId): Canvas {
-  const hit = faceCache.get(id);
+/** Утопленный прямоугольник: тень сверху-слева, свет снизу-справа (свет — слева сверху). */
+function recess(g: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number }, fill: string, rim: string) {
+  g.fillStyle = PAL.void;
+  g.fillRect(r.x - 1, r.y - 1, r.w + 1, 1);
+  g.fillRect(r.x - 1, r.y - 1, 1, r.h + 1);
+  g.fillStyle = rim;
+  g.fillRect(r.x - 1, r.y + r.h, r.w + 2, 1);
+  g.fillRect(r.x + r.w, r.y - 1, 1, r.h + 2);
+  g.fillStyle = fill;
+  g.fillRect(r.x, r.y, r.w, r.h);
+}
+
+export function cardFace(id: CardId, layout: FaceLayout = 'classic'): Canvas {
+  const key = `${layout}:${id}`;
+  const hit = faceCache.get(key);
   if (hit) return hit;
   const tier = TIER_STYLE[tierOf(CARDS[id])];
   const [c, g] = makeCanvas(CARD_W, CARD_H);
   g.drawImage(concreteTile(CARD_W, CARD_H, hexToRgb(tier.face), id.length * 31, { pores: 50, amp: 12, cracks: true }), 0, 0);
-  const wx = 5, wy = 5, ww = CARD_W - 10, wh = 38;
+  // у text окно ниже: иконка 28 px + по пикселю воздуха, место под название и поле эффекта
+  const wx = 5, wy = layout === 'text' ? 4 : 5, ww = CARD_W - 10, wh = layout === 'text' ? 30 : 38;
   // фаска плиты
   g.fillStyle = tier.rim;
   g.fillRect(1, 1, CARD_W - 2, 1);
@@ -179,7 +203,7 @@ export function cardFace(id: CardId): Canvas {
   const win = concreteTile(ww, wh, hexToRgb(PAL.slab800), 11 + id.length, { pores: 20, amp: 6 });
   g.drawImage(win, wx, wy);
   // световое пятно за иконкой
-  for (let r = 15; r > 0; r -= 3) {
+  for (let r = layout === 'text' ? 12 : 15; r > 0; r -= 3) {
     g.globalAlpha = 0.06;
     g.fillStyle = tier.glow;
     g.beginPath();
@@ -191,11 +215,20 @@ export function cardFace(id: CardId): Canvas {
   g.fillRect(wx, wy + wh, ww, 1);
   const icon = scaleCanvas(iconCanvas(id), 2);
   g.drawImage(icon, Math.floor(wx + (ww - icon.width) / 2), Math.floor(wy + (wh - icon.height) / 2));
-  // стяжки в углах
-  for (const [x, y] of [[2, CARD_H - 6], [CARD_W - 4, CARD_H - 6]]) {
-    px(g, x, y, 'rgba(0,0,0,0.55)', 2, 2);
-    px(g, x, y + 2, 'rgba(255,255,255,0.18)', 2, 1);
+  if (layout === 'plate') recess(g, NAME_PLATE, PAL.slab900, tier.rim);
+  if (layout === 'text') {
+    // поле эффекта — светлая «бумага» без пор: фактура под мелким текстом мешает читать
+    recess(g, NAME_STRIP, PAL.slab900, tier.rim);
+    recess(g, TEXT_BOX, PAL.concrete100, tier.rim);
+    g.fillStyle = PAL.bone;
+    g.fillRect(TEXT_BOX.x, TEXT_BOX.y, TEXT_BOX.w, 1);
   }
-  faceCache.set(id, c);
+  // стяжки в углах
+  if (layout === 'classic')
+    for (const [x, y] of [[2, CARD_H - 6], [CARD_W - 4, CARD_H - 6]]) {
+      px(g, x, y, 'rgba(0,0,0,0.55)', 2, 2);
+      px(g, x, y + 2, 'rgba(255,255,255,0.18)', 2, 1);
+    }
+  faceCache.set(key, c);
   return c;
 }

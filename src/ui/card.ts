@@ -2,10 +2,11 @@
 import { CARDS, tierOf } from '../core/karma/cards';
 import type { CardId } from '../core/types';
 import { getSettings } from '../profile/profile';
-import { CARD_H, CARD_W, cardFace } from '../render/cardArt';
+import { CARD_H, CARD_W, NAME_PLATE, NAME_STRIP, TEXT_BOX, cardFace, type FaceLayout } from '../render/cardArt';
 import { PAL } from '../render/palette';
 import { makeCanvas, withAlpha } from '../render/pixel';
 import { cardBack } from '../render/sprites';
+import { CARD_SHORT, KARMA_VARIANT, timingLabel } from './cardVariant';
 import { h } from './dom';
 
 let backCache: HTMLCanvasElement | null = null;
@@ -22,6 +23,90 @@ export type Rect = { x: number; y: number; w: number; h: number };
 
 /** Лицевая сторона: плашка названия и строка тира. Рамка по бокам остаётся «глянцевой». */
 const ICON_FACE_SAFE: Rect[] = [{ x: 3, y: 44, w: CARD_W - 6, h: CARD_H - 44 }];
+/** D «Текст на карте»: без блика всё ниже окна иллюстрации — название и поле эффекта. */
+const TEXT_FACE_SAFE: Rect[] = [{ x: 3, y: 34, w: CARD_W - 6, h: CARD_H - 34 }];
+
+const LAYOUT: FaceLayout = KARMA_VARIANT === 'a' ? 'plate' : KARMA_VARIANT === 'd' ? 'text' : 'classic';
+/** Позиция в пикселях карты → проценты (DOM-текст над канвасом точно по сетке плиты). */
+const box = (r: Rect) => `left:${(r.x / CARD_W) * 100}%;top:${(r.y / CARD_H) * 100}%;width:${(r.w / CARD_W) * 100}%;height:${(r.h / CARD_H) * 100}%`;
+
+/** Подпись-тир на лице карты по варианту. */
+function faceLabels(id: CardId) {
+  const def = CARDS[id];
+  const legacy = def.takesTurn ? '◆ занимает ход' : def.timing === 'period' ? '◆ период' : '◆ сразу';
+  if (KARMA_VARIANT === 'a')
+    return [h('div', { class: 'kcard-name kv-a-name', style: box(NAME_PLATE) }, def.name), h('div', { class: 'kcard-tier kv-a-tier' }, `◆ ${timingLabel(id)}`)];
+  if (KARMA_VARIANT === 'd')
+    return [
+      h('div', { class: 'kcard-name kv-d-name', style: box(NAME_STRIP) }, def.name),
+      h('div', { class: 'kv-d-text', style: box(TEXT_BOX) }, h('span', {}, CARD_SHORT[id])),
+    ];
+  if (KARMA_VARIANT === 'b' || KARMA_VARIANT === 'c') return [h('div', { class: `kcard-name kv-${KARMA_VARIANT}-name` }, def.name)];
+  return [h('div', { class: 'kcard-name' }, def.name), h('div', { class: 'kcard-tier' }, legacy)];
+}
+
+// ── C «Подсказка»: увеличенная карта и эффект по наведению (тап на сенсорном экране) ──────────
+let peekEl: HTMLElement | null = null;
+let peekOwner: HTMLElement | null = null;
+let peekTimer = 0;
+function hidePeek() {
+  clearTimeout(peekTimer);
+  peekEl?.remove();
+  peekEl = peekOwner = null;
+}
+function showPeek(owner: HTMLElement, id: CardId) {
+  hidePeek();
+  const def = CARDS[id];
+  const big = cardEl(id, { scale: 3, idle: false, tilt: false, peek: false }).el;
+  const el = h(
+    'div',
+    { class: `kv-peek tier-${tierOf(def)}` },
+    big,
+    h(
+      'div',
+      { class: 'kv-peek-text' },
+      h('div', { class: 'kv-peek-name' }, def.name),
+      h('div', { class: 'kv-peek-when' }, timingLabel(id)),
+      h('div', { class: 'kv-peek-short' }, CARD_SHORT[id]),
+      h('p', { class: 'kv-peek-full' }, def.text),
+    ),
+  );
+  document.body.appendChild(el);
+  const r = owner.getBoundingClientRect();
+  const pw = el.offsetWidth, ph = el.offsetHeight;
+  const gap = 12;
+  let x = r.right + gap;
+  if (x + pw > innerWidth - 8) x = r.left - gap - pw;
+  if (x < 8) x = Math.max(8, Math.min(innerWidth - pw - 8, r.left + r.width / 2 - pw / 2));
+  let y = Math.min(Math.max(8, r.top + r.height / 2 - ph / 2), innerHeight - ph - 8);
+  // на узком экране — под картой (или над ней), во всю ширину
+  if (x < r.right && x + pw > r.left) y = r.bottom + gap + ph < innerHeight ? r.bottom + gap : Math.max(8, r.top - gap - ph);
+  el.style.left = `${Math.round(x)}px`;
+  el.style.top = `${Math.round(y)}px`;
+  peekEl = el;
+  peekOwner = owner;
+  // карта могла исчезнуть при перерисовке экрана — тогда и подсказку убираем
+  const watch = () => {
+    if (peekOwner !== owner) return;
+    if (!owner.isConnected) return hidePeek();
+    requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
+}
+function attachPeek(el: HTMLElement, id: CardId) {
+  el.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    clearTimeout(peekTimer);
+    peekTimer = window.setTimeout(() => showPeek(el, id), 180);
+  });
+  el.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && hidePeek());
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'mouse') return;
+    if (peekOwner === el) return hidePeek();
+    showPeek(el, id);
+    setTimeout(() => document.addEventListener('pointerdown', hidePeek, { once: true }));
+  });
+}
 
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -76,7 +161,7 @@ export interface CardEl {
 
 export function cardEl(
   id: CardId | null,
-  opts: { scale?: number; faceUp?: boolean; idle?: boolean; tilt?: boolean; shineSafe?: Rect[] } = {},
+  opts: { scale?: number; faceUp?: boolean; idle?: boolean; tilt?: boolean; shineSafe?: Rect[]; peek?: boolean } = {},
 ): CardEl {
   const scale = opts.scale ?? 3;
   const w = CARD_W * scale;
@@ -97,7 +182,7 @@ export function cardEl(
   let tier = 'simple';
   if (id) {
     const def = CARDS[id];
-    const art = cloneCanvas(cardFace(id));
+    const art = cloneCanvas(cardFace(id, LAYOUT));
     art.className = 'pix kcard-art';
     tier = tierOf(def);
     frontShine = shineCanvas();
@@ -106,18 +191,19 @@ export function cardEl(
       { class: `kcard-face kcard-front tier-${tier}` },
       art,
       frontShine,
-      h('div', { class: 'kcard-name' }, def.name),
-      h('div', { class: 'kcard-tier' }, def.takesTurn ? '◆ занимает ход' : def.timing === 'period' ? '◆ период' : '◆ сразу'),
+      ...faceLabels(id),
     );
   }
   const backFace = h('div', { class: 'kcard-face kcard-back' }, back, backShine);
   const inner = h('div', { class: 'kcard-inner' }, front ?? '', backFace);
-  const el = h('div', { class: `kcard ${opts.idle !== false ? 'idle' : ''}`, style: `width:${w}px;height:${hgt}px;--s:${scale}` }, inner);
+  const el = h('div', { class: `kcard ${opts.idle !== false ? 'idle' : ''} ${scale <= 2 ? 'kcard-small' : ''}`, style: `width:${w}px;height:${hgt}px;--s:${scale}` }, inner);
+  // подсказка — у мелких карт (рука, сетка Колоды); крупная карта в оверлее и так с текстом рядом
+  if (KARMA_VARIANT === 'c' && id && opts.peek !== false && scale <= 2) attachPeek(el, id);
   el.style.setProperty('--phase', `${Math.random() * -6}s`);
   if (opts.faceUp !== false && id) el.classList.add('face-up');
 
   if (opts.tilt !== false) {
-    const safe = opts.shineSafe ?? ICON_FACE_SAFE;
+    const safe = opts.shineSafe ?? (LAYOUT === 'text' ? TEXT_FACE_SAFE : ICON_FACE_SAFE);
     const tint = tier === 'fatal' ? PAL.brand100 : tier === 'rare' ? PAL.amber100 : PAL.bone;
     let sparks: [number, number][] = [];
     let last = { nx: 0.5, ny: 0.5 };

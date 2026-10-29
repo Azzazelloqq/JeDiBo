@@ -11,6 +11,8 @@ import { initialScreen, screen, wantsTutorial } from './ui/nav';
 import './styles/game-layout.css';
 import './styles/fonts.css';
 import './styles/tutorial.css';
+import './styles/karma-variants.css';
+import { mountKarmaSwitcher } from './ui/cardVariant';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
@@ -42,6 +44,7 @@ function applyTheme() {
 
 async function boot() {
   applyTheme();
+  mountKarmaSwitcher();
   setFavicon();
   startBackground(document.getElementById('bg') as HTMLCanvasElement);
   applySettings();

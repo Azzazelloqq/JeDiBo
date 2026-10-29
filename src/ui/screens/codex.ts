@@ -4,6 +4,7 @@ import { setMood } from '../../render/background';
 import { TIER_STYLE } from '../../render/cardArt';
 import { open } from '../nav';
 import { cardEl } from '../card';
+import { effectText } from '../cardVariant';
 import { btn, h } from '../dom';
 
 /** Выбранная карта — остаётся выбранной при следующем заходе в Колоду. */
@@ -30,7 +31,7 @@ export function codexScreen(root: HTMLElement) {
           d.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
           h('span', { class: 'tag' }, `×${d.count} в колоде`),
         ),
-        h('p', { class: 'cd-quote' }, d.text),
+        effectText(d.id, 'cd-quote'),
         h('div', { class: 'h-label' }, 'Классический эффект'),
         h('p', { class: 'cd-rule' }, d.rule),
       ),

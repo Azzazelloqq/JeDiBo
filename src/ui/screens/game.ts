@@ -18,6 +18,7 @@ import { animSpeed, wait } from '../../render/tween';
 import { Match } from '../../session/match';
 import { endNet, type NetSession } from '../../session/netSession';
 import { open } from '../nav';
+import { effectText, heldScale, heldText } from '../cardVariant';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
 import { avatarEl, pieceIcon, titleEl } from '../widgets';
@@ -731,7 +732,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ? h(
             'div',
             { class: `held ${burning ? 'burning' : ''}` },
-            cardEl(held.card, { scale: 2, idle: true }).el,
+            cardEl(held.card, { scale: heldScale(), idle: true }).el,
             h(
               'div',
               { class: 'held-info' },
@@ -739,6 +740,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
               burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
               match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-amber btn-small', { disabled: !canPlayHeld }) : null,
             ),
+            heldText(held.card),
           )
         : null,
     );
@@ -894,7 +896,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         h('span', { class: 'tag' }, def.timing === 'period' ? 'в течение периода' : 'после получения'),
         def.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
       ),
-      h('p', { class: 'kr-text' }, def.text),
+      effectText(card, 'kr-text'),
     );
     const human = match.isHuman(p);
     await new Promise<void>((res) => {
