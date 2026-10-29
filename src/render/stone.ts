@@ -1,9 +1,10 @@
 // Фактуры потёртого камня (концепты): слои, царапины, потёртости, сколы, прожилки.
 // Всё считается в целых пикселях низкого разрешения и бесшовно (координаты по модулю плитки).
 // Свет слева-сверху: у царапины и скола тёмная кромка сверху, светлая снизу.
-import { makeCanvas, seeded, type Canvas } from './pixel';
+import { PAL } from './palette';
+import { hexToRgb, makeCanvas, seeded, type Canvas } from './pixel';
 
-export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3';
+export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3' | 'edgeworn4';
 type RGB = [number, number, number];
 
 // упорядоченный дизеринг 4×4 — для мягких краёв потёртостей без градиентов
@@ -21,6 +22,7 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
   const k = light ? 2.4 : 2; // общая сила следов
   const idx = (x: number, y: number) => (((y % h) + h) % h) * w + (((x % w) + w) % w);
   const add = (x: number, y: number, v: number) => (d[idx(x, y)] += v);
+  const white = new Uint8Array(w * h); // пиксели, стёртые до белого (bone)
 
   // бесшовный шум значений: решётка по модулю, сглаженная интерполяция
   const noise = (cell: number) => {
@@ -159,6 +161,18 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
       }
   };
 
+  /** Белые потёртости по краям: стёртое до белого (bone) — на светлом, но не белом камне. */
+  const edgeWhite = (depth: number) => {
+    const n = noise(8);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const e = Math.min(x, y, w - 1 - x, h - 1 - y);
+        const reach = depth * (0.6 + (n(x, y) + 0.5) * 0.9);
+        const dens = Math.max(0, Math.min(1, 1 - e / reach));
+        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) white[idx(x, y)] = 1;
+      }
+  };
+
   /** Сколы у кромки: чаще всего по краям поверхности. */
   const edgeChips = (count: number) => {
     for (let i = 0; i < count; i++) {
@@ -216,7 +230,8 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     }
     case 'edgeworn':
     case 'edgeworn2':
-    case 'edgeworn3': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
+    case 'edgeworn3':
+    case 'edgeworn4': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
       mottle(1);
       scuffs(4, -0.22);
       const dir = rnd() * Math.PI;
@@ -224,7 +239,8 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
       chips(Math.floor((w * h) / 1100));
       if (whole) {
         // светлый камень: тёмная стёртость читается как грязь — варианты: край светлее (edgeworn2) или только сколы (edgeworn3)
-        const mode = !light || style === 'edgeworn' ? 'wear' : style === 'edgeworn2' ? 'polish' : 'chips';
+        const mode = !light || style === 'edgeworn' ? 'wear' : style === 'edgeworn2' ? 'polish' : style === 'edgeworn4' ? 'white' : 'chips';
+        if (mode === 'white') edgeWhite(7);
         if (mode === 'wear') edgeWear(7, 7);
         if (mode === 'polish') edgeWear(9, 7, 1);
         edgeChips(Math.floor((w + h) / (mode === 'chips' ? 5 : 9)));
@@ -242,7 +258,12 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
 
   const [c, g] = makeCanvas(w, h);
   const img = g.createImageData(w, h);
+  const bone = hexToRgb(PAL.bone);
   for (let i = 0; i < d.length; i++) {
+    if (white[i]) {
+      img.data.set([bone[0], bone[1], bone[2], 255], i * 4);
+      continue;
+    }
     const v = Math.round(d[i]);
     img.data[i * 4] = base[0] + v;
     img.data[i * 4 + 1] = base[1] + v;
@@ -256,12 +277,12 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
 /** Потёртости по кромке для CSS-панелей (их фон — повторяющаяся плитка, края которой не совпадают с краями панели).
  *  Четыре полупрозрачные полосы: сверху, снизу, слева, справа; накладываются слоями фона поверх фактуры.
  *  onLight — панель светлая (следы тёмные), иначе следы светлые. Возвращает значение для CSS `background`. */
-export function edgeWearLayers(onLight: boolean, seed: number, mode: 'wear' | 'polish' | 'chips' = 'wear'): string {
+export function edgeWearLayers(onLight: boolean, seed: number, mode: 'wear' | 'polish' | 'chips' | 'white' = 'wear'): string {
   const L = 160; // длина полосы в пикселях фактуры
   const D = 9; // глубина потёртости от кромки
   const rnd = seeded(seed);
   if (!onLight) mode = 'wear'; // на тёмном светлая стёртость и так выглядит как износ
-  const wearCol = mode === 'polish' ? 'rgba(255,255,255,0.7)' : onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
+  const wearCol = mode === 'white' ? PAL.bone : mode === 'polish' ? 'rgba(255,255,255,0.7)' : onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
   const strip = () => {
     // полоса «сверху»: кромка на y = 0
     const [c, g] = makeCanvas(L, D);
