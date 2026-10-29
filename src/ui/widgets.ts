@@ -11,11 +11,13 @@ import logoSvg from '../assets/logo/jedibo-logo.svg?raw';
 import markSvg from '../assets/logo/jedibo-mark.svg?raw';
 
 const LOGO_PX = 3;
-const pixelLogoCache = new Map<number, Promise<HTMLCanvasElement>>();
+const pixelLogoCache = new Map<string, Promise<HTMLCanvasElement>>();
 /** Полный логотип в пикселях: SVG из гайда растрируется в k px на модуль знака (знак — 7 модулей по высоте,
- *  так квадраты знака ложатся на сетку ровно), затем красится гранитом (pixelLogo). Кэш — по k. */
-function pixelFullLogo(k: number) {
-  let p = pixelLogoCache.get(k);
+ *  так квадраты знака ложатся на сетку ровно), затем красится камнем (pixelLogo; `carved` — высеченный).
+ *  Кэш — по k и варианту. */
+function pixelFullLogo(k: number, carved: boolean) {
+  const key = `${k}${carved ? 'c' : ''}`;
+  let p = pixelLogoCache.get(key);
   if (!p) {
     p = new Promise((res, rej) => {
       const H = 7 * k;
@@ -25,31 +27,33 @@ function pixelFullLogo(k: number) {
       img.onload = () => {
         const [c, g] = makeCanvas(W, H);
         g.drawImage(img, 0, 0, W, H);
-        res(pixelLogo(c));
+        res(pixelLogo(c, carved));
       };
       img.onerror = rej;
       img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     });
-    pixelLogoCache.set(k, p);
+    pixelLogoCache.set(key, p);
   }
   return p;
 }
 
 /** Логотип из гайда. Полный красный — пиксельный гранит (`vector: true` — исходный SVG); остальные — SVG,
  *  цвет через currentColor. `scale` — 1 ≈ 151 px по высоте (как в гайде). Мелкий знак (≤ 48 px) можно взять
- *  пиксельным: `pixel: true` (только `variant: 'mark'`). */
-export function logoEl(opts: { variant?: 'full' | 'mark'; color?: 'brand' | 'ink' | 'bone'; scale?: number; pixel?: boolean; plate?: boolean; vector?: boolean } = {}) {
+ *  пиксельным: `pixel: true` (только `variant: 'mark'`). `carved` — пиксельный полный логотип высечен в плите
+ *  углублением. */
+export function logoEl(opts: { variant?: 'full' | 'mark'; color?: 'brand' | 'ink' | 'bone'; scale?: number; pixel?: boolean; plate?: boolean; vector?: boolean; carved?: boolean } = {}) {
   const variant = opts.variant ?? 'full';
   const color = opts.color ?? 'brand';
   const scale = opts.scale ?? 1;
+  const carved = !!opts.carved;
   let art: Element;
   if (variant === 'full' && color === 'brand' && !opts.vector) {
     // место под логотип занято сразу — без скачка раскладки, пока SVG растрируется
     const k = Math.max(3, Math.round((151 * scale) / 7 / LOGO_PX));
     const H = 7 * k;
     const W = Math.round((438 / 151) * H);
-    const holder = h('div', { class: 'logo-art logo-pix', style: `width:${W * LOGO_PX}px;height:${(H + 2) * LOGO_PX}px` });
-    void pixelFullLogo(k).then((src) => {
+    const holder = h('div', { class: `logo-art logo-pix ${carved ? 'logo-carved' : ''}`, style: `width:${W * LOGO_PX}px;height:${(H + (carved ? 0 : 2)) * LOGO_PX}px` });
+    void pixelFullLogo(k, carved).then((src) => {
       const [c, g] = makeCanvas(src.width, src.height);
       g.drawImage(src, 0, 0);
       holder.replaceChildren(canvasEl(c, LOGO_PX));

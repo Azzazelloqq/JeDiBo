@@ -14,7 +14,7 @@ export function rulesScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'page' },
-      h('div', { class: 'page-head' }, h('h1', {}, 'Правила · Классика'), h('div', { class: 'page-sub' }, 'Уничтожьте все фигуры соперника'), btn('В меню', () => open('menu'))),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Правила · Классика'), h('div', { class: 'page-sub' }, 'Уничтожьте все фигуры соперника'), btn('В меню', () => open('menu'), 'btn-dark')),
       h(
         'div',
         { class: 'rules-grid' },

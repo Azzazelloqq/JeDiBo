@@ -42,7 +42,7 @@ export function profileScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'Профиль'), h('div', { class: 'page-sub' }, 'Хранится в этом браузере'), btn('В меню', () => open('menu'))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'Профиль'), h('div', { class: 'page-sub' }, 'Хранится в этом браузере'), btn('В меню', () => open('menu'), 'btn-dark')),
         h(
           'div',
           { class: 'profile-grid' },
@@ -95,8 +95,9 @@ export function profileScreen(root: HTMLElement) {
               h(
                 'div',
                 { class: 'stats' },
-                stat('побед', p.wins, 'good'),
-                stat('поражений', p.losses, 'bad'),
+                // цвет — только когда есть что показать: зелёный и красный ноль ничего не значат
+                stat('побед', p.wins, p.wins ? 'good' : ''),
+                stat('поражений', p.losses, p.losses ? 'bad' : ''),
                 stat('ничьих', p.draws),
                 stat('винрейт', `${wr}%`),
                 stat('серия', p.streak),
@@ -117,8 +118,8 @@ export function profileScreen(root: HTMLElement) {
                     'div',
                     { class: `emb ${have[em.id] ? 'got' : 'locked'}`, title: have[em.id] ? `открыта ${dayLabel(have[em.id])}` : 'ещё не открыта' },
                     canvasEl(emblemIcon(em.id, em.tier, !have[em.id]), 3, 'emb-icon'),
-                    h('div', { class: 'emb-body' }, h('div', { class: 'emb-name' }, em.name), h('div', { class: 'emb-desc' }, em.desc)),
-                    h('div', { class: `emb-tier t-${em.points}` }, em.tier),
+                    // тир — строкой под названием: в углу он теснил длинные названия на две строки
+                    h('div', { class: 'emb-body' }, h('div', { class: 'emb-name' }, em.name), h('div', { class: `emb-tier t-${em.points}` }, em.tier), h('div', { class: 'emb-desc' }, em.desc)),
                   ),
                 ),
               ),

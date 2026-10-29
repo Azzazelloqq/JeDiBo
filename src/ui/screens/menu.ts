@@ -1,5 +1,5 @@
 import { LEVELS, type LevelId } from '../../ai/levels';
-import { saveProfile } from '../../profile/profile';
+import { getProfile, saveProfile } from '../../profile/profile';
 import { setMood } from '../../render/background';
 import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
@@ -35,7 +35,7 @@ export function chooseLevel() {
           ),
         ),
       ),
-      h('div', { class: 'row' }, btn('Отмена', close, 'btn-stone btn-small')),
+      h('div', { class: 'row' }, btn('Отмена', close, 'btn-dark')),
     ),
   );
   document.body.appendChild(ov);
@@ -63,7 +63,7 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'menu-main' },
-      h('div', { class: 'logo-wrap' }, logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true })),
+      h('div', { class: 'logo-wrap' }, logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true, carved: true })),
       h(
         'div',
         { class: 'mode-row' },
@@ -74,7 +74,8 @@ export function menuScreen(root: HTMLElement) {
       h(
         'nav',
         { class: 'menu-bar' },
-        btn('Обучение', () => open('game', 'tutorial')),
+        // главный вход для новичка — выделен, пока обучение не пройдено
+        btn('Обучение', () => open('game', 'tutorial'), getProfile().tutorialDone ? 'btn-stone' : 'btn-amber'),
         btn('Колода', () => open('codex')),
         btn('Правила', () => open('rules')),
         btn('Профиль', () => open('chronicle')),

@@ -235,31 +235,35 @@ export function tint(src: Canvas, color: string): Canvas {
   return c;
 }
 
-/** Пиксельный логотип по растровой маске формы (из SVG, ui/widgets.ts): красный гранит в разрешении маски,
- *  свет слева-сверху — светлая кромка сверху, полутон слева; снизу — «толщина» камня в D пикселей, как у фигур. */
-export function pixelLogo(mask: Canvas): Canvas {
-  const w = mask.width, hh = mask.height, D = 2;
+/** Пиксельный логотип по растровой маске формы (из SVG, ui/widgets.ts): красный камень в разрешении маски,
+ *  без крапинок и пор — только мягкие пятна. Свет слева-сверху.
+ *  Выпуклый: светлая кромка сверху, полутон слева; снизу — «толщина» камня в D пикселей, как у фигур.
+ *  `carved` — высечен в плите (основной вид в меню): дно темнее, верхняя и левая стенки в тени,
+ *  нижняя и правая освещены. */
+export function pixelLogo(mask: Canvas, carved = false): Canvas {
+  const w = mask.width, hh = mask.height, D = carved ? 0 : 2;
   const a = mask.getContext('2d')!.getImageData(0, 0, w, hh).data;
   const on = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < hh && a[(y * w + x) * 4 + 3] > 110;
+  const st = STONE.red;
   const [c, g] = makeCanvas(w, hh + D);
-  g.drawImage(concreteTile(w, hh + D, hexToRgb(PAL.logo), 41, { pores: 30, amp: 12 }), 0, 0);
+  g.drawImage(concreteTile(w, hh + D, hexToRgb(carved ? st.base : PAL.logo), 41, { pores: 0, amp: carved ? 8 : 12 }), 0, 0);
   const img = g.getImageData(0, 0, w, hh + D);
   const d = img.data;
-  const st = STONE.red;
-  const rnd = seeded(43);
   const set = (i: number, hex: string) => d.set([...hexToRgb(hex), 255], i);
   for (let y = 0; y < hh + D; y++)
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
+      if (carved) {
+        if (!on(x, y)) d[i + 3] = 0;
+        else if (!on(x, y - 1)) set(i, st.outline);
+        else if (!on(x, y - 2) || !on(x - 1, y)) set(i, st.side);
+        else if (!on(x, y + 1) || !on(x + 1, y)) set(i, st.hi);
+        continue;
+      }
       if (on(x, y)) {
         if (!on(x, y - 1)) set(i, st.hi);
         else if (!on(x - 1, y)) set(i, st.light);
         else if (!on(x, y + 1) || !on(x + 1, y)) set(i, st.base);
-        else {
-          const r = rnd();
-          if (r < 0.025) set(i, st.speckLight);
-          else if (r < 0.06) set(i, st.speckDark);
-        }
       } else if (on(x, y - 1) || on(x, y - 2)) set(i, st.side);
       else d[i + 3] = 0;
     }
