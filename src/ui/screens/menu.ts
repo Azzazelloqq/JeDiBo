@@ -1,5 +1,5 @@
 import { LEVELS, type LevelId } from '../../ai/levels';
-import { saveProfile } from '../../profile/profile';
+import { getProfile, saveProfile } from '../../profile/profile';
 import { setMood } from '../../render/background';
 import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
@@ -8,12 +8,6 @@ import { open } from '../nav';
 import { lobbyScreen } from './lobby';
 
 export const VERSION = '0.1.0-PROTO';
-
-const LEVEL_NOTE: Record<LevelId, string> = {
-  novice: 'часто ошибается',
-  amateur: 'не зевает простое',
-  master: 'считает на ход вперёд',
-};
 
 /** Выбор уровня Странника перед партией. Уровень запоминается в профиле, но в окне не подсвечивается. */
 export function chooseLevel() {
@@ -29,19 +23,19 @@ export function chooseLevel() {
     h(
       'div',
       { class: 'slab dialog level-dialog' },
-      h('h2', {}, 'Уровень Странника'),
+      h('h2', {}, 'Уровень бота'),
       h(
         'div',
         { class: 'level-list' },
         ...LEVELS.map((l) =>
           btn(
-            `${l.name} · ${l.rating} — ${LEVEL_NOTE[l.id]}`,
+            `Бот ${l.name.toLowerCase()}`,
             () => start(l.id),
             'btn-stone level-btn',
           ),
         ),
       ),
-      h('div', { class: 'row' }, btn('Отмена', close, 'btn-stone btn-small')),
+      h('div', { class: 'row' }, btn('Отмена', close, 'btn-dark')),
     ),
   );
   document.body.appendChild(ov);
@@ -69,7 +63,7 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'menu-main' },
-      h('div', { class: 'logo-wrap' }, logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true })),
+      h('div', { class: 'logo-wrap' }, logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true, carved: true })),
       h(
         'div',
         { class: 'mode-row' },
@@ -80,7 +74,8 @@ export function menuScreen(root: HTMLElement) {
       h(
         'nav',
         { class: 'menu-bar' },
-        btn('Обучение', () => open('game', 'tutorial')),
+        // главный вход для новичка — выделен, пока обучение не пройдено
+        btn('Обучение', () => open('game', 'tutorial'), getProfile().tutorialDone ? 'btn-stone' : 'btn-amber'),
         btn('Колода', () => open('codex')),
         btn('Правила', () => open('rules')),
         btn('Профиль', () => open('chronicle')),

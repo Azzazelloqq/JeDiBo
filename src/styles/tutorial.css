@@ -3,7 +3,7 @@
 
 .tut-hint {
   position: absolute; top: 6px; left: 50%; z-index: 5;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   max-width: calc(100% - 32px);
   font-family: var(--f-pix); font-size: 20px; line-height: 1.2;
   padding: 9px 16px 8px;
@@ -29,20 +29,23 @@
   transition: transform 0.18s, opacity 0.18s;
 }
 .tut-cap.on { transform: translate(-50%, -50%) scale(1) rotate(-2deg); opacity: 1; transition: transform 0.32s var(--bounce), opacity 0.1s; }
+.tut-cap-low { top: 80%; }
 .tut-cap-amber { background: var(--amber-500); }
 .tut-cap-stone { background: var(--slab-700); }
-.tut-cap-text { font-family: var(--f-pix); font-size: 34px; letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 3px 3px 0 var(--void); white-space: nowrap; }
-.tut-cap-sub { font-family: var(--f-pix); font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.9; margin-top: 4px; }
+.tut-cap-text { font-family: var(--f-pix); font-size: 32px; letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 3px 3px 0 var(--void); white-space: nowrap; }
+.tut-cap-sub { font-family: var(--f-pix); font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.9; margin-top: 4px; }
 
 .btn.tut-pulse { animation: tutPulse 0.9s ease-in-out infinite; }
 @keyframes tutPulse { 50% { transform: translateY(-3px) scale(1.06); } }
+
+.tut-end-actions { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 8px; }
 
 .tut-karma-note { text-align: center; font-family: var(--f-pix); font-size: 20px; letter-spacing: 0.06em; }
 .tut-karma-note .muted { font-size: 14px; margin-top: 4px; }
 
 @media (max-width: 760px) {
-  .tut-hint { font-size: 15px; padding: 7px 10px 6px; }
-  .tut-cap-text { font-size: 22px; white-space: normal; }
+  .tut-hint { font-size: 16px; padding: 7px 10px 6px; }
+  .tut-cap-text { font-size: 24px; white-space: normal; }
   .tut-cap { width: calc(100% - 40px); }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -24,8 +24,9 @@ export function settingsScreen(root: HTMLElement) {
       applySettings();
       render();
     };
+    // вкл/выкл — такой же переключатель из двух кнопок, как выбор темы и скорости: выбранное — янтарное
     const toggle = (label: string, v: boolean, on: () => void) =>
-      h('div', { class: 'set-row' }, h('span', {}, label), btn(v ? 'ВКЛ' : 'ВЫКЛ', on, v ? 'btn-brand btn-small' : 'btn-dark btn-small'));
+      h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...([['Вкл', true], ['Выкл', false]] as const).map(([l, x]) => btn(l, () => x !== v && on(), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
     const choice = (label: string, opts: [string, number][], v: number, on: (x: number) => void) =>
       h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
     const choiceStr = (label: string, opts: [string, string][], v: string, on: (x: string) => void) =>
@@ -39,7 +40,7 @@ export function settingsScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page narrow' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'Настройки'), btn('В меню', () => open('menu'))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'Настройки'), btn('В меню', () => open('menu'), 'btn-dark')),
         h(
           'section',
           { class: 'slab settings' },

@@ -38,7 +38,7 @@ export function codexScreen(root: HTMLElement) {
   };
   const grid = h(
     'div',
-    { class: 'codex-grid' },
+    { class: 'codex-grid slab' },
     ...ALL_CARDS.map((d) => {
       const c = cardEl(d.id, { scale: 2 });
       c.el.addEventListener('click', () => show(d));
@@ -50,7 +50,7 @@ export function codexScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'page' },
-      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), btn('В меню', () => open('menu'))),
+      h('div', { class: 'page-head' }, h('h1', {}, 'Колода Кармы'), h('div', { class: 'page-sub' }, '34 карты в общей колоде · 21 случайная в матче'), btn('В меню', () => open('menu'), 'btn-dark')),
       h('div', { class: 'codex' }, grid, detail),
     ),
   );

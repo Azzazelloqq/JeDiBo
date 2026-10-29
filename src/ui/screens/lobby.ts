@@ -135,7 +135,7 @@ export function lobbyScreen(root: HTMLElement) {
           { class: 'slab lobby-card' },
           h('div', { class: 'h-label' }, 'Своя комната'),
           h('p', { class: 'muted' }, 'Вы получите код и ссылку для соперника. Игра идёт через ваш браузер — не закрывайте вкладку до конца партии.'),
-          btn('Создать комнату', create, 'btn-brand btn-big'),
+          btn('Создать', create, 'btn-amber btn-big'), // «комната» — уже в заголовке карточки; длинная подпись переносилась
         ),
         h(
           'section',
@@ -159,8 +159,9 @@ export function lobbyScreen(root: HTMLElement) {
         h(
           'div',
           { class: 'row' },
-          canShare ? btn('Поделиться', () => void shareLink(code), 'btn-brand') : null,
-          btn('Скопировать ссылку', () => void copyLink(code), 'btn-amber'),
+          // главное действие — одно и янтарное: «Поделиться», а где его нет — «Скопировать ссылку»
+          canShare ? btn('Поделиться', () => void shareLink(code), 'btn-amber') : null,
+          btn('Скопировать ссылку', () => void copyLink(code), canShare ? 'btn-stone' : 'btn-amber'),
           btn('Отмена', cancel, 'btn-dark'),
         ),
         h('p', { class: `lobby-status ${st === 'failed' ? 'bad' : ''}` }, opp ? `${opp.name} подключается…` : HOST_STATUS[st]),
@@ -192,7 +193,7 @@ export function lobbyScreen(root: HTMLElement) {
       h(
         'div',
         { class: 'page narrow lobby' },
-        h('div', { class: 'page-head' }, h('h1', {}, 'По сети'), h('div', { class: 'page-sub' }, 'дуэль · Классика'), btn('В меню', () => (cancel(), open('menu')))),
+        h('div', { class: 'page-head' }, h('h1', {}, 'По сети'), h('div', { class: 'page-sub' }, 'дуэль · Классика'), btn('В меню', () => (cancel(), open('menu')), 'btn-dark')),
         failure ? h('section', { class: 'slab lobby-fail' }, failure) : null,
         body,
       ),

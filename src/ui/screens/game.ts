@@ -5,7 +5,7 @@ import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
 import { anyLegalAction, canAct, choosingOpponent, heldExpiresThisTurn, homeRows, legalTargets, pieceAt, piecesOf, targetsOf } from '../../core/rules';
-import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
+import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type Piece, type PlayerId, type Pos } from '../../core/types';
 import { ABANDON_MS } from '../../net/protocol';
 import { getProfile, recordMatch, saveProfile, type MatchRecord } from '../../profile/profile';
 import { checkEmblems, grantEmblem } from '../../profile/emblems';
@@ -110,7 +110,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     board.fit(r.width - 8, r.height - 8);
   };
   /** обучение: режиссёр подсказок и тактов (null в обычной партии) */
-  const tut: TutorialDirector | null = kind === 'tutorial' ? tutorialDirector(s, board, boardSlot) : null;
+  const tut: TutorialDirector | null = kind === 'tutorial' ? tutorialDirector(s, board, boardSlot, () => refreshBoard()) : null;
   const ro = new ResizeObserver(fit);
   ro.observe(boardSlot);
 
@@ -220,7 +220,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       kind === 'bot' ? 'уже расставился' : kind === 'net' ? (oppReady ? 'готов' : 'расставляется…') : placingFor === 0 ? 'расставится следом' : 'уже расставился';
     left.replaceChildren(
       seatCard(placingFor, kind === 'hotseat' ? `расставляет · игрок ${placingFor + 1} из 2` : 'расставляет фигуры', true),
-      presetsPanel(),
       h(
         'div',
         { class: 'rank-picks' },
@@ -235,6 +234,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           );
         }),
       ),
+      // быстрая расстановка — внизу колонки, рядом с «Готово» под полем: меньше тянуться мышью
+      presetsPanel(),
       h('div', { class: 'controls' }, btn('В меню', () => leave(), 'btn-dark btn-small')),
     );
     right.replaceChildren(
@@ -491,7 +492,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const ov = board.ov;
     ov.preview = null;
     ov.ghost = null;
-    if (s.phase !== 'play' || animating || overlayOpen) return;
+    if (s.phase !== 'play' || overlayOpen) return;
+    const pin = tut?.threat ?? null;
+    const pinned = pin !== null ? s.pieces.find((q) => q.id === pin) : undefined;
+    // во время подписей обучения — только закреплённый узор: курсор мог остаться на чужой фигуре,
+    // а партия уже ушла вперёд (вопрос карты ещё не показан)
+    if (animating) return showPattern(pinned);
     const pend = s.pending;
     if (pend) {
       const rank = pend.data.spawnRank as Rank | undefined;
@@ -501,14 +507,16 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     // выбрана своя фигура — на поле её ходы, разведку не смешиваем
     if (selected !== null) return;
-    const pin = tut?.threat ?? null;
-    const pc = (hoverCell && pieceAt(s, hoverCell)) || (pin !== null ? s.pieces.find((q) => q.id === pin) : undefined);
+    showPattern((hoverCell && pieceAt(s, hoverCell)) || pinned);
+  }
+
+  function showPattern(pc: Piece | undefined) {
     if (!pc) return;
     const side = kind === 'hotseat' ? s.current : me;
     const moves: Pos[] = [];
     const attacks: Pos[] = [];
     for (const t of targetsOf(s, pc)) (t.attack ? attacks : moves).push(t.to);
-    ov.preview = { id: pc.id, moves, attacks, foe: pc.owner !== side };
+    board.ov.preview = { id: pc.id, moves, attacks, foe: pc.owner !== side };
   }
 
   function refreshBoard() {
@@ -554,7 +562,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const fromOwner = oldBadge?.closest('.player')?.getAttribute('data-player');
     // своя панель всегда слева, соперник — справа
     const mine = viewer();
-    left.replaceChildren(playerPanel(mine), top, effectsPanel(), controls());
+    // «На поле» — только когда что-то действует: пустая плита с «пока ничего» лишь занимала колонку
+    left.replaceChildren(...[playerPanel(mine), top, effectsPanel(), controls()].filter((n): n is HTMLElement => !!n));
     right.replaceChildren(playerPanel(other(mine)), deckPanel(), logPanel());
     if (!hudShown) {
       // первый кадр партии: всё, кроме профилей (они стояли тут и на расстановке), въезжает по очереди
@@ -654,7 +663,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     let prompt: string | Node = '';
     const actions: Node[] = [];
     if (s.phase === 'over') prompt = s.endReason ?? '';
-    else if (s.pending) {
+    else if (tut) {
+      // пока идут анимации, состояние уже ушло вперёд — имя ходящего не показываем; вопрос карты — тоже подсказкой такта
+      prompt = (!animating && tut.step?.hint) || '…';
+    } else if (s.pending) {
       const src = s.pending.source === 'promotion' ? 'Повышение' : CARDS[s.pending.source].name;
       const rank = s.pending.data.spawnRank as Rank | undefined;
       prompt = human ? `${src}: ${s.pending.prompt}` : `${s.players[p].name} выбирает (${src})…`;
@@ -671,9 +683,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         );
       }
       if (human && s.pending.canSkip) actions.push(btn('Хватит', () => match.submit({ type: 'skip', by: p }), 'btn-dark btn-big'));
-    } else if (tut) {
-      // пока идут анимации, состояние уже ушло вперёд — имя ходящего не показываем
-      prompt = (!animating && tut.step?.hint) || '…';
     } else if (human) {
       prompt = selected !== null ? 'Выберите клетку: точка — ход, рамка — атака' : s.actedThisTurn ? 'Ещё действие или завершите ход' : 'Выберите фигуру';
     } else prompt = `${s.players[p].name} думает…`;
@@ -728,7 +737,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
               burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
-              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-brand btn-small', { disabled: !canPlayHeld }) : null,
+              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-amber btn-small', { disabled: !canPlayHeld }) : null,
             ),
           )
         : null,
@@ -745,20 +754,19 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   function effectsPanel() {
     const list = s.effects.filter((e) => !(e.kind === 'blitz' && e.done));
+    if (!list.length) return null;
     return h(
       'section',
       { class: 'slab' },
       h('div', { class: 'h-label' }, 'На поле'),
-      list.length
-        ? h(
-            'div',
-            { class: 'effects' },
-            ...list.map((e) => {
-              const left = e.untilOwnTurn - s.players[e.owner].ownTurns + 1;
-              return h('div', { class: `effect fx-${s.players[e.owner].color}` }, h('span', {}, EFFECT_NAME[e.kind]), h('span', { class: 'muted small' }, `${s.players[e.owner].name} · ${left <= 1 ? 'этот ход' : `ещё ${left} х.`}`));
-            }),
-          )
-        : h('div', { class: 'muted small' }, 'пока ничего не действует'),
+      h(
+        'div',
+        { class: 'effects' },
+        ...list.map((e) => {
+          const left = e.untilOwnTurn - s.players[e.owner].ownTurns + 1;
+          return h('div', { class: `effect fx-${s.players[e.owner].color}` }, h('span', {}, EFFECT_NAME[e.kind]), h('span', { class: 'muted small' }, `${s.players[e.owner].name} · ${left <= 1 ? 'этот ход' : `ещё ${left} х.`}`));
+        }),
+      ),
     );
   }
 
@@ -767,7 +775,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     return h(
       'div',
       { class: 'controls' },
-      btn('Сдаться', () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', () => match.submit({ type: 'resign', by: kind === 'hotseat' ? s.current : me })), 'btn-dark btn-small'),
+      btn('Сдаться', () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', 'Сдаться', 'Играть дальше', () => match.submit({ type: 'resign', by: kind === 'hotseat' ? s.current : me })), 'btn-dark btn-small'),
       btn('В меню', () => leave(), 'btn-dark btn-small'),
     );
   }
@@ -896,7 +904,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       };
       const label = def.timing === 'period' && mode === 'drawn' ? 'В руку' : 'Принять';
       // кнопка — только тому, кому выпала карта; чужая закрывается сама или кликом
-      if (human) btnHost.append(btn(label, done, 'btn-brand btn-big'));
+      if (human) btnHost.append(btn(label, done, 'btn-amber btn-big'));
       if (!human || kind !== 'hotseat') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });
@@ -952,13 +960,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         'div',
         { class: 'result' },
         titleEl('ПОБЕДА', 5),
-        h('div', { class: 'result-sub' }, 'Обучение пройдено'),
-        h('div', { class: 'muted' }, 'Ходы, повышение и Карма — всё, что нужно для первой партии'),
+        // главное — в бой; правила тише, под ним
         h(
           'div',
-          { class: 'row' },
-          btn('В бой против Странника', () => (ov.remove(), open('menu'), chooseLevel()), 'btn-brand btn-big'),
-          btn('Правила целиком', () => (ov.remove(), open('rules')), 'btn-stone btn-big'),
+          { class: 'tut-end-actions' },
+          btn('Тренировочный бой', () => (ov.remove(), open('menu'), chooseLevel()), 'btn-amber btn-big'),
+          btn('Правила', () => (ov.remove(), open('rules')), 'btn-stone'),
         ),
       ),
     );
@@ -1003,7 +1010,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     document.body.appendChild(ov);
   }
 
-  function confirmBox(title: string, text: string, yes: () => void) {
+  /** Подтверждение: кнопки подписаны действием («Сдаться» / «Играть дальше»), а не «Да» / «Нет». */
+  function confirmBox(title: string, text: string, yesLabel: string, noLabel: string, yes: () => void) {
     overlayOpen = true;
     match.setPaused(true);
     const close = () => {
@@ -1014,7 +1022,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const ov = h(
       'div',
       { class: 'overlay in' },
-      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('Да', () => (close(), yes()), 'btn-brand'), btn('Нет', close, 'btn-stone'))),
+      h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn(yesLabel, () => (close(), yes()), 'btn-brand'), btn(noLabel, close, 'btn-dark'))),
     );
     document.body.appendChild(ov);
   }
@@ -1093,7 +1101,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           stat('карт', match.stats.cards[me]),
           rated ? h('div', { class: 'stat' }, deltaEl, h('div', { class: 'stat-l' }, 'рейтинг')) : null,
         ),
-        h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), open('menu')), 'btn-stone btn-big')),
+        h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), open('menu')), 'btn-dark btn-big')),
       ),
     );
     document.body.appendChild(ov);
@@ -1109,7 +1117,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
   /** Реванш: офлайн — новая партия сразу; в сети — просьба в комнату, новая партия придёт как start с новым seed. */
   function rematchBtn() {
-    if (kind !== 'net') return btn('Реванш', () => open('game', { kind, level: level.id }), 'btn-brand btn-big');
+    if (kind !== 'net') return btn('Реванш', () => open('game', { kind, level: level.id }), 'btn-amber btn-big');
     const alive = client!.status === 'over' && !hostGone && client!.opponentConnected && net!.link?.status !== 'failed';
     const b = btn(
       'Реванш',
@@ -1118,7 +1126,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         b.disabled = true;
         b.textContent = oppWantsRematch ? 'Начинаем…' : 'Ждём соперника…';
       },
-      'btn-brand btn-big',
+      'btn-amber btn-big',
       { disabled: !alive },
     );
     rematchButton = b;
@@ -1129,10 +1137,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function leave() {
     if (kind === 'net') {
       if (s.phase === 'over') return endNet(true), open('menu');
-      return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', () => (endNet(true), open('menu')));
+      return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', 'Покинуть', 'Остаться', () => (endNet(true), open('menu')));
     }
     if (tut) return saveProfile({ tutorialDone: true }), open('menu');
-    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => open('menu'));
+    if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', 'Покинуть', 'Остаться', () => open('menu'));
     else open('menu');
   }
 
@@ -1176,7 +1184,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function fatal(title: string, text: string) {
     stopNetWatch();
     overlayOpen = true;
-    const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), open('menu')), 'btn-stone'))));
+    const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), open('menu')), 'btn-dark'))));
     document.body.appendChild(ov);
   }
 
