@@ -5,6 +5,7 @@ import { PAL } from './palette';
 import { makeCanvas, outline, type Canvas } from './pixel';
 
 const GLYPHS: Record<string, string[]> = {
+  student: ['...o....', '..ooo...', '........', '...x....', '..xxx...', '.xxxxx..', 'xxxxxxx.', '........'],
   firstStone: ['........', '..xxxx..', '.xxxxxx.', '.xxooxx.', '.xxooxx.', '.xxxxxx.', '..xxxx..', '........'],
   wandererWrong: ['...xx...', '..xxxx..', '..xoox..', '..xxxx..', '.xxxxxx.', 'x.xxxx.x', '..x..x..', '.xx..xx.'],
   twoAtTable: ['........', '.xx..oo.', '.xx..oo.', '........', 'xxxxxxxx', '.x....x.', '.x....x.', '........'],

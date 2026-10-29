@@ -80,6 +80,7 @@ export function menuScreen(root: HTMLElement) {
     h(
       'div',
       { class: 'menu-bar' },
+      btn('Обучение', () => open('game', 'tutorial')),
       btn('Колода', () => open('codex')),
       btn('Правила', () => open('rules')),
       btn('Летопись', () => open('chronicle')),

@@ -23,6 +23,8 @@ export interface MatchConfig {
   botLevel?: LevelId;
   /** выбор хода бота вместо BotClient; тесты подменяют, чтобы бот «задумывался». clockMs — остаток часов бота */
   botAct?: (s: GameState, p: PlayerId, clockMs?: number) => Action | null | Promise<Action | null>;
+  /** готовая позиция вместо новой партии (обучение начинается с середины боя) */
+  initial?: GameState;
   /** сетевая партия: клиент комнаты, уже получивший start. Место соперника — 'remote'. */
   net?: RoomClient;
 }
@@ -85,7 +87,7 @@ export class Match {
       });
     } else {
       const mode = cfg.mode ?? CLASSIC;
-      this.state = createGame(mode, cfg.seed ?? (Math.random() * 2 ** 31) | 0, cfg.names);
+      this.state = cfg.initial ? clone(cfg.initial) : createGame(mode, cfg.seed ?? (Math.random() * 2 ** 31) | 0, cfg.names);
       this.clocks = newClocks(mode);
     }
   }

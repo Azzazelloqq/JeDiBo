@@ -129,6 +129,14 @@ export interface GameState {
   winner: PlayerId | 'draw' | null;
   endReason: string | null;
   draw: { signature: string; turns: number } | null;
+  /** режиссированная партия (обучение): заранее известные карты Кармы по игрокам и столбцы Линии смерти */
+  rig?: Rig;
+}
+
+/** Подкрутка случайности для обучения. Каждая запись расходуется один раз, дальше — обычный ГСЧ. */
+export interface Rig {
+  draws: [CardId[], CardId[]];
+  columns: number[];
 }
 
 export type Action =

@@ -33,6 +33,8 @@ const won = (o: MatchOutcome) => o.rec.result === 'win';
 const wonOnBoard = (o: MatchOutcome) => won(o) && o.oppWiped;
 
 export const EMBLEMS: Emblem[] = [
+  // выдаётся в конце обучения (grantEmblem), партии её не проверяют
+  e('student', 'Ученик', 'Пройти обучение', 'знак', () => false),
   e('firstStone', 'Первый камень', 'Выиграть первую партию', 'знак', (o) => won(o)),
   e('wandererWrong', 'Странник ошибся', 'Выиграть у Странника', 'знак', (o) => won(o) && o.rec.kind === 'bot'),
   e('twoAtTable', 'Двое за столом', 'Доиграть партию за одним компьютером', 'знак', (o) => o.rec.kind === 'hotseat'),
@@ -67,6 +69,16 @@ export function checkEmblems(o: MatchOutcome): Emblem[] {
   fresh.forEach((em) => (have[em.id] = now));
   saveProfile({ emblems: have });
   return fresh;
+}
+
+/** Открыть эмблему вне партии (обучение). null — уже была. */
+export function grantEmblem(id: string): Emblem | null {
+  const em = EMBLEMS.find((x) => x.id === id);
+  const have = { ...unlockedEmblems() };
+  if (!em || have[id]) return null;
+  have[id] = Date.now();
+  saveProfile({ emblems: have });
+  return em;
 }
 
 /** Сводка для шапки Летописи: звание, очки, эмблемы, прогресс до следующего звания. */

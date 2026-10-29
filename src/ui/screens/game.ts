@@ -7,8 +7,9 @@ import { PRESETS } from '../../core/presets';
 import { anyLegalAction, canAct, choosingOpponent, heldExpiresThisTurn, homeRows, legalTargets, pieceAt, piecesOf, targetsOf } from '../../core/rules';
 import { Rank, key, other, unkey, type CardId, type GameEvent, type GameState, type PlayerId, type Pos } from '../../core/types';
 import { ABANDON_MS } from '../../net/protocol';
-import { getProfile, recordMatch, type MatchRecord } from '../../profile/profile';
-import { checkEmblems } from '../../profile/emblems';
+import { getProfile, recordMatch, saveProfile, type MatchRecord } from '../../profile/profile';
+import { checkEmblems, grantEmblem } from '../../profile/emblems';
+import { tutorialEnemy, tutorialState } from '../../core/tutorial';
 import { setMood } from '../../render/background';
 import { PAL } from '../../render/palette';
 import { BoardView } from '../../render/board';
@@ -20,8 +21,10 @@ import { open } from '../nav';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
 import { avatarEl, pieceIcon, rubbleEl, titleEl } from '../widgets';
+import { tutorialDirector, type TutorialDirector } from '../tutorial';
+import { chooseLevel } from './menu';
 
-type Kind = 'bot' | 'hotseat' | 'net';
+type Kind = 'bot' | 'hotseat' | 'net' | 'tutorial';
 const LETTERS = 'ABCDEFGHIJKL';
 const coord = (p: Pos) => `${LETTERS[p.x]}${12 - p.y}`;
 const GLYPH = ['▲', '■', '●'];
@@ -74,13 +77,15 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const opp = other(me);
   const names: [string, string] = client
     ? [client.state!.players[0].name, client.state!.players[1].name]
-    : kind === 'bot'
+    : kind === 'bot' || kind === 'tutorial'
       ? [prof.name, 'Странник']
       : [prof.name, 'Гость'];
   const match = new Match(
     client
       ? { names, controllers: me === 0 ? ['human', 'remote'] : ['remote', 'human'], net: client }
-      : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'], botLevel: level.id },
+      : kind === 'tutorial'
+        ? { names, controllers: ['human', 'bot'], initial: tutorialState(names), botAct: tutorialEnemy, botDelay: 750 }
+        : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'], botLevel: level.id },
   );
   const s = match.state;
   const gameSeed = s.seed;
@@ -103,6 +108,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const r = boardSlot.getBoundingClientRect();
     board.fit(r.width - 8, r.height - 8);
   };
+  /** обучение: режиссёр подсказок и тактов (null в обычной партии) */
+  const tut: TutorialDirector | null = kind === 'tutorial' ? tutorialDirector(s, board, boardSlot) : null;
   const ro = new ResizeObserver(fit);
   ro.observe(boardSlot);
 
@@ -346,6 +353,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     animating = true;
     for (const [i, e] of list.entries()) {
       chronicleFrom(e, st);
+      tut?.before(e);
       switch (e.type) {
         case 'start':
           await beginPlay();
@@ -387,12 +395,16 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         default:
           await board.playEvent(e);
       }
+      if (tut) {
+        await tut.after(e, st);
+        refreshBoard();
+      }
     }
     animating = false;
     board.sync(st);
     refresh();
     const over = events.find((e) => e.type === 'gameOver');
-    if (over && over.type === 'gameOver') await showResult(over.winner, over.reason);
+    if (over && over.type === 'gameOver') await (tut ? showTutorialEnd() : showResult(over.winner, over.reason));
   };
 
   async function beginPlay() {
@@ -423,6 +435,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       return refreshBoard();
     }
     const p = match.actor();
+    if (tut && !tut.allows(c, selected !== null ? s.pieces.find((q) => q.id === selected) : undefined)) return tut.nudge();
     if (s.pending) {
       if (s.pending.kind === 'cell' && s.pending.options.includes(key(c))) {
         sfx.select();
@@ -477,7 +490,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     // выбрана своя фигура — на поле её ходы, разведку не смешиваем
     if (selected !== null) return;
-    const pc = (hoverCell && pieceAt(s, hoverCell)) || (inspect !== null ? s.pieces.find((q) => q.id === inspect) : undefined);
+    const pin = inspect ?? tut?.threat ?? null;
+    const pc = (hoverCell && pieceAt(s, hoverCell)) || (pin !== null ? s.pieces.find((q) => q.id === pin) : undefined);
     if (!pc) return;
     const side = kind === 'hotseat' ? s.current : me;
     const moves: Pos[] = [];
@@ -496,7 +510,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     if (s.pending) {
       // выбор клетки по карте — только после того, как карта показана и принята
       if (human && s.pending.kind === 'cell' && !animating) {
-        ov.options = s.pending.options.map(unkey);
+        ov.options = tut?.step?.choose ?? s.pending.options.map(unkey);
         ov.optionsTone = DESTRUCTIVE.has(s.pending.source) ? 'brand' : 'amber';
       }
     } else {
@@ -507,6 +521,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       } else selected = null;
     }
     if (inspect !== null && !s.pieces.some((q) => q.id === inspect)) inspect = null;
+    if (tut) {
+      // узор выбранной фигуры проступает сквозь тень — так игрок видит, как она ходит
+      const lit = animating || overlayOpen ? null : tut.focus();
+      ov.focus = lit && [...lit, ...ov.moves, ...ov.attacks];
+      tut.render(animating || overlayOpen);
+    }
     updatePreview();
   }
 
@@ -630,12 +650,15 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         );
       }
       if (human && s.pending.canSkip) actions.push(btn('Хватит', () => match.submit({ type: 'skip', by: p }), 'btn-dark btn-big'));
+    } else if (tut) {
+      // пока идут анимации, состояние уже ушло вперёд — имя ходящего не показываем
+      prompt = (!animating && tut.step?.hint) || '…';
     } else if (human) {
       prompt = selected !== null ? 'Выберите клетку: точка — ход, рамка — атака' : s.actedThisTurn ? 'Ещё действие или завершите ход' : 'Выберите фигуру';
     } else prompt = `${s.players[p].name} думает…`;
-    const canEnd = human && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play';
-    if (human && !s.pending && s.phase === 'play') actions.push(btn('Отменить', () => ((selected = null), refreshBoard(), renderBottom()), 'btn-stone btn-big', { disabled: selected === null }));
-    actions.push(btn('Завершить ход', () => match.submit({ type: 'endTurn', by: s.current }), 'btn-amber btn-big bb-main', { disabled: !canEnd }));
+    const canEnd = human && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play' && (!tut || !!tut.step?.endTurn);
+    if (human && !s.pending && s.phase === 'play' && !tut) actions.push(btn('Отменить', () => ((selected = null), refreshBoard(), renderBottom()), 'btn-stone btn-big', { disabled: selected === null }));
+    actions.push(btn('Завершить ход', () => match.submit({ type: 'endTurn', by: s.current }), `btn-amber btn-big bb-main ${tut && canEnd ? 'tut-pulse' : ''}`, { disabled: !canEnd }));
     bottom.replaceChildren(h('div', { class: `prompt slab ${s.pending && human ? 'prompt-hot' : ''}` }, prompt), h('div', { class: 'bb-actions' }, ...actions));
   }
 
@@ -721,6 +744,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   function controls() {
+    if (tut) return h('div', { class: 'controls' }, btn('Пропустить обучение', () => (saveProfile({ tutorialDone: true }), open('menu')), 'btn-dark btn-small'));
     return h(
       'div',
       { class: 'controls' },
@@ -812,20 +836,27 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     sfx.karma();
     const c = cardEl(card, { scale: 4, faceUp: false, idle: true });
     const desc = h('div', { class: 'kr-desc' });
+    const note = tut && mode === 'drawn' ? tut.karmaNote(p) : null;
     const btnHost = h('div', { class: 'kr-actions' });
     const ov = h(
       'div',
       { class: 'overlay karma-overlay' },
       h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: 'kr-who' }, `${s.players[p].name}`)),
+      note ? h('div', { class: 'tut-karma-note' }, h('div', {}, note.title), h('div', { class: 'muted' }, note.sub)) : null,
       h('div', { class: 'kr-card fly-in' }, c.el),
       desc,
       btnHost,
     );
     document.body.appendChild(ov);
     await wait(550);
-    c.flip(true);
-    sfx.cardFlip();
-    await wait(380);
+    if (note) {
+      await roulette(c.el.parentElement!, c.el, tut!.roulette(p));
+      await wait(120);
+    } else {
+      c.flip(true);
+      sfx.cardFlip();
+      await wait(380);
+    }
     sfx.stamp();
     shake(5);
     desc.append(
@@ -855,6 +886,64 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     await wait(260);
     ov.remove();
     overlayOpen = false;
+  }
+
+  /** Обучение: лица карт мелькают, как барабан, который тормозит. Каждый щелчок чуть дольше предыдущего,
+   *  на предпоследней (плохой) карте барабан почти встал — и последним щелчком приходит настоящая карта. */
+  async function roulette(host: HTMLElement, real: HTMLElement, faces: CardId[]) {
+    const K = 1.32;
+    // интервал на предпоследней карте ~360 мс, от него вниз по геометрической прогрессии
+    let delay = 360 / K ** (faces.length - 1);
+    for (const [i, id] of faces.entries()) {
+      host.replaceChildren(cardEl(id, { scale: 4, idle: false, tilt: false }).el);
+      sfx.tick();
+      if (i === faces.length - 1) sfx.heartbeat();
+      await wait(delay);
+      delay *= K;
+    }
+    // настоящая карта — тем же щелчком барабана, сразу лицом вверх, без переворота
+    const inner = real.querySelector<HTMLElement>('.kcard-inner');
+    if (inner) inner.style.transition = 'none';
+    real.classList.add('face-up');
+    host.replaceChildren(real);
+    void real.offsetWidth;
+    if (inner) inner.style.transition = '';
+  }
+
+  /** Конец обучения: победа, эмблема «Ученик», дорога в настоящую партию. */
+  async function showTutorialEnd() {
+    if (resultShown) return;
+    resultShown = true;
+    overlayOpen = true;
+    saveProfile({ tutorialDone: true });
+    await wait(500);
+    setMood('win');
+    sfx.win();
+    shake(12);
+    const em = grantEmblem('student');
+    if (em)
+      setTimeout(() => {
+        sfx.emblem();
+        toast(`Новая эмблема: ${em.name}`, 'amber');
+      }, 900);
+    const ov = h(
+      'div',
+      { class: 'overlay result-overlay' },
+      h(
+        'div',
+        { class: 'result' },
+        titleEl('ПОБЕДА', 5),
+        h('div', { class: 'result-sub' }, 'Обучение пройдено'),
+        h('div', { class: 'muted' }, 'Ходы, повышение и Карма — всё, что нужно для первой партии'),
+        h(
+          'div',
+          { class: 'row' },
+          btn('В бой против Странника', () => (ov.remove(), open('menu'), chooseLevel()), 'btn-brand btn-big'),
+          btn('Правила целиком', () => (ov.remove(), open('rules')), 'btn-stone btn-big'),
+        ),
+      ),
+    );
+    document.body.appendChild(ov);
   }
 
   async function gravePicker() {
@@ -939,7 +1028,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const st = match.stats;
     const rec = {
       opponent: kind === 'bot' ? `${names[opp]} · ${level.name}` : names[opp],
-      kind,
+      // обучение сюда не попадает (showTutorialEnd) и в историю не пишется
+      kind: kind as MatchRecord['kind'],
       result: (kind === 'hotseat' && winner !== 'draw' ? (meWon ? 'win' : 'loss') : result) as MatchRecord['result'],
       turns: s.turn,
       // расширенная история для Летописи
@@ -1022,6 +1112,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       if (s.phase === 'over') return endNet(true), open('menu');
       return confirmBox('Покинуть партию?', s.phase === 'play' ? 'Будет засчитано поражение.' : 'Партия не начнётся.', () => (endNet(true), open('menu')));
     }
+    if (tut) return saveProfile({ tutorialDone: true }), open('menu');
     if (s.phase === 'play') confirmBox('Покинуть партию?', 'Прогресс партии будет потерян.', () => open('menu'));
     else open('menu');
   }
@@ -1143,6 +1234,24 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     if (s.phase === 'over' && s.winner !== null) void showResult(s.winner, s.endReason ?? '');
   }
 
+  /** Обучение: армии падают на поле, бой уже идёт. Пока идёт заставка, ввод закрыт. */
+  async function tutorialIntro() {
+    overlayOpen = true;
+    board.viewer = viewer();
+    board.onHover = playHover;
+    board.onCell = playClick;
+    board.clear();
+    refresh();
+    await wait(250);
+    const order = [...s.pieces].sort((a, b) => (a.owner - b.owner) || (a.y - b.y) || (a.x - b.x));
+    order.forEach((pc, i) => setTimeout(() => void board.playEvent({ type: 'spawn', piece: pc }), i * 70));
+    await wait(order.length * 70 + 450);
+    board.sync(s);
+    await banner('Бой уже идёт', 'тебя теснят: 3 фигуры против 7', 'brand', 900);
+    overlayOpen = false;
+    refresh();
+  }
+
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       selected = null;
@@ -1150,7 +1259,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       refreshBoard();
       renderBottom();
     }
-    if ((e.key === ' ' || e.key === 'Enter') && humanActs() && !s.pending && (s.actedThisTurn || !anyLegalAction(s))) {
+    if ((e.key === ' ' || e.key === 'Enter') && humanActs() && !s.pending && (s.actedThisTurn || !anyLegalAction(s)) && (!tut || tut.step?.endTurn)) {
       e.preventDefault();
       match.submit({ type: 'endTurn', by: s.current });
     }
@@ -1160,7 +1269,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   // отладка из консоли: __match.state, __match.submit(...)
   if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }) });
 
-  if (s.phase !== 'placement') enterPlayDirect();
+  if (tut) void tutorialIntro();
+  else if (s.phase !== 'placement') enterPlayDirect();
   else if (kind === 'net' && (client!.placeCommitted || s.players[me].placed)) renderWaiting();
   else startPlacement(me);
   match.start();
@@ -1175,6 +1285,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     ro.disconnect();
     clearInterval(clockTimer);
     window.removeEventListener('keydown', onKey);
+    tut?.dispose();
     document.querySelectorAll('.overlay, .banner, .turn-fly').forEach((e) => e.remove());
   };
 }

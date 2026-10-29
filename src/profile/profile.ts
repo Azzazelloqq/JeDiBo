@@ -33,6 +33,8 @@ export interface Profile {
   botLevel?: string;
   /** Открытые эмблемы Летописи: id → время открытия (profile/emblems.ts). */
   emblems?: Record<string, number>;
+  /** обучение пройдено или пропущено — само больше не открывается */
+  tutorialDone?: boolean;
 }
 
 export interface Settings {

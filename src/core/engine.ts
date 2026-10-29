@@ -176,8 +176,8 @@ function startTurn(c: Ctx, p: PlayerId) {
 
   // Карма: в начале последнего хода каждого цикла; с него же идёт новый Период
   if (pl.ownTurns % s.mode.karmaEvery === 0) pl.periodStart = s.turn;
-  if (pl.ownTurns % s.mode.karmaEvery === 0 && s.deck.length) {
-    const card = s.deck.splice(randInt(s, s.deck.length), 1)[0];
+  if (pl.ownTurns % s.mode.karmaEvery === 0 && (s.deck.length || s.rig?.draws[p].length)) {
+    const card = drawCard(s, p);
     c.ev.push({ type: 'cardDrawn', player: p, card });
     const def = CARDS[card];
     if (def.timing === 'period') {
@@ -185,6 +185,15 @@ function startTurn(c: Ctx, p: PlayerId) {
       log(c, `Карма: «${def.name}» — можно сыграть до конца Периода`, p);
     } else playCard(c, p, card);
   }
+}
+
+/** Карта из колоды: случайная, а в обучении — заранее заданная. */
+function drawCard(s: GameState, p: PlayerId) {
+  const rigged = s.rig?.draws[p].shift();
+  if (!rigged) return s.deck.splice(randInt(s, s.deck.length), 1)[0];
+  const i = s.deck.indexOf(rigged);
+  if (i >= 0) s.deck.splice(i, 1);
+  return rigged;
 }
 
 function playCard(c: Ctx, p: PlayerId, card: GameState['deck'][number]) {

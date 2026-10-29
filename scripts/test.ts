@@ -10,6 +10,7 @@ import { createGame, dispatch } from '../src/core/engine';
 import { ALL_CARDS, fullDeck } from '../src/core/karma/cards';
 import { CLASSIC } from '../src/core/modes';
 import { PRESETS } from '../src/core/presets';
+import { tutorialEnemy, tutorialState, tutorialStep } from '../src/core/tutorial';
 import { heldExpiresThisTurn, homeRows, legalTargets } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
@@ -791,6 +792,33 @@ test('Мастер обыгрывает старого жадного бота �
     if (s.winner === masterSeat) wins++;
   }
   assert(wins >= 9, `Мастер выиграл только ${wins} из 10`);
+});
+
+test('обучение: сценарий проходится от первого шага до победы', () => {
+  const s = tutorialState(['Я', 'Соперник']);
+  const steps: string[] = [];
+  for (let guard = 0; s.phase === 'play' && guard < 60; guard++) {
+    let a: Action | null;
+    if ((s.pending ? s.pending.chooser : s.current) === 1) a = tutorialEnemy(s, 1);
+    else {
+      const st = tutorialStep(s);
+      assert(st, `ход ${s.turn}: у игрока нет такта`);
+      steps.push(st.id);
+      if (st.choose) a = { type: 'choose', by: 0, option: `${st.choose[0].x},${st.choose[0].y}` };
+      else if (st.endTurn) a = { type: 'endTurn', by: 0 };
+      else {
+        const pc = s.pieces.find((q) => q.x === st.piece!.x && q.y === st.piece!.y)!;
+        assert(pc && legalTargets(s, pc).some((t) => t.to.x === st.to!.x && t.to.y === st.to!.y), `ход ${s.turn}: такт «${st.id}» недостижим`);
+        a = { type: 'move', by: 0, pieceId: pc.id, to: st.to! };
+      }
+    }
+    assert(a, `ход ${s.turn}: соперник без действия`);
+    const r = dispatch(s, a);
+    assert(r.ok, `ход ${s.turn}: ${JSON.stringify(a)} — ${r.error}`);
+    if (s.turn === 9 && s.phase === 'play') assert(s.pieces.filter((q) => q.owner === 1).length === 1, 'перед добиванием у соперника не одна фигура');
+  }
+  assert(s.winner === 0, `итог: ${s.winner} (${s.endReason})`);
+  assert(steps.join(' ') === 'step end revenge circle karma karma finish', `такты: ${steps.join(' ')}`);
 });
 
 // ── запуск ──────────────────────────────────────────────────────────────────

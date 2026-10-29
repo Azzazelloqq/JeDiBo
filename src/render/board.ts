@@ -53,6 +53,8 @@ export interface Overlay {
   hoverEnabled: boolean;
   /** Разведка (как в Balatro): ходы и атаки фигуры под курсором — своей или чужой. foe — фигура соперника смотрящего. */
   preview: { id: number; moves: Pos[]; attacks: Pos[]; foe: boolean } | null;
+  /** Обучение: светлыми остаются только эти клетки, остальное поле притушено. null — без притушения. */
+  focus?: Pos[] | null;
 }
 
 export class BoardView {
@@ -71,6 +73,8 @@ export class BoardView {
   private barrierDrop = new Map<string, number>();
   private unsub: () => void;
   scale = 3;
+  /** Обучение: Линия смерти сначала «замирает» на этом столбце и лишь потом щёлкает на выбранный */
+  columnTease: number | null = null;
   /** Чьими глазами смотрим: его сторона всегда внизу (сторона 1 — поле повёрнуто на 180°). null — без поворота. */
   viewer: PlayerId | null = null;
   ov: Overlay = { selected: null, moves: [], attacks: [], options: [], optionsTone: 'amber', lastMove: [], zone: null, ghost: null, hoverEnabled: true, preview: null };
@@ -343,21 +347,48 @@ export class BoardView {
         return;
       }
       case 'column': {
-        // линия проходит всё поле слева направо, возвращается и замирает на выбранном столбце
-        const target = this.flipped ? N - 1 - e.x : e.x;
-        const dist = N - 1 + (N - 1 - target);
-        this.scan = { pos: 0, lock: 0 };
-        let lastCol = -1;
-        await tween(900 + dist * 25, (t) => {
-          const d = ease.outCubic(t) * dist;
-          const pos = d <= N - 1 ? d : 2 * (N - 1) - d;
-          if (this.scan) this.scan.pos = pos;
-          const col = Math.round(pos);
-          if (col !== lastCol) {
-            lastCol = col;
+        const screen = (x: number) => (this.flipped ? N - 1 - x : x);
+        const target = screen(e.x);
+        const tease = this.columnTease === null ? null : screen(this.columnTease);
+        this.columnTease = null;
+        if (tease === null) {
+          // линия проходит всё поле слева направо, возвращается и замирает на выбранном столбце
+          const dist = N - 1 + (N - 1 - target);
+          this.scan = { pos: 0, lock: 0 };
+          let lastCol = -1;
+          await tween(900 + dist * 25, (t) => {
+            const d = ease.outCubic(t) * dist;
+            const pos = d <= N - 1 ? d : 2 * (N - 1) - d;
+            if (this.scan) this.scan.pos = pos;
+            const col = Math.round(pos);
+            if (col !== lastCol) {
+              lastCol = col;
+              sfx.tick();
+            }
+          });
+        } else {
+          // обучение: барабан щёлкает по столбцам, каждый щелчок дольше предыдущего. Подходит к выбранному
+          // столбцу через «столбец-приманку» — дольше всех стоит на нём (сердцебиение) и последним щелчком переходит
+          const dir = Math.sign(target - tease) || 1;
+          const far = dir > 0 ? N - 1 : 0;
+          const path: number[] = [];
+          for (let c = far; c !== N - 1 - far; c -= dir) path.push(c);
+          path.push(N - 1 - far);
+          for (let c = N - 1 - far + dir; c !== target + dir; c += dir) path.push(c);
+          const K = 1.2;
+          let delay = 620 / K ** (path.length - 2);
+          this.scan = { pos: path[0], lock: 0 };
+          for (let i = 1; i < path.length; i++) {
+            const from = path[i - 1];
+            const to = path[i];
+            const slide = Math.min(110, delay * 0.45);
+            await tween(slide, (t) => this.scan && (this.scan.pos = from + (to - from) * ease.outCubic(t)));
             sfx.tick();
+            if (to === tease) sfx.heartbeat();
+            if (i < path.length - 1) await wait(Math.max(0, delay - slide));
+            delay *= K;
           }
-        });
+        }
         sfx.stamp();
         await tween(360, (t) => this.scan && (this.scan.lock = t));
         this.scan = null;
@@ -573,6 +604,12 @@ export class BoardView {
       g.globalAlpha = 0.45 + pulse * 0.2;
       g.drawImage(pieceSprite(gh.rank, s.players[gh.owner].color, this.faceUp(gh.owner, s)), this.X(gh.pos.x), this.Y(gh.pos.y));
       g.globalAlpha = 1;
+    }
+
+    // обучение: всё, кроме нужных клеток, уходит в тень
+    if (this.ov.focus) {
+      const lit = new Set(this.ov.focus.map((c) => `${c.x},${c.y}`));
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!lit.has(`${x},${y}`)) this.fillCell({ x, y }, withAlpha(PAL.void, 0.5));
     }
 
     // разведка: рамки поверх фигур — под атакой и сама фигура

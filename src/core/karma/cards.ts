@@ -311,7 +311,7 @@ const defs: CardDef[] = [
     text: 'Случайно выбирается столбец, в котором будут уничтожены все фигуры.',
     rule: 'Случайным образом выбирается столбец. Все фигуры в нём уничтожаются. Клетки Защитного барьера сохраняются. Занимает ход.',
     play(c) {
-      const x = randInt(c.s, c.s.mode.size);
+      const x = c.s.rig?.columns.shift() ?? randInt(c.s, c.s.mode.size);
       c.ev.push({ type: 'column', x });
       for (const pc of c.s.pieces.filter((q) => q.x === x)) destroy(c, pc, 'deathLine');
       return true;

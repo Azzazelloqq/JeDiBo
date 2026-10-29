@@ -7,9 +7,10 @@ import { logoMark } from './render/sprites';
 import { edgeWearLayers, panelTexture } from './render/stone';
 import { go } from './ui/app';
 import { bootScreen } from './ui/screens/lobby';
-import { initialScreen, screen } from './ui/nav';
+import { initialScreen, screen, wantsTutorial } from './ui/nav';
 import './styles/game-layout.css';
 import './styles/fonts.css';
+import './styles/tutorial.css';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
@@ -53,7 +54,7 @@ async function boot() {
     /* офлайн — останется моноширинный запасной */
   }
   // ссылка-приглашение или возврат в сетевую комнату после перезагрузки вкладки — иначе стартовый экран
-  go(bootScreen() ?? screen(initialScreen()));
+  go(bootScreen() ?? (wantsTutorial() ? screen('game', 'tutorial') : screen(initialScreen())));
   // отладочный пульт сети: в прод-сборку не попадает
   if (import.meta.env.DEV) void import('./net/devtools');
   // ?shot — для скриншотов headless-браузером: без анимаций входа (только dev)

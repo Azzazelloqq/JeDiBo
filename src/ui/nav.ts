@@ -1,5 +1,6 @@
 // Навигация по экранам: screen(id) — фабрика экрана по имени, open(id) — переход, initialScreen() — стартовый экран.
 import type { LevelId } from '../ai/levels';
+import { getProfile } from '../profile/profile';
 import type { NetSession } from '../session/netSession';
 import { go, type Screen } from './app';
 import { codexScreen } from './screens/codex';
@@ -10,7 +11,7 @@ import { rulesScreen } from './screens/rules';
 import { settingsScreen } from './screens/settings';
 
 export type ScreenId = 'menu' | 'chronicle' | 'codex' | 'rules' | 'settings' | 'game';
-export type GameKind = 'bot' | 'hotseat' | 'net';
+export type GameKind = 'bot' | 'hotseat' | 'net' | 'tutorial';
 /** Аргумент экрана партии: вид партии, либо с уровнем Странника / сетевой сессией. */
 export type GameArg = GameKind | { kind: GameKind; level?: LevelId; net?: NetSession };
 const gameArg = (a: unknown) => (typeof a === 'object' && a ? (a as Exclude<GameArg, GameKind>) : { kind: (a as GameKind | undefined) ?? 'bot' });
@@ -41,6 +42,19 @@ export function screen(id: ScreenId, arg?: unknown): Screen {
 
 /** Перейти на экран (короткая запись go(screen(id))). */
 export const open = (id: ScreenId, arg?: unknown) => go(screen(id, arg));
+
+/** Открыть обучение вместо стартового экрана: ?screen=tutorial или самый первый запуск (не перезагрузка страницы). */
+export function wantsTutorial(): boolean {
+  const q = new URLSearchParams(location.search).get('screen');
+  if (q) return q === 'tutorial';
+  const p = getProfile();
+  if (p.tutorialDone || p.history.length) return false;
+  try {
+    return !sessionStorage.getItem('jedibo.ui.screen');
+  } catch {
+    return true;
+  }
+}
 
 /** Стартовый экран: ?screen=<id> из адреса, иначе тот, где была страница до перезагрузки (смена темы); партия — в меню. */
 export function initialScreen(): ScreenId {
