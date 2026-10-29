@@ -4,7 +4,7 @@
 import { PAL } from './palette';
 import { hexToRgb, makeCanvas, seeded, type Canvas } from './pixel';
 
-export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3' | 'edgeworn4' | 'edgeworn5' | 'edgeworn6';
+export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3' | 'edgeworn4' | 'edgeworn5' | 'edgeworn6' | 'edgeworn7' | 'inset';
 type RGB = [number, number, number];
 
 // упорядоченный дизеринг 4×4 — для мягких краёв потёртостей без градиентов
@@ -237,6 +237,7 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     case 'edgeworn2':
     case 'edgeworn3':
     case 'edgeworn4':
+    case 'edgeworn7':
     case 'edgeworn5':
     case 'edgeworn6': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
       mottle(1);
@@ -254,6 +255,18 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
         edgeChips(Math.floor((w + h) / (mode === 'chips' ? 5 : 9)));
       }
       grain(2);
+      break;
+    }
+    case 'inset': { // утопленное поле (доска на плитке меню): ровный камень, царапины и равномерная тень по краю
+      const dir = rnd() * Math.PI;
+      for (let i = 0; i < 16; i++) scratch(5 + rnd() * 24, 2 + rnd() * 3, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
+      // тень одинаковой силы по всему периметру — без пятен и осветлений
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const e = Math.min(x, y, w - 1 - x, h - 1 - y);
+          if (e < 2) add(x, y, -7 * k);
+          else if (e < 3) add(x, y, -3.5 * k);
+        }
       break;
     }
     case 'vein': // прожилки: тёмный/светлый мрамор с жилами

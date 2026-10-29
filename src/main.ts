@@ -44,7 +44,7 @@ function applyTheme() {
   tex('--tex-slab', PAL.slab800, PAL.slab900, 3, false);
   tex('--tex-slab-light', PAL.slab700, PAL.slab800, 5, false);
   // потёртые края CSS-панелей — только у концептов «края, царапины, сколы»
-  const edges = { edgeworn: 'wear', edgeworn2: 'polish', edgeworn3: 'chips', edgeworn4: 'white', edgeworn5: 'white', edgeworn6: 'white2' } as const;
+  const edges = { edgeworn: 'wear', edgeworn2: 'polish', edgeworn3: 'chips', edgeworn4: 'white', edgeworn7: 'white', edgeworn5: 'white', edgeworn6: 'white2' } as const;
   const em = edges[texConcept() as keyof typeof edges];
   root.setProperty('--tex-edges', em ? edgeWearLayers(THEME.scheme === 'light', 21, em) : 'none');
 }

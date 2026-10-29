@@ -119,7 +119,7 @@ export function profileChip(onClick: () => void) {
 export function tileArt(kind: 'bot' | 'hotseat' | 'net'): HTMLCanvasElement {
   const W = 84, H = 46;
   const [c, g] = makeCanvas(W, H);
-  g.drawImage(surfaceTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, cracks: true, amp: 10 }), 0, 0);
+  g.drawImage(surfaceTile(W, H, hexToRgb(kind === 'hotseat' ? PAL.concrete400 : PAL.concrete300), W + kind.length, { pores: 60, cracks: true, amp: 10, inset: true }), 0, 0);
   // сетка клеток
   g.fillStyle = 'rgba(0,0,0,0.12)';
   for (let x = 2; x < W; x += 16) g.fillRect(x, 0, 1, H);

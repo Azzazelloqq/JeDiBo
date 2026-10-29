@@ -17,8 +17,8 @@ const BLOTS = {
 } as const;
 type Blot = keyof typeof BLOTS;
 
-const STONES: StoneStyle[] = ['wornscratch', 'edgeworn', 'edgeworn4', 'edgeworn5', 'edgeworn6', 'edgeworn2', 'edgeworn3', 'worn', 'strata', 'scratch', 'slate', 'vein'];
-export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | StoneStyle;
+const STONES: Exclude<StoneStyle, 'inset'>[] = ['wornscratch', 'edgeworn', 'edgeworn4', 'edgeworn7', 'edgeworn5', 'edgeworn6', 'edgeworn2', 'edgeworn3', 'worn', 'strata', 'scratch', 'slate', 'vein'];
+export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | Exclude<StoneStyle, 'inset'>;
 export const TEX_CONCEPTS: TexConcept[] = ['concrete', ...STONES, 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
   l1s1: 'Светлее · пятна 1',
@@ -31,6 +31,7 @@ export const TEX_NAMES: Record<TexConcept, string> = {
   wornscratch: 'Потёртый + царапины',
   edgeworn: 'Края, царапины, сколы',
   edgeworn4: 'То же · белые края',
+  edgeworn7: 'Белые края · ровное поле',
   edgeworn5: 'То же · все потёртости белые',
   edgeworn6: 'То же · контрастные белые края',
   edgeworn2: 'То же · светлые края',
@@ -216,7 +217,8 @@ function terrazzoTile(w: number, h: number, base: RGB, seed: number, darkTheme: 
   return c;
 }
 
-type Opts = { pores?: number; cracks?: boolean; amp?: number };
+/** inset — утопленное поле (доска на плитке меню). */
+type Opts = { pores?: number; cracks?: boolean; amp?: number; inset?: boolean };
 
 /** Поверхность UI (панель, табличка, плитка меню) в выбранном концепте. opts — параметры бетона;
  *  darker — соседний более тёмный тон палитры для дизеринга (по умолчанию основа −14). */
@@ -226,8 +228,8 @@ export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts:
   if ((STONES as string[]).includes(concept)) {
     // светлая тема — камень светлее, чтобы тёмные следы читались как на тёмном
     // у «белых краёв» основа почти не осветляется — иначе белому не на чем выделяться
-    const lift = THEME.scheme !== 'light' ? 0 : ['edgeworn4', 'edgeworn5', 'edgeworn6'].includes(concept) ? 0.1 : 0.4;
-    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, concept as StoneStyle, whole);
+    const lift = THEME.scheme !== 'light' ? 0 : ['edgeworn4', 'edgeworn7', 'edgeworn5', 'edgeworn6'].includes(concept) ? 0.1 : 0.4;
+    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, opts.inset && concept === 'edgeworn7' && THEME.scheme === 'light' ? 'inset' : (concept as StoneStyle), whole);
   }
   if (concept in BLOTS) {
     const b = BLOTS[concept as Blot];
