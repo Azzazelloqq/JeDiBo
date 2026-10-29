@@ -11,7 +11,7 @@ import { ALL_CARDS, fullDeck } from '../src/core/karma/cards';
 import { CLASSIC } from '../src/core/modes';
 import { PRESETS } from '../src/core/presets';
 import { tutorialEnemy, tutorialState, tutorialStep } from '../src/core/tutorial';
-import { heldExpiresThisTurn, homeRows, legalTargets } from '../src/core/rules';
+import { heldExpiresThisTurn, homeRows, isAttacked, legalTargets, targetsOf } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
@@ -804,6 +804,11 @@ test('обучение: сценарий проходится от первог�
       const st = tutorialStep(s);
       assert(st, `ход ${s.turn}: у игрока нет такта`);
       steps.push(st.id);
+      // саспенс такта Кармы: квадрат видит убийцу, но не достаёт — достаёт только после повышения
+      if (st.id === 'karma') {
+        const sq = s.pieces.find((q) => q.owner === 0)!;
+        assert(sq.rank === Rank.Square && !targetsOf(s, sq).some((t) => t.attack), 'до повышения квадрат не должен никого доставать');
+      }
       if (st.choose) a = { type: 'choose', by: 0, option: `${st.choose[0].x},${st.choose[0].y}` };
       else if (st.endTurn) a = { type: 'endTurn', by: 0 };
       else {
@@ -815,10 +820,14 @@ test('обучение: сценарий проходится от первог�
     assert(a, `ход ${s.turn}: соперник без действия`);
     const r = dispatch(s, a);
     assert(r.ok, `ход ${s.turn}: ${JSON.stringify(a)} — ${r.error}`);
-    if (s.turn === 9 && s.phase === 'play') assert(s.pieces.filter((q) => q.owner === 1).length === 1, 'перед добиванием у соперника не одна фигура');
+    // взятие на ходу 7 сразу передаёт ход — проверяем уже на 8-м
+    if (a.type === 'move' && a.by === 0 && s.turn === 8) assert(!isAttacked(s, { x: 5, y: 6 }, 1), 'съел, но встал под удар');
+    // месть уводит круг вглубь — там его уже никто не должен бить
+    if (a.type === 'move' && a.by === 0 && s.turn === 10) assert(!isAttacked(s, { x: 5, y: 2 }, 1), 'после мести круг под ударом');
+    if (s.turn === 11 && s.phase === 'play') assert(s.pieces.filter((q) => q.owner === 1).length === 1, 'перед добиванием у соперника не одна фигура');
   }
   assert(s.winner === 0, `итог: ${s.winner} (${s.endReason})`);
-  assert(steps.join(' ') === 'step end revenge circle karma karma finish', `такты: ${steps.join(' ')}`);
+  assert(steps.join(' ') === 'step end revenge circle stuck karma avenge finish', `такты: ${steps.join(' ')}`);
 });
 
 // ── запуск ──────────────────────────────────────────────────────────────────
