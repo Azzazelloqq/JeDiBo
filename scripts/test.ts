@@ -31,12 +31,18 @@ const botOf = (level: LevelId, seed: number): BotFn => createAgent({ ...levelByI
 const actor = (s: GameState): PlayerId => (s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current);
 
 /** Партия двух ботов; бросает ошибку, если бот не дал действия или движок его отклонил. */
-function playGame(bots: [BotFn, BotFn], seed: number, opts: { limit?: number; noKarma?: boolean } = {}) {
+function playGame(
+  bots: [BotFn, BotFn],
+  seed: number,
+  opts: { limit?: number; noKarma?: boolean; prep?: (s: GameState) => void; after?: (s: GameState, r: ReturnType<typeof dispatch>, before: GameState) => void } = {},
+) {
   const s = createGame(CLASSIC, seed, ['A', 'B']);
   if (opts.noKarma) s.deck = [];
+  opts.prep?.(s);
   const log: Action[] = [];
   while (s.phase !== 'over' && s.turn <= (opts.limit ?? 1500)) {
     const who = actor(s);
+    const before = opts.after ? (JSON.parse(JSON.stringify(s)) as GameState) : undefined;
     const a = bots[who](s, who);
     assert(a, `seed ${seed}, ход ${s.turn}: бот ${who} не дал действия`);
     let r;
@@ -47,6 +53,7 @@ function playGame(bots: [BotFn, BotFn], seed: number, opts: { limit?: number; no
     }
     assert(r.ok, `seed ${seed}, ход ${s.turn}: недопустимое действие ${JSON.stringify(a)}: ${r.error}`);
     log.push(a);
+    if (opts.after) opts.after(s, r, before!);
   }
   return { s, log };
 }
@@ -789,6 +796,38 @@ test('Смена поля: часы и победа — по игроку, а н
   dispatch(t, { type: 'endTurn', by: 1 });
   hit(t);
   assert(stateHash(s) === stateHash(t), 'Смена поля недетерминирована');
+});
+
+test('Смена поля в середине партии: боты доигрывают, цвет фигур не меняется, повтор даёт то же состояние', () => {
+  for (let g = 0; g < 6; g++) {
+    const seed = 900 + g * 31;
+    const getter = (g % 2) as PlayerId;
+    // первой картой получателю приходит Смена поля, сопернику — случайная из колоды; дальше обычная Карма
+    const prep = (s: GameState) => {
+      s.rig = { draws: getter === 0 ? [['sideChange'], []] : [[], ['sideChange']], columns: [] };
+    };
+    let swaps = 0;
+    const after = (s: GameState, r: ReturnType<typeof dispatch>, before: GameState) => {
+      if (!r.events.some((e) => e.type === 'sidesSwap')) return;
+      swaps++;
+      assert(s.players[0].color === before.players[1].color && s.players[0].side === before.players[1].side, `seed ${seed}: игроки не поменялись цветом и стороной`);
+      const recolored = new Set(r.events.flatMap((e) => (e.type === 'ownerChange' ? [e.pieceId] : [])));
+      for (const pc of s.pieces) {
+        const old = before.pieces.find((q) => q.id === pc.id);
+        if (old && !recolored.has(pc.id))
+          assert(s.players[pc.owner].color === before.players[old.owner].color, `seed ${seed}: фигура ${pc.id} перекрасилась`);
+      }
+    };
+    const bots = (): [BotFn, BotFn] => [botOf('novice', seed), botOf('amateur', seed + 1)];
+    const { s, log } = playGame(bots(), seed, { prep, after, limit: 400 });
+    assert(swaps === 1, `seed ${seed}: Смена поля сработала ${swaps} раз`);
+    assert(s.phase === 'over' || s.turn > 400, `seed ${seed}: партия застряла`);
+    // повтор того же потока действий на свежей партии — то же состояние (как у второго пира в сети)
+    const t = createGame(CLASSIC, seed, ['A', 'B']);
+    prep(t);
+    for (const a of log) assert(dispatch(t, a).ok, `seed ${seed}: повтор отклонил ${JSON.stringify(a)}`);
+    assert(stateHash(t) === stateHash(s), `seed ${seed}: повтор разошёлся`);
+  }
 });
 
 test('реестр Карт Кармы совпадает с таблицей ГДД: 34 карты, количество, момент розыгрыша, занимает ли ход', () => {

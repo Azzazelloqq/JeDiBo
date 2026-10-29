@@ -6,7 +6,7 @@ import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type P
 import { PAL, STONE } from './palette';
 import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
-import { ease, onFrame, tween, wait } from './tween';
+import { animSpeed, ease, onFrame, tween, wait } from './tween';
 import { shake } from './fx';
 
 const M = 10; // поля под координаты
@@ -364,7 +364,7 @@ export class BoardView {
           // поле поворачивается к зрителю его новой армией; в конце поворота подменяем картинку тем же видом без поворота
           const spin = this.canvas.animate(
             [{ transform: 'rotate(0deg) scale(1)' }, { transform: 'rotate(90deg) scale(0.72)' }, { transform: 'rotate(180deg) scale(1)' }],
-            { duration: 620, easing: 'ease-in-out', fill: 'forwards' },
+            { duration: 620 / animSpeed(), easing: 'ease-in-out', fill: 'forwards' },
           );
           await spin.finished.catch(() => {});
           swap();
