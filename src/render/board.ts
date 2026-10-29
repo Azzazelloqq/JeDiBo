@@ -1,7 +1,7 @@
 // BoardView: низкорезный канвас поля (212×212), масштабируемый целиком.
 // Получает состояние + события движка, проигрывает анимации и рисует подсказки.
 import { sfx } from '../audio/sfx';
-import { forward, homeRows, isBarrier } from '../core/rules';
+import { canAct, forward, homeRows, isBarrier } from '../core/rules';
 import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
 import { PAL, STONE } from './palette';
 import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
@@ -707,13 +707,10 @@ export class BoardView {
     const bx = this.X(v.x) + (CELL - w) / 2;
     const by = this.Y(v.y) + (CELL - h) - v.z + 1;
     const pc = s.pieces.find((q) => q.id === v.id);
-    const dim = pc && s.phase === 'play' && pc.owner === s.current && pc.acted && !s.pending;
-    g.globalAlpha = v.alpha;
-    g.drawImage(sprite, Math.round(bx), Math.round(by), Math.round(w), Math.round(h));
-    if (dim) {
-      g.globalAlpha = 0.4 * v.alpha;
-      g.drawImage(pieceSprite(v.rank, 'black', up), Math.round(bx), Math.round(by), Math.round(w), Math.round(h));
-    }
+    // походившая фигура «призрак»: утоплена на пиксель и просвечивает — одинаково читается у обоих цветов
+    const dim = pc && s.phase === 'play' && pc.owner === s.current && pc.acted && !s.pending && !canAct(s, pc);
+    g.globalAlpha = (dim ? 0.38 : 1) * v.alpha;
+    g.drawImage(sprite, Math.round(bx), Math.round(by) + (dim ? 1 : 0), Math.round(w), Math.round(h));
     if (v.flash > 0) {
       g.globalAlpha = v.flash;
       g.drawImage(pieceSprite(v.rank, color, up, 'flash'), Math.round(bx), Math.round(by), Math.round(w), Math.round(h));
