@@ -1,30 +1,42 @@
 // Концепты фактуры панелей (временный выбор через свитчер «Фактура»; после решения владельца лишние уберём).
 // Все плитки бесшовные, пиксель = 2 CSS px, контраст низкий — поверх лежит текст.
 import { PAL, THEME } from './palette';
+import { stoneTile, type StoneStyle } from './stone';
 import { concreteTile, hexToRgb, makeCanvas, scaleCanvas, seeded, type Canvas } from './pixel';
 
-// пятна: s1–s3 — сила пятен, «d» — с деталями (зерно, поры, крупинки), g — серая основа
+// пятна: светлая основа (lift — насколько основа осветлена к белому) и только тёмные пятна (amp — их глубина);
+// details — мелкое зерно и поры поверх
 const BLOTS = {
-  s1: { amp: 6, details: false, gray: false },
-  s2: { amp: 11, details: false, gray: false },
-  s3: { amp: 16, details: false, gray: false },
-  s2d: { amp: 11, details: true, gray: false },
-  s3d: { amp: 16, details: true, gray: false },
-  g2: { amp: 11, details: false, gray: true },
-  g2d: { amp: 11, details: true, gray: true },
+  l1s1: { lift: 0.45, amp: 10, details: false },
+  l1s2: { lift: 0.45, amp: 16, details: false },
+  l1s3: { lift: 0.45, amp: 24, details: false },
+  l1s2d: { lift: 0.45, amp: 16, details: true },
+  l2s2: { lift: 0.8, amp: 16, details: false },
+  l2s3: { lift: 0.8, amp: 24, details: false },
+  l2s3d: { lift: 0.8, amp: 24, details: true },
 } as const;
 type Blot = keyof typeof BLOTS;
 
-export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot;
-export const TEX_CONCEPTS: TexConcept[] = ['concrete', 's1', 's2', 's3', 's2d', 's3d', 'g2', 'g2d', 'cool', 'smooth', 'dither', 'terrazzo'];
+const STONES: StoneStyle[] = ['wornscratch', 'edgeworn', 'edgeworn2', 'edgeworn3', 'worn', 'strata', 'scratch', 'slate', 'vein'];
+export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | StoneStyle;
+export const TEX_CONCEPTS: TexConcept[] = ['concrete', ...STONES, 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
-  s1: 'Пятна 1',
-  s2: 'Пятна 2',
-  s3: 'Пятна 3',
-  s2d: 'Пятна 2 + детали',
-  s3d: 'Пятна 3 + детали',
-  g2: 'Серые пятна 2',
-  g2d: 'Серые пятна 2 + детали',
+  l1s1: 'Светлее · пятна 1',
+  l1s2: 'Светлее · пятна 2',
+  l1s3: 'Светлее · пятна 3',
+  l1s2d: 'Светлее · пятна 2 + детали',
+  l2s2: 'Почти белый · пятна 2',
+  l2s3: 'Почти белый · пятна 3',
+  l2s3d: 'Почти белый · пятна 3 + детали',
+  wornscratch: 'Потёртый + царапины',
+  edgeworn: 'Края, царапины, сколы',
+  edgeworn2: 'То же · светлые края',
+  edgeworn3: 'То же · только сколы',
+  worn: 'Потёртый',
+  strata: 'Слоистый',
+  scratch: 'Исцарапанный',
+  slate: 'Сланец',
+  vein: 'Прожилки',
   concrete: 'Бетон',
   cool: 'Серый бетон',
   smooth: 'Гладкий',
@@ -90,8 +102,8 @@ function smoothTile(w: number, h: number, base: RGB, seed: number): Canvas {
   return c;
 }
 
-/** Пятна, как у тёмного бетона: крупные мягкие пятна схватывания ступенями, рисунок по сиду.
- *  amp — сила пятен; details — мелкое зерно, поры и светлые крупинки поверх. */
+/** Пятна схватывания: чистая основа и тёмные пятна ступенями (как у тёмного бетона), рисунок по сиду.
+ *  amp — глубина пятен; details — мелкое зерно и поры поверх. */
 function blotTile(w: number, h: number, base: RGB, seed: number, amp: number, details: boolean): Canvas {
   const [c, g] = makeCanvas(w, h);
   const rnd = seeded(seed);
@@ -110,7 +122,9 @@ function blotTile(w: number, h: number, base: RGB, seed: number, amp: number, de
       const tx = sm(fx - i0);
       const ty = sm(fy - j0);
       const v = (at(i0, j0) * (1 - tx) + at(i0 + 1, j0) * tx) * (1 - ty) + (at(i0, j0 + 1) * (1 - tx) + at(i0 + 1, j0 + 1) * tx) * ty;
-      let n = (Math.round(v * 4) / 4) * amp * 1.8;
+      // только затемнение: светлее среднего — чистая основа, дальше 3 ступени вглубь
+      const t = Math.max(0, Math.min(1, (0.08 - v) / 0.42));
+      let n = -(Math.ceil(t * 3) / 3) * amp;
       if (details) n += (rnd() - 0.5) * 5;
       const i = (y * w + x) * 4;
       img.data[i] = base[0] + n;
@@ -203,12 +217,20 @@ type Opts = { pores?: number; cracks?: boolean; amp?: number };
 
 /** Поверхность UI (панель, табличка, плитка меню) в выбранном концепте. opts — параметры бетона;
  *  darker — соседний более тёмный тон палитры для дизеринга (по умолчанию основа −14). */
-export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB): Canvas {
+export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB, whole = true): Canvas {
   const concept = texConcept();
   const dark = darker ?? ([base[0] - 14, base[1] - 14, base[2] - 14] as RGB);
+  if ((STONES as string[]).includes(concept)) {
+    // светлая тема — камень светлее, чтобы тёмные следы читались как на тёмном
+    const lift = THEME.scheme === 'light' ? 0.4 : 0;
+    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, concept as StoneStyle, whole);
+  }
   if (concept in BLOTS) {
     const b = BLOTS[concept as Blot];
-    return blotTile(w, h, b.gray ? neutral(base) : base, seed, b.amp, b.details);
+    // осветляем только в светлой теме: в тёмной пятна и так тёмные на тёмном
+    const k = THEME.scheme === 'light' ? b.lift : 0;
+    const lifted: RGB = [base[0] + (255 - base[0]) * k, base[1] + (255 - base[1]) * k, base[2] + (253 - base[2]) * k];
+    return blotTile(w, h, lifted, seed, b.amp, b.details);
   }
   switch (concept) {
     case 'cool':
@@ -227,5 +249,7 @@ export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts:
 /** CSS-фон панели (data URL), пиксель = 2 CSS px. */
 export function panelTexture(hex: string, darkerHex: string, seed: number, soft: boolean): string {
   const opts = soft ? { pores: 40, amp: 8 } : { pores: 60, amp: 9 };
-  return scaleCanvas(surfaceTile(96, 96, hexToRgb(hex), seed, opts, hexToRgb(darkerHex)), 2).toDataURL();
+  // у камня крупнее плитка: царапины и слои на маленькой плитке складываются в заметный повтор
+  const n = (STONES as string[]).includes(texConcept()) ? 160 : 96;
+  return scaleCanvas(surfaceTile(n, n, hexToRgb(hex), seed, opts, hexToRgb(darkerHex), false), 2).toDataURL();
 }
