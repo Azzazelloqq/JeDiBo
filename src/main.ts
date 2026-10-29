@@ -43,8 +43,10 @@ function applyTheme() {
   tex('--tex-inset', PAL.concrete400, PAL.concrete500, 17);
   tex('--tex-slab', PAL.slab800, PAL.slab900, 3, false);
   tex('--tex-slab-light', PAL.slab700, PAL.slab800, 5, false);
-  // потёртые края CSS-панелей — только у концепта «края, царапины, сколы»
-  root.setProperty('--tex-edges', texConcept() === 'edgeworn' ? edgeWearLayers(THEME.scheme === 'light', 21) : 'none');
+  // потёртые края CSS-панелей — только у концептов «края, царапины, сколы»
+  const edges = { edgeworn: 'wear', edgeworn2: 'polish', edgeworn3: 'chips' } as const;
+  const em = edges[texConcept() as keyof typeof edges];
+  root.setProperty('--tex-edges', em ? edgeWearLayers(THEME.scheme === 'light', 21, em) : 'none');
 }
 
 async function boot() {

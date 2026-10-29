@@ -3,7 +3,7 @@
 // Свет слева-сверху: у царапины и скола тёмная кромка сверху, светлая снизу.
 import { makeCanvas, seeded, type Canvas } from './pixel';
 
-export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn';
+export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3';
 type RGB = [number, number, number];
 
 // упорядоченный дизеринг 4×4 — для мягких краёв потёртостей без градиентов
@@ -148,14 +148,14 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
   };
 
   /** Потёртости по краям: камень стёрт у кромки, вглубь — неровно, дизерингом. */
-  const edgeWear = (amp: number, depth: number) => {
+  const edgeWear = (amp: number, depth: number, sign = wear) => {
     const n = noise(8);
     for (let y = 0; y < h; y++)
       for (let x = 0; x < w; x++) {
         const e = Math.min(x, y, w - 1 - x, h - 1 - y);
         const reach = depth * (0.6 + (n(x, y) + 0.5) * 0.9);
         const dens = Math.max(0, Math.min(1, 1 - e / reach));
-        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) add(x, y, wear * amp * k);
+        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) add(x, y, sign * amp * k);
       }
   };
 
@@ -214,15 +214,20 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
       grain(2.5);
       break;
     }
-    case 'edgeworn': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
+    case 'edgeworn':
+    case 'edgeworn2':
+    case 'edgeworn3': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
       mottle(1);
       scuffs(4, -0.22);
       const dir = rnd() * Math.PI;
       for (let i = 0; i < 34; i++) scratch(5 + rnd() * 30, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
       chips(Math.floor((w * h) / 1100));
       if (whole) {
-        edgeWear(7, 7);
-        edgeChips(Math.floor((w + h) / 9));
+        // светлый камень: тёмная стёртость читается как грязь — варианты: край светлее (edgeworn2) или только сколы (edgeworn3)
+        const mode = !light || style === 'edgeworn' ? 'wear' : style === 'edgeworn2' ? 'polish' : 'chips';
+        if (mode === 'wear') edgeWear(7, 7);
+        if (mode === 'polish') edgeWear(9, 7, 1);
+        edgeChips(Math.floor((w + h) / (mode === 'chips' ? 5 : 9)));
       }
       grain(2);
       break;
@@ -251,11 +256,12 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
 /** Потёртости по кромке для CSS-панелей (их фон — повторяющаяся плитка, края которой не совпадают с краями панели).
  *  Четыре полупрозрачные полосы: сверху, снизу, слева, справа; накладываются слоями фона поверх фактуры.
  *  onLight — панель светлая (следы тёмные), иначе следы светлые. Возвращает значение для CSS `background`. */
-export function edgeWearLayers(onLight: boolean, seed: number): string {
+export function edgeWearLayers(onLight: boolean, seed: number, mode: 'wear' | 'polish' | 'chips' = 'wear'): string {
   const L = 160; // длина полосы в пикселях фактуры
   const D = 9; // глубина потёртости от кромки
   const rnd = seeded(seed);
-  const wearCol = onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
+  if (!onLight) mode = 'wear'; // на тёмном светлая стёртость и так выглядит как износ
+  const wearCol = mode === 'polish' ? 'rgba(255,255,255,0.7)' : onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
   const strip = () => {
     // полоса «сверху»: кромка на y = 0
     const [c, g] = makeCanvas(L, D);
@@ -268,13 +274,14 @@ export function edgeWearLayers(onLight: boolean, seed: number): string {
       return 2 + (lv[i % gw] * (1 - t) + lv[(i + 1) % gw] * t) * (D - 2);
     };
     g.fillStyle = wearCol;
+    if (mode !== 'chips')
     for (let x = 0; x < L; x++)
       for (let y = 0; y < D; y++) {
         const dens = Math.max(0, 1 - y / reachAt(x));
         if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) g.fillRect(x, y, 1, 1);
       }
     // сколы у кромки
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < (mode === 'chips' ? 11 : 5); i++) {
       const x = Math.floor(rnd() * (L - 3));
       const sz = 1 + Math.floor(rnd() * 3);
       g.fillStyle = 'rgba(0,0,0,0.28)';

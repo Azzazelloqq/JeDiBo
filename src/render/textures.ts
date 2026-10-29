@@ -17,7 +17,7 @@ const BLOTS = {
 } as const;
 type Blot = keyof typeof BLOTS;
 
-const STONES: StoneStyle[] = ['wornscratch', 'edgeworn', 'worn', 'strata', 'scratch', 'slate', 'vein'];
+const STONES: StoneStyle[] = ['wornscratch', 'edgeworn', 'edgeworn2', 'edgeworn3', 'worn', 'strata', 'scratch', 'slate', 'vein'];
 export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | StoneStyle;
 export const TEX_CONCEPTS: TexConcept[] = ['concrete', ...STONES, 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
@@ -30,6 +30,8 @@ export const TEX_NAMES: Record<TexConcept, string> = {
   l2s3d: 'Почти белый · пятна 3 + детали',
   wornscratch: 'Потёртый + царапины',
   edgeworn: 'Края, царапины, сколы',
+  edgeworn2: 'То же · светлые края',
+  edgeworn3: 'То же · только сколы',
   worn: 'Потёртый',
   strata: 'Слоистый',
   scratch: 'Исцарапанный',
