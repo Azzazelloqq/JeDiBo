@@ -1,6 +1,7 @@
 // Концепты фактуры панелей (временный выбор через свитчер «Фактура»; после решения владельца лишние уберём).
 // Все плитки бесшовные, пиксель = 2 CSS px, контраст низкий — поверх лежит текст.
 import { PAL, THEME } from './palette';
+import { stoneTile, type StoneStyle } from './stone';
 import { concreteTile, hexToRgb, makeCanvas, scaleCanvas, seeded, type Canvas } from './pixel';
 
 // пятна: светлая основа (lift — насколько основа осветлена к белому) и только тёмные пятна (amp — их глубина);
@@ -16,8 +17,9 @@ const BLOTS = {
 } as const;
 type Blot = keyof typeof BLOTS;
 
-export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot;
-export const TEX_CONCEPTS: TexConcept[] = ['concrete', 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
+const STONES: StoneStyle[] = ['worn', 'strata', 'scratch', 'slate', 'vein'];
+export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | StoneStyle;
+export const TEX_CONCEPTS: TexConcept[] = ['concrete', ...STONES, 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
   l1s1: 'Светлее · пятна 1',
   l1s2: 'Светлее · пятна 2',
@@ -26,6 +28,11 @@ export const TEX_NAMES: Record<TexConcept, string> = {
   l2s2: 'Почти белый · пятна 2',
   l2s3: 'Почти белый · пятна 3',
   l2s3d: 'Почти белый · пятна 3 + детали',
+  worn: 'Потёртый',
+  strata: 'Слоистый',
+  scratch: 'Исцарапанный',
+  slate: 'Сланец',
+  vein: 'Прожилки',
   concrete: 'Бетон',
   cool: 'Серый бетон',
   smooth: 'Гладкий',
@@ -209,6 +216,11 @@ type Opts = { pores?: number; cracks?: boolean; amp?: number };
 export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB): Canvas {
   const concept = texConcept();
   const dark = darker ?? ([base[0] - 14, base[1] - 14, base[2] - 14] as RGB);
+  if ((STONES as string[]).includes(concept)) {
+    // светлая тема — камень светлее, чтобы тёмные следы читались как на тёмном
+    const lift = THEME.scheme === 'light' ? 0.4 : 0;
+    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, concept as StoneStyle);
+  }
   if (concept in BLOTS) {
     const b = BLOTS[concept as Blot];
     // осветляем только в светлой теме: в тёмной пятна и так тёмные на тёмном
@@ -233,5 +245,7 @@ export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts:
 /** CSS-фон панели (data URL), пиксель = 2 CSS px. */
 export function panelTexture(hex: string, darkerHex: string, seed: number, soft: boolean): string {
   const opts = soft ? { pores: 40, amp: 8 } : { pores: 60, amp: 9 };
-  return scaleCanvas(surfaceTile(96, 96, hexToRgb(hex), seed, opts, hexToRgb(darkerHex)), 2).toDataURL();
+  // у камня крупнее плитка: царапины и слои на маленькой плитке складываются в заметный повтор
+  const n = (STONES as string[]).includes(texConcept()) ? 160 : 96;
+  return scaleCanvas(surfaceTile(n, n, hexToRgb(hex), seed, opts, hexToRgb(darkerHex)), 2).toDataURL();
 }
