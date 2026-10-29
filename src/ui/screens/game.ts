@@ -20,7 +20,7 @@ import { endNet, type NetSession } from '../../session/netSession';
 import { open } from '../nav';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
-import { avatarEl, pieceIcon, rubbleEl, titleEl } from '../widgets';
+import { avatarEl, pieceIcon, titleEl } from '../widgets';
 import { tutorialDirector, type TutorialDirector } from '../tutorial';
 import { chooseLevel } from './menu';
 
@@ -92,11 +92,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const board = new BoardView();
   const avatarSeed = (p: PlayerId) => (p === me ? prof.avatarSeed : (client?.opponent?.avatarSeed ?? `${names[p]}#seed`));
 
-  // ── каркас (как в Balatro): слева колонка «своей» стороны с карточкой хода во главе, по центру поле,
-  // под полем — панель действий с крупными кнопками, справа — соперник и общая информация
+  // ── каркас (как в Balatro): слева колонка «своей» стороны, по центру поле, под полем — панель действий
+  // с крупными кнопками, справа — соперник и общая информация. Профили обоих игроков — первыми в колонках,
+  // на одном уровне; карточка хода (top) — под своим профилем
   const top = h('div', { class: 'topbar slab' });
   const left = h('div', { class: 'side-body' });
-  const leftCol = h('aside', { class: 'side side-left' }, top, left);
+  const leftCol = h('aside', { class: 'side side-left' }, left);
   const right = h('aside', { class: 'side side-right' });
   const bottom = h('div', { class: 'bottombar' });
   const boardSlot = h('div', { class: 'board-slot' }, board.el);
@@ -115,8 +116,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   let overlayOpen = false;
   let selected: number | null = null;
-  /** фигура, «закреплённая» кликом для разведки (чужая или та, что сейчас не ходит) */
-  let inspect: number | null = null;
   let hoverCell: Pos | null = null;
   /** идёт проигрывание событий: выбор клеток по картам и окно кладбища ждут конца анимаций */
   let animating = false;
@@ -216,18 +215,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const up = s.players[placingFor].side === 0;
     const rows = homeRows(s, s.players[placingFor].side);
     const inRow = (y: number) => [...layoutMap.keys()].filter((k) => unkey(k).y === y).length;
-    top.replaceChildren(
-      h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${color}` }), s.players[placingFor].name),
-      h('div', { class: 'tb-title' }, 'Скрытая расстановка'),
-      h('div', { class: 'tb-note' }, kind === 'bot' ? 'Странник уже расставился' : kind === 'net' ? (oppReady ? 'Соперник готов' : 'Соперник расставляется…') : `Игрок ${placingFor + 1} из 2`),
-    );
+    const rival = other(placingFor);
+    const rivalNote =
+      kind === 'bot' ? 'уже расставился' : kind === 'net' ? (oppReady ? 'готов' : 'расставляется…') : placingFor === 0 ? 'расставится следом' : 'уже расставился';
     left.replaceChildren(
-      h(
-        'section',
-        { class: 'slab place-head' },
-        h('div', { class: 'ph-count' }, h('b', {}, String(total)), ' из 21 на поле'),
-        h('div', { class: 'meter big' }, h('div', { class: 'meter-fill', style: `width:${(total / 21) * 100}%` })),
-      ),
+      seatCard(placingFor, kind === 'hotseat' ? `расставляет · игрок ${placingFor + 1} из 2` : 'расставляет фигуры', true),
+      presetsPanel(),
       h(
         'div',
         { class: 'rank-picks' },
@@ -242,10 +235,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           );
         }),
       ),
-      presetsPanel(),
       h('div', { class: 'controls' }, btn('В меню', () => leave(), 'btn-dark btn-small')),
     );
     right.replaceChildren(
+      seatCard(rival, rivalNote, false),
       h(
         'section',
         { class: 'slab' },
@@ -262,11 +255,42 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           h('div', { class: 'army-row' }, h('span', {}, String(l)), h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${(inRow(y as number) / 12) * 100}%` })), h('b', {}, String(inRow(y as number)))),
         ),
       ),
-      h('section', { class: 'slab hint' }, 'Клик ставит фигуру, повторный клик — убирает. Расстановка скрыта от соперника.'),
+      h('section', { class: 'slab hint' }, 'Клик по своим трём рядам ставит фигуру, повторный клик — убирает. Расстановка скрыта от соперника.'),
     );
+    // под полем: сколько стоит, полоса прогресса и что ставим сейчас — рядом с главной кнопкой
+    const done = total === 21;
     bottom.replaceChildren(
-      h('div', { class: 'prompt slab' }, total === 21 ? 'Армия собрана — можно начинать' : `Осталось поставить ${21 - total} · ${RANK_NAME[placeRank]}: ${LIMIT[placeRank] - c[placeRank]}`),
-      h('div', { class: 'bb-actions' }, btn('Готово', () => ready(), `btn-amber btn-big bb-main ${total === 21 ? 'ready-pulse' : ''}`, { disabled: total !== 21 })),
+      h(
+        'div',
+        { class: `prompt slab place-progress ${done ? 'done' : ''}` },
+        h('div', { class: 'pp-count' }, h('b', {}, String(total)), h('span', {}, '/21')),
+        h(
+          'div',
+          { class: 'pp-body' },
+          done
+            ? h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать')
+            : h(
+                'div',
+                { class: 'pp-text' },
+                'Ставим',
+                h('span', { class: 'spawn-rank' }, pieceIcon(placeRank, color, 2, up), RANK_NAME[placeRank]),
+                h('span', { class: 'muted' }, `ещё ${LIMIT[placeRank] - c[placeRank]}`),
+              ),
+          h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${(total / 21) * 100}%` })),
+        ),
+      ),
+      h('div', { class: 'bb-actions' }, btn('Готово', () => ready(), `btn-amber btn-big bb-main ${done ? 'ready-pulse' : ''}`, { disabled: !done })),
+    );
+  }
+
+  /** Карточка игрока на расстановке — на месте его панели в партии: при старте партии профили остаются на месте. */
+  function seatCard(p: PlayerId, note: string, active: boolean) {
+    const pl = s.players[p];
+    return h(
+      'section',
+      { class: `slab player seat pl-${pl.color} ${active ? 'active' : ''} ${p === viewer() ? 'pl-own' : 'pl-opp'}`, 'data-player': String(p) },
+      h('div', { class: 'pl-head' }, avatarEl(avatarSeed(p), 4), h('div', { class: 'pl-id' }, h('div', { class: 'pl-name' }, pl.name), controllerLabel(p))),
+      h('div', { class: 'seat-note' }, note),
     );
   }
 
@@ -274,8 +298,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function presetsPanel() {
     return h(
       'section',
-      { class: 'slab presets-panel' },
-      h('div', { class: 'h-label' }, 'Быстрая расстановка'),
+      { class: `slab presets-panel ${layoutMap.size === 0 ? 'fresh' : ''}` },
+      h('div', { class: 'presets-head' }, h('div', { class: 'h-label' }, 'Быстрая расстановка'), h('div', { class: 'presets-sub' }, 'готовое построение в один клик')),
       h('div', { class: 'presets' }, ...PRESETS.map((p) => btn(p.name, () => applyPreset(p.id), 'btn-stone btn-small'))),
       btn('Очистить', () => {
         layoutMap.clear();
@@ -308,16 +332,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     board.ov = { ...board.ov, zone: null, ghost: null };
     board.onHover = () => {};
     board.onCell = () => {};
-    top.replaceChildren(
-      h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${s.players[me].color}` }), s.players[me].name),
-      h('div', { class: 'tb-title' }, 'Расстановка отправлена'),
-      h('div', { class: 'tb-note' }, oppReady ? 'Соперник готов — начинаем…' : 'Ждём, пока соперник расставится…'),
-    );
     left.replaceChildren(
+      seatCard(me, 'расстановка отправлена', false),
       h('section', { class: 'slab hint' }, 'Ваша расстановка скрыта: соперник увидит её только когда закончит свою.'),
       h('div', { class: 'controls' }, btn('В меню', () => leave(), 'btn-dark btn-small')),
     );
-    right.replaceChildren();
+    right.replaceChildren(seatCard(opp, oppReady ? 'готов — начинаем…' : 'расставляется…', true));
     bottom.replaceChildren(h('div', { class: 'prompt slab' }, 'Ждём соперника…'));
   }
 
@@ -360,7 +380,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           break;
         case 'turnStart':
           selected = null;
-          inspect = null;
           // «Ваш ход» — когда улягутся обломки атаки, а не посреди удара
           if (i === lastTurn) await board.settle();
           refresh();
@@ -408,6 +427,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   };
 
   async function beginPlay() {
+    for (const el of [...left.children, ...right.children, ...bottom.children])
+      if (!el.classList.contains('player')) el.classList.add('panel-out');
     board.viewer = viewer();
     board.ov = { ...board.ov, zone: null, ghost: null };
     board.onHover = playHover;
@@ -426,14 +447,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const humanActs = () => s.phase === 'play' && !overlayOpen && !match.isBusy && match.isHuman(match.actor());
 
   function playClick(c: Pos) {
-    if (!humanActs()) {
-      // не наш ход — фигуры можно разглядывать, но не двигать
-      const pc = s.phase === 'play' && !overlayOpen && !s.pending ? pieceAt(s, c) : undefined;
-      if (!pc) return sfx.error();
-      inspect = pc.id !== inspect ? pc.id : null;
-      sfx.select();
-      return refreshBoard();
-    }
+    // не наш ход — фигуры видно наведением, двигать нельзя
+    if (!humanActs()) return sfx.error();
     const p = match.actor();
     if (tut && !tut.allows(c, selected !== null ? s.pieces.find((q) => q.id === selected) : undefined)) return tut.nudge();
     if (s.pending) {
@@ -457,14 +472,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     if (pc && pc.owner === p && canAct(s, pc)) {
       selected = pc.id === selected ? null : pc.id;
-      inspect = null;
       sfx.select();
     } else {
       if (pc && pc.owner === p) toast('Эта фигура уже действовала', 'stone');
       selected = null;
-      // клик по чужой (или уже ходившей) фигуре закрепляет её разведку, по пустой клетке — снимает
-      inspect = pc && pc.id !== inspect ? pc.id : null;
-      if (inspect !== null) sfx.select();
     }
     refreshBoard();
     renderBottom();
@@ -490,7 +501,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     // выбрана своя фигура — на поле её ходы, разведку не смешиваем
     if (selected !== null) return;
-    const pin = inspect ?? tut?.threat ?? null;
+    const pin = tut?.threat ?? null;
     const pc = (hoverCell && pieceAt(s, hoverCell)) || (pin !== null ? s.pieces.find((q) => q.id === pin) : undefined);
     if (!pc) return;
     const side = kind === 'hotseat' ? s.current : me;
@@ -520,7 +531,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         for (const t of legalTargets(s, sel)) (t.attack ? ov.attacks : ov.moves).push(t.to);
       } else selected = null;
     }
-    if (inspect !== null && !s.pieces.some((q) => q.id === inspect)) inspect = null;
     if (tut) {
       // узор выбранной фигуры проступает сквозь тень — так игрок видит, как она ходит
       const lit = animating || overlayOpen ? null : tut.focus();
@@ -532,6 +542,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   // ── HUD ─────────────────────────────────────────────────────────────────
   let lastAp = -1;
+  let hudShown = false;
   function refresh() {
     if (s.phase === 'placement') return;
     refreshBoard();
@@ -543,8 +554,18 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const fromOwner = oldBadge?.closest('.player')?.getAttribute('data-player');
     // своя панель всегда слева, соперник — справа
     const mine = viewer();
-    left.replaceChildren(playerPanel(mine), effectsPanel(), controls());
+    left.replaceChildren(playerPanel(mine), top, effectsPanel(), controls());
     right.replaceChildren(playerPanel(other(mine)), deckPanel(), logPanel());
+    if (!hudShown) {
+      // первый кадр партии: всё, кроме профилей (они стояли тут и на расстановке), въезжает по очереди
+      hudShown = true;
+      [...left.children, ...right.children, ...bottom.children]
+        .filter((el) => !el.classList.contains('player'))
+        .forEach((el, i) => {
+          el.classList.add('panel-in');
+          (el as HTMLElement).style.animationDelay = `${i * 50}ms`;
+        });
+    }
     if (from && fromOwner !== undefined && fromOwner !== String(s.current) && s.phase === 'play') flyTurnBadge(from);
     // окно кладбища по карте — тоже после показа карты
     if (s.pending?.kind === 'grave' && match.isHuman(s.pending.chooser) && !overlayOpen && !animating) void gravePicker();
@@ -666,7 +687,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const pl = s.players[p];
     const pcs = piecesOf(s, p);
     const cnt = [0, 1, 2].map((r) => pcs.filter((q) => q.rank === r).length);
-    const lost = pl.graveyard.length;
     const active = s.current === p && s.phase === 'play';
     const k = s.mode.karmaEvery;
     const inCycle = pl.ownTurns % k;
@@ -690,7 +710,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         'div',
         { class: 'pl-pieces' },
         ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, pl.color, 2, up), h('b', {}, String(cnt[r])))),
-        h('div', { class: 'pl-lost', title: 'потеряно фигур' }, rubbleEl(2), h('b', {}, String(lost))),
       ),
       h(
         'div',
@@ -703,7 +722,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ? h(
             'div',
             { class: `held ${burning ? 'burning' : ''}` },
-            cardEl(held.card, { scale: 1.4, idle: true }).el,
+            cardEl(held.card, { scale: 2, idle: true }).el,
             h(
               'div',
               { class: 'held-info' },
@@ -754,7 +773,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   function deckPanel() {
-    const back = cardEl(null, { scale: 1.2, tilt: false, idle: false }).el;
+    const back = cardEl(null, { scale: 1, tilt: false, idle: false }).el;
     return h(
       'section',
       { class: 'slab deck' },
@@ -1255,7 +1274,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       selected = null;
-      inspect = null;
       refreshBoard();
       renderBottom();
     }

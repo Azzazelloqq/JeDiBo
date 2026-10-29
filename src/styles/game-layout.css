@@ -1,5 +1,5 @@
 /* JeDiBo — каркас экрана партии (общий для тем и вариантов «а»/«в»). Цвета и фактуры — в темах;
-   здесь только раскладка. Как в Balatro: слева колонка своей стороны (карточка хода во главе, своя панель,
+   здесь только раскладка. Как в Balatro: слева колонка своей стороны (свой профиль, под ним карточка хода,
    внизу — меню), по центру поле, под полем — подсказка и крупные кнопки действий, справа — соперник,
    колода и сворачиваемая Хроника. Селекторы с `body` — чтобы перебить базовые правила тем, которые
    подключаются позже. Крючки для анимаций: .player[data-player], .pl-own / .pl-opp, .topbar (карточка хода),
@@ -88,4 +88,42 @@ body .game .prompt-spawn .muted { font-size: 14px; }
   body .game .rank-pick .rp-left { font-size: 30px; }
   body .game .bottombar .prompt { min-height: 54px; }
   body .game .bb-actions .btn-big { font-size: 20px; padding: 11px 18px 9px; }
+}
+
+/* ── профили на расстановке (на месте панелей партии) ───────────────────── */
+body .game .seat-note { margin-top: 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85; }
+
+/* быстрая расстановка — главный путь для новичка: выделена рамкой акцента, пока поле пустое — мягко пульсирует */
+body .game .presets-panel { border-color: var(--brand-500); }
+body .game .presets-panel .h-label { color: var(--brand-500); font-size: 15px; }
+body .game .presets-head { display: flex; flex-direction: column; gap: 2px; }
+body .game .presets-sub { font-size: 12px; opacity: 0.8; margin-left: 8px; }
+body .game .presets-panel.fresh { animation: presetsCall 1.6s ease-in-out infinite; }
+@keyframes presetsCall { 50% { border-color: var(--amber-500); } }
+
+/* прогресс расстановки под полем: крупный счётчик, что ставим сейчас, полоса */
+body .game .place-progress { gap: 16px; }
+body .game .pp-count { flex: none; font-family: var(--f-pix); line-height: 1; }
+body .game .pp-count b { font-size: 40px; }
+body .game .pp-count span { font-size: 18px; opacity: 0.7; }
+body .game .pp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+body .game .pp-text { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 17px; }
+body .game .pp-text .spawn-rank { font-size: 16px; }
+body .game .place-progress .meter { height: 12px; margin: 0; }
+body .game .place-progress.done .meter-fill { background: repeating-linear-gradient(90deg, var(--amber-500) 0 6px, var(--amber-300) 6px 8px); }
+
+/* переход расстановка → партия: старое уходит, новое въезжает по очереди (задержки — из game.ts) */
+body .game .panel-out { opacity: 0; transform: translateY(12px); transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
+body .game .panel-in { animation: panelIn 0.4s var(--bounce) backwards; }
+@keyframes panelIn { from { opacity: 0; transform: translateY(16px) scale(0.97); } }
+
+/* читаемость партии: мелкий служебный текст крупнее */
+body .game .small { font-size: 13px; }
+body .game .h-label { font-size: 14px; }
+body .game .kt-label { font-size: 15px; }
+body .game .effect { font-size: 15px; }
+body .game .log-list { font-size: 13px; }
+body .game .prompt { font-size: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  body .game .panel-in, body .game .presets-panel.fresh { animation: none; }
 }

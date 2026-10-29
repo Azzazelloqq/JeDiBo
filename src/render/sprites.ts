@@ -1,7 +1,7 @@
 // Программные спрайты: фигуры из гранита/базальта, бетонные плиты поля, рубашка Кармы, аватары.
 import { Rank } from '../core/types';
 import { PAL, STONE, THEME, type StoneColor } from './palette';
-import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, scaleCanvas, seeded, type Canvas, type Mask } from './pixel';
+import { concreteTile, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, scaleCanvas, seeded, type Canvas, type Mask } from './pixel';
 import { surfaceTile } from './stone';
 
 export const CELL = 16;
@@ -166,18 +166,6 @@ export function cardBack(w = 52, h = 72): Canvas {
   return c;
 }
 
-/** Пиктограмма «обломки» — счётчик потерянных фигур (вместо креста). */
-export function rubbleIcon(): Canvas {
-  return outline(
-    fromAscii(
-      ['...GG....', '..GwGg...', '..GGgg.G.', '.Gw.dg.Gg', 'GGGg.GwGg', 'Ggggd.ggd', '.dddddddd'],
-      { w: PAL.bone, G: PAL.concrete200, g: PAL.concrete400, d: PAL.slab500 },
-      1,
-    ),
-    PAL.void,
-  );
-}
-
 /** Аватар-идентикон 8×8 (симметричный) из имени. */
 export function avatar(seedStr: string, size = 10): Canvas {
   const rnd = seeded(hashStr(seedStr));
@@ -244,6 +232,38 @@ export function tint(src: Canvas, color: string): Canvas {
   g.globalCompositeOperation = 'source-in';
   g.fillStyle = color;
   g.fillRect(0, 0, src.width, src.height);
+  return c;
+}
+
+/** Пиксельный логотип по растровой маске формы (из SVG, ui/widgets.ts): красный гранит в разрешении маски,
+ *  свет слева-сверху — светлая кромка сверху, полутон слева; снизу — «толщина» камня в D пикселей, как у фигур. */
+export function pixelLogo(mask: Canvas): Canvas {
+  const w = mask.width, hh = mask.height, D = 2;
+  const a = mask.getContext('2d')!.getImageData(0, 0, w, hh).data;
+  const on = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < hh && a[(y * w + x) * 4 + 3] > 110;
+  const [c, g] = makeCanvas(w, hh + D);
+  g.drawImage(concreteTile(w, hh + D, hexToRgb(PAL.logo), 41, { pores: 30, amp: 12 }), 0, 0);
+  const img = g.getImageData(0, 0, w, hh + D);
+  const d = img.data;
+  const st = STONE.red;
+  const rnd = seeded(43);
+  const set = (i: number, hex: string) => d.set([...hexToRgb(hex), 255], i);
+  for (let y = 0; y < hh + D; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (on(x, y)) {
+        if (!on(x, y - 1)) set(i, st.hi);
+        else if (!on(x - 1, y)) set(i, st.light);
+        else if (!on(x, y + 1) || !on(x + 1, y)) set(i, st.base);
+        else {
+          const r = rnd();
+          if (r < 0.025) set(i, st.speckLight);
+          else if (r < 0.06) set(i, st.speckDark);
+        }
+      } else if (on(x, y - 1) || on(x, y - 2)) set(i, st.side);
+      else d[i + 3] = 0;
+    }
+  g.putImageData(img, 0, 0);
   return c;
 }
 

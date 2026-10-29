@@ -25,8 +25,9 @@ const ICON_FACE_SAFE: Rect[] = [{ x: 3, y: 44, w: CARD_W - 6, h: CARD_H - 44 }];
 
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-/** Блик «лампа по глянцу», нарисованный в разрешении карты: узкая диагональная полоса (~115°),
- *  её положение вдоль диагонали — от курсора; кромка, обращённая к свету; искры на рамке при входе.
+/** Блик «лампа по глянцу», нарисованный в разрешении карты: узкая диагональная полоса (~115°), искры на рамке
+ *  при входе. Лампа неподвижна (слева сверху): курсор наклоняет карту, и отражение скользит по глянцу навстречу
+ *  наклону, а не бежит за курсором; светлые кромки — верхняя и левая, обращённые к лампе.
  *  Рисуем пиксели, а не CSS-градиенты, — края полосы ступенчатые на сетке пикселя карты. */
 function drawShine(c: HTMLCanvasElement, nx: number, ny: number, safe: Rect[], sparks: [number, number][], tint: string) {
   const g = c.getContext('2d')!;
@@ -36,7 +37,9 @@ function drawShine(c: HTMLCanvasElement, nx: number, ny: number, safe: Rect[], s
   // полоса: пиксели, у которых x + 0.47·y попадает в окно шириной 4 (наклон ≈ 25° от вертикали)
   const SLOPE = 0.47;
   const span = W + SLOPE * H + 8;
-  const pos = -4 + (nx * 0.65 + ny * 0.35) * span;
+  // nx, ny = 0.5 — карта ровно, полоса посередине; наклон к правому нижнему углу уводит её влево вверх
+  const t = 0.5 + ((0.5 - nx) * 0.65 + (0.5 - ny) * 0.35) * 0.9;
+  const pos = -4 + t * span;
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       if (blocked(x, y)) continue;
@@ -46,12 +49,11 @@ function drawShine(c: HTMLCanvasElement, nx: number, ny: number, safe: Rect[], s
       else continue;
       g.fillRect(x, y, 1, 1);
     }
-  // кромка, обращённая к свету (курсор = лампа): 1 пиксель карты
-  g.fillStyle = withAlpha(PAL.bone, 0.5);
-  const ey = ny < 0.5 ? 0 : H - 1;
-  const ex = nx < 0.5 ? 0 : W - 1;
-  for (let x = 0; x < W; x++) if (!blocked(x, ey)) g.fillRect(x, ey, 1, 1);
-  for (let y = 0; y < H; y++) if (!blocked(ex, y)) g.fillRect(ex, y, 1, 1);
+  // кромки, обращённые к лампе: ярче, когда карта повёрнута этой стороной к свету
+  g.fillStyle = withAlpha(PAL.bone, 0.25 + 0.35 * ny);
+  for (let x = 0; x < W; x++) if (!blocked(x, 0)) g.fillRect(x, 0, 1, 1);
+  g.fillStyle = withAlpha(PAL.bone, 0.2 + 0.3 * nx);
+  for (let y = 1; y < H; y++) if (!blocked(0, y)) g.fillRect(0, y, 1, 1);
   // искры 2×2 на рамке
   g.fillStyle = PAL.bone;
   for (const [x, y] of sparks) g.fillRect(x, y, 2, 2);

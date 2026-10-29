@@ -62,29 +62,30 @@ export function menuScreen(root: HTMLElement) {
     return el;
   };
 
+  // логотип, режимы и второстепенное меню — одна колонка по центру экрана: меню сразу под плитками,
+  // а не прижато к нижнему краю
   root.append(
     h('div', { class: 'menu-top' }, profileChip(() => open('chronicle')), h('div', { class: 'version' }, VERSION)),
     h(
       'div',
-      { class: 'logo-wrap' },
-      logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true }),
-      h('div', { class: 'logo-plate' }, 'КЛАССИКА · 12×12 · КАРМА'),
-    ),
-    h(
-      'div',
-      { class: 'mode-row' },
-      tile('bot', 'Против Странника', 'один за столом · рейтинг', chooseLevel),
-      tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => open('game', 'hotseat')),
-      tile('net', 'По сети', 'по коду · дуэль · рейтинг', () => go(lobbyScreen)),
-    ),
-    h(
-      'div',
-      { class: 'menu-bar' },
-      btn('Обучение', () => open('game', 'tutorial')),
-      btn('Колода', () => open('codex')),
-      btn('Правила', () => open('rules')),
-      btn('Летопись', () => open('chronicle')),
-      btn('Настройки', () => open('settings')),
+      { class: 'menu-main' },
+      h('div', { class: 'logo-wrap' }, logoEl({ variant: 'full', color: 'brand', scale: 1, plate: true })),
+      h(
+        'div',
+        { class: 'mode-row' },
+        tile('bot', 'Против Странника', 'один за столом · рейтинг', chooseLevel),
+        tile('hotseat', 'Двое за столом', 'одно устройство · без рейтинга', () => open('game', 'hotseat')),
+        tile('net', 'По сети', 'по коду · дуэль · рейтинг', () => go(lobbyScreen)),
+      ),
+      h(
+        'nav',
+        { class: 'menu-bar' },
+        btn('Обучение', () => open('game', 'tutorial')),
+        btn('Колода', () => open('codex')),
+        btn('Правила', () => open('rules')),
+        btn('Профиль', () => open('chronicle')),
+        btn('Настройки', () => open('settings')),
+      ),
     ),
   );
 }
