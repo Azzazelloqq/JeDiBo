@@ -9,12 +9,6 @@ import { lobbyScreen } from './lobby';
 
 export const VERSION = '0.1.0-PROTO';
 
-const LEVEL_NOTE: Record<LevelId, string> = {
-  novice: 'часто ошибается',
-  amateur: 'не зевает простое',
-  master: 'считает на ход вперёд',
-};
-
 /** Выбор уровня Странника перед партией. Уровень запоминается в профиле, но в окне не подсвечивается. */
 export function chooseLevel() {
   const close = () => ov.remove();
@@ -29,13 +23,13 @@ export function chooseLevel() {
     h(
       'div',
       { class: 'slab dialog level-dialog' },
-      h('h2', {}, 'Уровень Странника'),
+      h('h2', {}, 'Уровень бота'),
       h(
         'div',
         { class: 'level-list' },
         ...LEVELS.map((l) =>
           btn(
-            `${l.name} · ${l.rating} — ${LEVEL_NOTE[l.id]}`,
+            `Бот ${l.name.toLowerCase()}`,
             () => start(l.id),
             'btn-stone level-btn',
           ),
