@@ -4,15 +4,12 @@ import { applyCssPalette, PAL, THEME } from './render/palette';
 import { startBackground } from './render/background';
 import { scaleCanvas } from './render/pixel';
 import { logoMark } from './render/sprites';
-import { edgeWearLayers } from './render/stone';
-import { panelTexture, texConcept } from './render/textures';
+import { edgeWearLayers, panelTexture } from './render/stone';
 import { go } from './ui/app';
 import { bootScreen } from './ui/screens/lobby';
 import { initialScreen, screen } from './ui/nav';
-import { mountTexSwitcher } from './ui/texSwitcher';
 import './styles/game-layout.css';
 import './styles/fonts.css';
-import './styles/tex-switcher.css';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
@@ -30,20 +27,16 @@ function applyTheme() {
   document.head.appendChild(style);
   document.body.classList.add(`theme-${THEME.scheme}`);
   applyCssPalette();
-  // бетонные фактуры для CSS-панелей генерируются один раз при старте
+  // фактуры камня для CSS-панелей генерируются один раз при старте
   const root = document.documentElement.style;
-  const soft = THEME.scheme === 'light'; // светлая — лёгкий рельеф
-  const tex = (name: string, hex: string, darker: string, seed: number, s = soft) =>
-    root.setProperty(name, `url(${panelTexture(hex, darker, seed, s)})`);
-  tex('--tex-concrete', PAL.concrete300, PAL.concrete400, 9);
-  tex('--tex-concrete-light', PAL.concrete200, PAL.concrete300, 13);
-  tex('--tex-inset', PAL.concrete400, PAL.concrete500, 17);
-  tex('--tex-slab', PAL.slab800, PAL.slab900, 3, false);
-  tex('--tex-slab-light', PAL.slab700, PAL.slab800, 5, false);
-  // потёртые края CSS-панелей — только у концептов «края, царапины, сколы»
-  const edges = { edgeworn: 'wear', edgeworn2: 'polish', edgeworn3: 'chips' } as const;
-  const em = edges[texConcept() as keyof typeof edges];
-  root.setProperty('--tex-edges', em ? edgeWearLayers(THEME.scheme === 'light', 21, em) : 'none');
+  const tex = (name: string, hex: string, seed: number) => root.setProperty(name, `url(${panelTexture(hex, seed)})`);
+  tex('--tex-concrete', PAL.concrete300, 9);
+  tex('--tex-concrete-light', PAL.concrete200, 13);
+  tex('--tex-inset', PAL.concrete400, 17);
+  tex('--tex-slab', PAL.slab800, 3);
+  tex('--tex-slab-light', PAL.slab700, 5);
+  // стёртые края CSS-панелей — отдельные слои фона поверх фактуры
+  root.setProperty('--tex-edges', edgeWearLayers(21));
 }
 
 async function boot() {
@@ -59,7 +52,6 @@ async function boot() {
   } catch {
     /* офлайн — останется моноширинный запасной */
   }
-  mountTexSwitcher();
   // ссылка-приглашение или возврат в сетевую комнату после перезагрузки вкладки — иначе стартовый экран
   go(bootScreen() ?? screen(initialScreen()));
   // отладочный пульт сети: в прод-сборку не попадает

@@ -1,17 +1,22 @@
-// Фактуры потёртого камня (концепты): слои, царапины, потёртости, сколы, прожилки.
+// Фактура потёртого камня для поверхностей UI (панели, таблички, плитки меню).
+// Основа почти целая, много тонких царапин, редкие потёртости и сколы, стёртые края.
+// Тёмная тема — края светлеют от износа; светлая — края стёрты до белого (bone), основа не осветляется сильно,
+// чтобы белому было на чём выделяться. Утопленное поле (доска на плитке меню) в светлой теме — ровное, с тенью по краю.
 // Всё считается в целых пикселях низкого разрешения и бесшовно (координаты по модулю плитки).
 // Свет слева-сверху: у царапины и скола тёмная кромка сверху, светлая снизу.
-import { makeCanvas, seeded, type Canvas } from './pixel';
+import { PAL, THEME } from './palette';
+import { hexToRgb, makeCanvas, scaleCanvas, seeded, type Canvas } from './pixel';
 
-export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn' | 'edgeworn2' | 'edgeworn3';
 type RGB = [number, number, number];
 
 // упорядоченный дизеринг 4×4 — для мягких краёв потёртостей без градиентов
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-/** whole — плитка и есть вся поверхность (табличка, плитка меню): тогда видны её края и по ним можно стереть камень.
- *  Для повторяющегося CSS-фона края плитки — не края панели, там потёртостей по краям нет. */
-export function stoneTile(w: number, h: number, base: RGB, seed: number, style: StoneStyle, whole = false): Canvas {
+/** kind: panel — обычная поверхность, inset — утопленное поле.
+ *  whole — плитка и есть вся поверхность (табличка, плитка меню): тогда видны её края и по ним можно стереть камень.
+ *  Для повторяющегося CSS-фона края плитки — не края панели, там края стирает edgeWearLayers.
+ *  whiteEdges — края стёрты до белого (светлая тема), иначе — на тон в сторону износа. */
+function stoneTile(w: number, h: number, base: RGB, seed: number, kind: 'panel' | 'inset', whole: boolean, whiteEdges: boolean): Canvas {
   const rnd = seeded(seed * 7 + 3);
   const d = new Float32Array(w * h); // сдвиг яркости каждого пикселя
   const lum = 0.3 * base[0] + 0.59 * base[1] + 0.11 * base[2];
@@ -21,6 +26,7 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
   const k = light ? 2.4 : 2; // общая сила следов
   const idx = (x: number, y: number) => (((y % h) + h) % h) * w + (((x % w) + w) % w);
   const add = (x: number, y: number, v: number) => (d[idx(x, y)] += v);
+  const white = new Uint8Array(w * h); // пиксели, стёртые до белого (bone)
 
   // бесшовный шум значений: решётка по модулю, сглаженная интерполяция
   const noise = (cell: number) => {
@@ -46,36 +52,6 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) add(x, y, Math.round(n(x, y) * 3) * amp * k);
   };
 
-  /** Слои: полосы разной толщины, волнистые (синусы с целым числом периодов — плитка бесшовная). */
-  const strata = (amp: number) => {
-    const th: number[] = [];
-    let sum = 0;
-    while (sum < h) {
-      const t = Math.min(h - sum, 3 + Math.floor(rnd() * 12));
-      th.push(t);
-      sum += t;
-    }
-    const tones = th.map(() => [0, -1, 1, -2, 2, -1][Math.floor(rnd() * 6)] * amp * k);
-    // у части слоёв — тонкий шов-граница
-    const seam = th.map(() => rnd() < 0.35);
-    const edges: number[] = [];
-    th.reduce((a, t) => (edges.push(a), a + t), 0);
-    const k1 = 1 + Math.floor(rnd() * 2);
-    const k2 = 2 + Math.floor(rnd() * 3);
-    const p1 = rnd() * 6.28;
-    const p2 = rnd() * 6.28;
-    const wob = noise(10);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        const off = 4 * Math.sin((x / w) * 6.283 * k1 + p1) + 1.5 * Math.sin((x / w) * 6.283 * k2 + p2) + wob(x, y) * 3;
-        const yy = (((Math.round(y + off) % h) + h) % h);
-        let b = 0;
-        while (b + 1 < edges.length && edges[b + 1] <= yy) b++;
-        add(x, y, tones[b]);
-        if (seam[b] && yy === edges[b]) add(x, y, -amp * 1.6 * k);
-      }
-  };
-
   /** Царапина: прямая или чуть изогнутая; канавка тёмная, кромка под ней светлая. */
   const scratch = (len: number, depth: number, angle?: number) => {
     let x = rnd() * w;
@@ -92,6 +68,12 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
       a += bend;
       if (rnd() < 0.05) s += 2; // царапина рвётся
     }
+  };
+
+  /** Сетка царапин: половина — пучком в одну сторону, как от износа. */
+  const scratches = (count: number, depth: number, depthRange: number, maxLen: number) => {
+    const dir = rnd() * Math.PI;
+    for (let i = 0; i < count; i++) scratch(5 + rnd() * maxLen, depth + rnd() * depthRange, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
   };
 
   /** Потёртости: стёртые участки с дизеринговым краем. */
@@ -119,43 +101,17 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     }
   };
 
-  /** Прожилки: длинные извилистые жилы, на тёмном камне светлые, на светлом — тёмные. */
-  const veins = (count: number, amp: number) => {
-    for (let v = 0; v < count; v++) {
-      let x = rnd() * w;
-      let y = rnd() * h;
-      let a = rnd() * Math.PI * 2;
-      const len = w * (0.8 + rnd());
-      for (let s = 0; s < len; s++) {
-        add(Math.round(x), Math.round(y), wear * amp * k);
-        if (rnd() < 0.18) add(Math.round(x) + 1, Math.round(y), wear * amp * 0.5 * k); // утолщение
-        // ветка
-        if (rnd() < 0.01) {
-          let bx = x;
-          let by = y;
-          const ba = a + (rnd() < 0.5 ? 0.9 : -0.9);
-          for (let t = 0; t < 10 + rnd() * 14; t++) {
-            add(Math.round(bx), Math.round(by), wear * amp * 0.6 * k);
-            bx += Math.cos(ba);
-            by += Math.sin(ba);
-          }
-        }
-        a += (rnd() - 0.5) * 0.5;
-        x += Math.cos(a);
-        y += Math.sin(a);
-      }
-    }
-  };
-
-  /** Потёртости по краям: камень стёрт у кромки, вглубь — неровно, дизерингом. */
-  const edgeWear = (amp: number, depth: number, sign = wear) => {
+  /** Стёртые края: у кромки плотно, вглубь — неровно, дизерингом. toWhite — до белого, иначе на amp в сторону износа. */
+  const edgeWear = (amp: number, depth: number, toWhite: boolean) => {
     const n = noise(8);
     for (let y = 0; y < h; y++)
       for (let x = 0; x < w; x++) {
         const e = Math.min(x, y, w - 1 - x, h - 1 - y);
         const reach = depth * (0.6 + (n(x, y) + 0.5) * 0.9);
         const dens = Math.max(0, Math.min(1, 1 - e / reach));
-        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) add(x, y, sign * amp * k);
+        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 >= dens * dens) continue;
+        if (toWhite) white[idx(x, y)] = 1;
+        else add(x, y, wear * amp * k);
       }
   };
 
@@ -178,71 +134,35 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     for (let i = 0; i < d.length; i++) d[i] += (rnd() - 0.5) * amp * k;
   };
 
-  switch (style) {
-    case 'worn': // потёртый: стёртые участки, редкие царапины и сколы
-      mottle(1.5);
-      scuffs(6, 0);
-      for (let i = 0; i < 5; i++) scratch(8 + rnd() * 18, 6);
-      chips(Math.floor((w * h) / 500));
-      grain(3);
-      break;
-    case 'strata': // слоистый: волнистые пласты разной толщины
-      strata(2.5);
-      chips(Math.floor((w * h) / 900));
-      grain(2.5);
-      break;
-    case 'scratch': { // исцарапанный: ровный камень и сетка царапин, часть — пучками в одну сторону
-      mottle(1);
-      const dir = rnd() * Math.PI;
-      for (let i = 0; i < 26; i++) scratch(6 + rnd() * 30, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
-      grain(2);
-      break;
-    }
-    case 'slate': // сланец: слои + потёртости + царапины + сколы
-      strata(2);
-      scuffs(4, -0.08);
-      for (let i = 0; i < 10; i++) scratch(6 + rnd() * 20, 5);
-      chips(Math.floor((w * h) / 600));
-      grain(2.5);
-      break;
-    case 'wornscratch': { // потёртый + исцарапанный
-      mottle(1.2);
-      scuffs(6, -0.02);
-      const dir = rnd() * Math.PI;
-      for (let i = 0; i < 22; i++) scratch(6 + rnd() * 28, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
-      chips(Math.floor((w * h) / 700));
-      grain(2.5);
-      break;
-    }
-    case 'edgeworn':
-    case 'edgeworn2':
-    case 'edgeworn3': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
-      mottle(1);
-      scuffs(4, -0.22);
-      const dir = rnd() * Math.PI;
-      for (let i = 0; i < 34; i++) scratch(5 + rnd() * 30, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
-      chips(Math.floor((w * h) / 1100));
-      if (whole) {
-        // светлый камень: тёмная стёртость читается как грязь — варианты: край светлее (edgeworn2) или только сколы (edgeworn3)
-        const mode = !light || style === 'edgeworn' ? 'wear' : style === 'edgeworn2' ? 'polish' : 'chips';
-        if (mode === 'wear') edgeWear(7, 7);
-        if (mode === 'polish') edgeWear(9, 7, 1);
-        edgeChips(Math.floor((w + h) / (mode === 'chips' ? 5 : 9)));
+  if (kind === 'inset') {
+    // утопленное поле: ровный камень, тонкие царапины и тень одинаковой силы по всему периметру — без пятен и осветлений
+    scratches(16, 2, 3, 24);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const e = Math.min(x, y, w - 1 - x, h - 1 - y);
+        if (e < 2) add(x, y, -7 * k);
+        else if (e < 3) add(x, y, -3.5 * k);
       }
-      grain(2);
-      break;
+  } else {
+    mottle(1);
+    scuffs(4, -0.22);
+    scratches(34, 3, 5, 30);
+    chips(Math.floor((w * h) / 1100));
+    if (whole) {
+      edgeWear(7, 7, whiteEdges);
+      edgeChips(Math.floor((w + h) / 9));
     }
-    case 'vein': // прожилки: тёмный/светлый мрамор с жилами
-      mottle(1.2);
-      veins(3, 7);
-      for (let i = 0; i < 4; i++) scratch(8 + rnd() * 14, 4);
-      grain(2);
-      break;
+    grain(2);
   }
 
   const [c, g] = makeCanvas(w, h);
   const img = g.createImageData(w, h);
+  const bone = hexToRgb(PAL.bone);
   for (let i = 0; i < d.length; i++) {
+    if (white[i]) {
+      img.data.set([bone[0], bone[1], bone[2], 255], i * 4);
+      continue;
+    }
     const v = Math.round(d[i]);
     img.data[i * 4] = base[0] + v;
     img.data[i * 4 + 1] = base[1] + v;
@@ -253,15 +173,30 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
   return c;
 }
 
-/** Потёртости по кромке для CSS-панелей (их фон — повторяющаяся плитка, края которой не совпадают с краями панели).
- *  Четыре полупрозрачные полосы: сверху, снизу, слева, справа; накладываются слоями фона поверх фактуры.
- *  onLight — панель светлая (следы тёмные), иначе следы светлые. Возвращает значение для CSS `background`. */
-export function edgeWearLayers(onLight: boolean, seed: number, mode: 'wear' | 'polish' | 'chips' = 'wear'): string {
+/** Поверхность UI (табличка, плитка меню, рубашка карты) — вся поверхность целиком, со стёртыми краями.
+ *  inset — утопленное поле (доска на плитке меню). whole = false — бесшовная плитка для повтора. */
+export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: { inset?: boolean } = {}, whole = true): Canvas {
+  const light = THEME.scheme === 'light';
+  // светлая тема: основа чуть светлее палитры, но не белая — белыми остаются только стёртые края
+  const lift = light ? 0.1 : 0;
+  const b: RGB = [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift];
+  return stoneTile(w, h, b, seed, opts.inset && light ? 'inset' : 'panel', whole, light);
+}
+
+/** Плитка камня для CSS-фона панелей (data URL). Пиксель фактуры = 2 CSS px — та же сетка, что у рамок и шрифта.
+ *  Плитка крупная (320 CSS px): царапины на маленькой плитке складываются в заметный повтор. */
+export function panelTexture(hex: string, seed: number): string {
+  return scaleCanvas(surfaceTile(160, 160, hexToRgb(hex), seed, {}, false), 2).toDataURL();
+}
+
+/** Стёртые края для CSS-панелей (их фон — повторяющаяся плитка, края которой не совпадают с краями панели).
+ *  Четыре полосы — сверху, снизу, слева, справа — накладываются слоями фона поверх фактуры.
+ *  Светлая тема — стёрто до белого (bone), тёмная — полупрозрачный светлый износ. Возвращает значение для CSS `background`. */
+export function edgeWearLayers(seed: number): string {
   const L = 160; // длина полосы в пикселях фактуры
   const D = 9; // глубина потёртости от кромки
   const rnd = seeded(seed);
-  if (!onLight) mode = 'wear'; // на тёмном светлая стёртость и так выглядит как износ
-  const wearCol = mode === 'polish' ? 'rgba(255,255,255,0.7)' : onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
+  const wearCol = THEME.scheme === 'light' ? PAL.bone : 'rgba(255,255,255,0.09)';
   const strip = () => {
     // полоса «сверху»: кромка на y = 0
     const [c, g] = makeCanvas(L, D);
@@ -274,14 +209,13 @@ export function edgeWearLayers(onLight: boolean, seed: number, mode: 'wear' | 'p
       return 2 + (lv[i % gw] * (1 - t) + lv[(i + 1) % gw] * t) * (D - 2);
     };
     g.fillStyle = wearCol;
-    if (mode !== 'chips')
     for (let x = 0; x < L; x++)
       for (let y = 0; y < D; y++) {
         const dens = Math.max(0, 1 - y / reachAt(x));
         if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) g.fillRect(x, y, 1, 1);
       }
     // сколы у кромки
-    for (let i = 0; i < (mode === 'chips' ? 11 : 5); i++) {
+    for (let i = 0; i < 5; i++) {
       const x = Math.floor(rnd() * (L - 3));
       const sz = 1 + Math.floor(rnd() * 3);
       g.fillStyle = 'rgba(0,0,0,0.28)';
