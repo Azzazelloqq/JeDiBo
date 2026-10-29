@@ -2,6 +2,7 @@
 import { Rank } from '../core/types';
 import { PAL, STONE, THEME, type StoneColor } from './palette';
 import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, scaleCanvas, seeded, type Canvas, type Mask } from './pixel';
+import { surfaceTile } from './textures';
 
 export const CELL = 16;
 const FACE_W = 12;
@@ -133,10 +134,10 @@ export function logoMark(k = 3, color: string = PAL.logo): Canvas {
 export function cardBack(w = 52, h = 72): Canvas {
   const [c, g] = makeCanvas(w, h);
   const dark = THEME.scheme === 'dark';
-  g.drawImage(concreteTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77, { pores: 30, amp: 6 }), 0, 0);
+  g.drawImage(surfaceTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77, { pores: 30, amp: 6 }), 0, 0);
   // внутренняя плита
   const ix = 4, iy = 4, iw = w - 8, ih = h - 8;
-  g.drawImage(concreteTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, cracks: true, amp: 10 }), ix, iy);
+  g.drawImage(surfaceTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, cracks: true, amp: 10 }), ix, iy);
   const k = w >= 48 ? 4 : 3;
   const mark = logoMark(k, PAL.logo);
   const mx = Math.floor((w - mark.width) / 2);

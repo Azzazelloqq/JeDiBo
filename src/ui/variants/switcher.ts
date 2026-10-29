@@ -2,6 +2,7 @@
 // Стиль нейтральный и одинаковый во всех вариантах, чтобы не путать с тестируемым UI.
 import { saveSettings, type Settings } from '../../profile/profile';
 import { THEME } from '../../render/palette';
+import { setTexConcept, TEX_CONCEPTS, TEX_NAMES, texConcept } from '../../render/textures';
 import { h } from '../dom';
 import {
   AVAILABLE, cardArtMode, chosenVariant, currentScreen, onUiChange, SCREEN_NAMES, SCREENS, setCardArtMode,
@@ -46,6 +47,16 @@ export function mountSwitcher() {
                 'div',
                 { class: 'vsw-opts' },
                 ...([['dark', 'Тёмная'], ['light', 'Светлая']] as const).map(([t, l]) => opt(l, THEME.scheme === t, () => THEME.scheme !== t && reloadTheme(t))),
+              ),
+            ),
+            h(
+              'div',
+              { class: 'vsw-row' },
+              h('span', {}, 'Фактура'),
+              h(
+                'div',
+                { class: 'vsw-opts' },
+                ...TEX_CONCEPTS.map((t) => opt(TEX_NAMES[t], texConcept() === t, () => texConcept() !== t && (setTexConcept(t), (location.href = location.pathname)))),
               ),
             ),
             h(

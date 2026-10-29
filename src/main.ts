@@ -3,7 +3,8 @@ import lightCss from './styles/light.css?inline';
 import { applyCssPalette, PAL, THEME } from './render/palette';
 import { startBackground } from './render/background';
 import { scaleCanvas } from './render/pixel';
-import { concreteCss, logoMark } from './render/sprites';
+import { logoMark } from './render/sprites';
+import { panelTexture } from './render/textures';
 import { go } from './ui/app';
 import { bootScreen } from './ui/screens/lobby';
 import { initialScreen, screen } from './ui/variants/registry';
@@ -34,14 +35,14 @@ function applyTheme() {
   applyCssPalette();
   // бетонные фактуры для CSS-панелей генерируются один раз при старте
   const root = document.documentElement.style;
-  const tex = (name: string, hex: string, seed: number, soft = false) =>
-    root.setProperty(name, `url(${concreteCss(hex, seed, 96, 96, soft)})`);
   const soft = THEME.scheme === 'light'; // светлая — лёгкий рельеф
-  tex('--tex-concrete', PAL.concrete300, 9, soft);
-  tex('--tex-concrete-light', PAL.concrete200, 13, soft);
-  tex('--tex-inset', PAL.concrete400, 17, soft);
-  tex('--tex-slab', PAL.slab800, 3);
-  tex('--tex-slab-light', PAL.slab700, 5);
+  const tex = (name: string, hex: string, darker: string, seed: number, s = soft) =>
+    root.setProperty(name, `url(${panelTexture(hex, darker, seed, s)})`);
+  tex('--tex-concrete', PAL.concrete300, PAL.concrete400, 9);
+  tex('--tex-concrete-light', PAL.concrete200, PAL.concrete300, 13);
+  tex('--tex-inset', PAL.concrete400, PAL.concrete500, 17);
+  tex('--tex-slab', PAL.slab800, PAL.slab900, 3, false);
+  tex('--tex-slab-light', PAL.slab700, PAL.slab800, 5, false);
 }
 
 async function boot() {
@@ -64,6 +65,12 @@ async function boot() {
   go(bootScreen() ?? screen(initialScreen()));
   // отладочный пульт сети: в прод-сборку не попадает
   if (import.meta.env.DEV) void import('./net/devtools');
+  // ?shot — для скриншотов headless-браузером: без анимаций входа (только dev)
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('shot')) {
+    const st = document.createElement('style');
+    st.textContent = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important}.screen{opacity:1!important;transform:none!important}';
+    document.head.appendChild(st);
+  }
 }
 
 void boot();
