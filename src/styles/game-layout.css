@@ -65,6 +65,10 @@ body .game .log-count { flex: none; font-family: var(--f-pix); font-size: 12px; 
 body .game .log-last { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 body .game .log[open] .log-last { display: none; }
 body .game .log .log-list { margin-top: 8px; max-height: 34vh; }
+/* раскрытая Хроника занимает только остаток колонки (карта в руке соперника не выталкивает её за край), список прокручивается */
+body .game .side-right > .log[open] { flex: 0 1 auto; min-height: 120px; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; }
+body .game .side-right > .log[open]::details-content { display: contents; }
+body .game .side-right > .log[open] .log-list { flex: 1 1 auto; min-height: 0; }
 
 /* ── анимации партии ────────────────────────────────────────────────────── */
 /* плашка «ходит» в полёте между панелями (game.ts, flyTurnBadge); на месте посадки — невидима до приземления */
