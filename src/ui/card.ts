@@ -33,7 +33,8 @@ const box = (r: Rect) => `left:${(r.x / CARD_W) * 100}%;top:${(r.y / CARD_H) * 1
 /** Подпись-тир на лице карты по варианту. */
 function faceLabels(id: CardId) {
   const def = CARDS[id];
-  const legacy = def.takesTurn ? '◆ занимает ход' : def.timing === 'period' ? '◆ период' : '◆ сразу';
+  // когда действует — на сплошной плашке внизу карты (поверх крапчатого бетона мелкий текст не читался)
+  const when = h('div', { class: 'kcard-tier' }, h('span', {}, def.timing === 'period' ? 'в течение периода' : 'после получения'), def.takesTurn ? h('span', { class: 'kcard-turn' }, 'занимает ход') : null);
   if (KARMA_VARIANT === 'a')
     return [h('div', { class: 'kcard-name kv-a-name', style: box(NAME_PLATE) }, def.name), h('div', { class: 'kcard-tier kv-a-tier' }, `◆ ${timingLabel(id)}`)];
   if (KARMA_VARIANT === 'd')
@@ -42,7 +43,7 @@ function faceLabels(id: CardId) {
       h('div', { class: 'kv-d-text', style: box(TEXT_BOX) }, h('span', {}, CARD_SHORT[id])),
     ];
   if (KARMA_VARIANT === 'b' || KARMA_VARIANT === 'c') return [h('div', { class: `kcard-name kv-${KARMA_VARIANT}-name` }, def.name)];
-  return [h('div', { class: 'kcard-name' }, def.name), h('div', { class: 'kcard-tier' }, legacy)];
+  return [h('div', { class: 'kcard-name' }, def.name), when];
 }
 
 // ── C «Подсказка»: увеличенная карта и эффект по наведению (тап на сенсорном экране) ──────────

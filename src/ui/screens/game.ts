@@ -888,16 +888,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     }
     sfx.stamp();
     shake(5);
-    desc.append(
-      h('div', { class: 'kr-name stamp' }, def.name),
-      h(
-        'div',
-        { class: 'tags' },
-        h('span', { class: 'tag' }, def.timing === 'period' ? 'в течение периода' : 'после получения'),
-        def.takesTurn ? h('span', { class: 'tag tag-brand' }, 'занимает ход') : null,
-      ),
-      effectText(card, 'kr-text'),
-    );
+    // название и срок действия уже на самой карте — под ней только эффект, на сплошной плашке
+    desc.append(effectText(card, 'kr-text stamp'));
     const human = match.isHuman(p);
     await new Promise<void>((res) => {
       const done = () => {
