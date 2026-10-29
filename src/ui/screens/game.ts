@@ -18,7 +18,6 @@ import { animSpeed, wait } from '../../render/tween';
 import { Match } from '../../session/match';
 import { endNet, type NetSession } from '../../session/netSession';
 import { open } from '../nav';
-import { effectText, heldScale, heldText } from '../cardVariant';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
 import { avatarEl, pieceIcon, titleEl } from '../widgets';
@@ -732,7 +731,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ? h(
             'div',
             { class: `held ${burning ? 'burning' : ''}` },
-            cardEl(held.card, { scale: heldScale(), idle: true }).el,
+            cardEl(held.card, { scale: 2, idle: true }).el,
             h(
               'div',
               { class: 'held-info' },
@@ -740,7 +739,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
               burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
               match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-amber btn-small', { disabled: !canPlayHeld }) : null,
             ),
-            heldText(held.card),
           )
         : null,
     );
@@ -889,7 +887,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     sfx.stamp();
     shake(5);
     // название и срок действия уже на самой карте — под ней только эффект, на сплошной плашке
-    desc.append(effectText(card, 'kr-text stamp'));
+    desc.append(h('p', { class: 'kr-text stamp' }, def.text));
     const human = match.isHuman(p);
     await new Promise<void>((res) => {
       const done = () => {
