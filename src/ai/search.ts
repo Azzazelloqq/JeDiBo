@@ -18,6 +18,13 @@ export interface SearchOpts {
    * бот проверял бы один план и снова зевал.
    */
   minChecked?: number;
+  /**
+   * Эксперимент: дополнительные кандидаты от планировщика с другими весами («характерами»), чтобы проверке ответом
+   * было из чего выбирать, когда все лучшие планы по основной оценке — вариации одной идеи.
+   */
+  personas?: { weights: Partial<Weights>; top: number }[];
+  /** эксперимент: четвёртый полуход — после моего следующего хода соперник ещё раз ходит (дешёвым планировщиком) */
+  leaf?: TurnOpts;
 }
 
 export interface Scored {
@@ -33,6 +40,8 @@ export interface SearchResult {
 
 const mine = Array.from({ length: 10 }, newUndo);
 const theirs = Array.from({ length: 10 }, newUndo);
+const folU = Array.from({ length: 10 }, newUndo);
+const leafU = Array.from({ length: 10 }, newUndo);
 
 /**
  * deadline — момент (performance.now), после которого планы сверх обязательного минимума ответом не проверяются.
@@ -41,6 +50,20 @@ const theirs = Array.from({ length: 10 }, newUndo);
  */
 export function searchTurn(b: FastBoard, me: PlayerId, w: Weights, turn: TurnOpts, so: SearchOpts, deadline?: number): SearchResult {
   const first = planTurn(b, me, w, { ...turn, top: so.reply ? so.candidates : 1 });
+  if (so.reply && so.personas) {
+    const key = (st: Step[]) => st.map((x) => `${x.pi}:${x.t}`).sort().join(' ');
+    const have = new Set(first.alts.map((a) => key(a.steps)));
+    for (const p of so.personas) {
+      const r = planTurn(b, me, { ...w, ...p.weights }, { ...turn, top: p.top });
+      first.nodes += r.nodes;
+      for (const a of r.alts) {
+        const k = key(a.steps);
+        if (have.has(k)) continue;
+        have.add(k);
+        first.alts.push(a);
+      }
+    }
+  }
   if (!so.reply || first.alts.length <= 1) return { scored: first.alts.length ? first.alts : [{ steps: first.steps, score: first.score }], nodes: first.nodes };
   const opp = (1 - me) as PlayerId;
   let nodes = first.nodes;
@@ -65,6 +88,18 @@ export function searchTurn(b: FastBoard, me: PlayerId, w: Weights, turn: TurnOpt
         const f = planTurn(b, me, w, { ...so.followup, deadline: dl });
         nodes += f.nodes;
         sc = f.score;
+        if (so.leaf && f.score < WIN && f.score > -WIN) {
+          // соперник реально ходит на листе: статический размен не видит, что за ход он успевает подтянуть фигуры
+          f.steps.forEach((st, k) => b.make(st.pi, st.t, folU[k]));
+          const save3 = passTurn(b);
+          const l = planTurn(b, opp, w, { ...so.leaf, deadline: dl });
+          nodes += l.nodes;
+          l.steps.forEach((st, k) => b.make(st.pi, st.t, leafU[k]));
+          sc = l.score <= -WIN ? WIN : l.score >= WIN ? -WIN : evaluate(b, me, me, w);
+          for (let k = l.steps.length - 1; k >= 0; k--) b.unmake(leafU[k]);
+          restoreTurn(b, save3);
+          for (let k = f.steps.length - 1; k >= 0; k--) b.unmake(folU[k]);
+        }
         restoreTurn(b, save2);
       } else sc = evaluate(b, me, me, w);
       for (let k = r.steps.length - 1; k >= 0; k--) b.unmake(theirs[k]);

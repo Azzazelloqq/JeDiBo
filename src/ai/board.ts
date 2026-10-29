@@ -10,6 +10,7 @@ export const JUMP = 1 << 13;
 export const CELL_MASK = ATTACK - 1;
 
 const BARRIER = -1;
+const reachBuf = new Int32Array(256);
 const CAP = 128;
 
 // направления: 0..7 — ALL8 в порядке движка
@@ -228,6 +229,50 @@ export class FastBoard {
       if (!this.alive[i] || this.owner[i] !== by) continue;
       if (best >= 0 && this.rank[i] >= this.rank[best]) continue;
       if (this.hits(i, x, y, xray)) best = i;
+    }
+    return best;
+  }
+
+  /**
+   * Эксперимент: самая дешёвая фигура игрока `by`, которая бьёт клетку сейчас или после одного тихого хода
+   * (подкрепление: в размене на несколько ходов каждая сторона успевает подтянуть фигуры). -1 — нет такой.
+   */
+  reachAttackerOf(x: number, y: number, by: PlayerId, xray = false): number {
+    let best = -1;
+    const n = this.n;
+    for (let i = 0; i < this.count; i++) {
+      if (!this.alive[i] || this.owner[i] !== by) continue;
+      if (best >= 0 && this.rank[i] >= this.rank[best]) continue;
+      if (this.px[i] === x && this.py[i] === y) continue;
+      if (this.hits(i, x, y, xray)) {
+        best = i;
+        continue;
+      }
+      // дальше хода плюс удара фигура не дотянется
+      const r = this.rank[i];
+      const reach = r === Rank.Triangle ? 2 : this.shortRange[by] ? 2 : r === Rank.Square ? 6 : 10;
+      if (Math.abs(this.px[i] - x) > reach || Math.abs(this.py[i] - y) > reach) continue;
+      const len = this.targets(i, reachBuf);
+      const from = this.py[i] * n + this.px[i];
+      const fx = this.px[i];
+      const fy = this.py[i];
+      this.cell[from] = 0;
+      let ok = false;
+      for (let k = 0; k < len && !ok; k++) {
+        const t = reachBuf[k];
+        if (t & ATTACK) continue;
+        const c = t & CELL_MASK;
+        if (c === y * n + x) continue;
+        this.px[i] = c % n;
+        this.py[i] = (c / n) | 0;
+        this.cell[c] = i + 1;
+        ok = this.hits(i, x, y, xray);
+        this.cell[c] = 0;
+      }
+      this.px[i] = fx;
+      this.py[i] = fy;
+      this.cell[from] = i + 1;
+      if (ok) best = i;
     }
     return best;
   }

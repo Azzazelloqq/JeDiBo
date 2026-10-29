@@ -22,6 +22,8 @@ export interface Weights {
    * больше — полная цепочка, где каждая сторона бьёт самой дешёвой фигурой и может остановиться.
    */
   see: number;
+  /** эксперимент: со второго своего взятия в размене стороны подтягивают фигуры (бьющие после одного хода) */
+  reach?: boolean;
 }
 
 // Ценности 1/3/5 и полный штраф за угрозу: веса, подобранные в игре бота против самого себя (1/2.75/3.5, угроза 0.66),
@@ -61,7 +63,7 @@ function exchange(b: FastBoard, v: number, a: number, by: PlayerId, w: Weights):
     b.make(attacker, cell | ATTACK, seeUndo[made++]);
     side = (1 - side) as PlayerId;
     if (d + 1 >= depth) break;
-    const next = b.attackerOf(x, y, side, w.xray);
+    const next = w.reach && d >= 1 ? b.reachAttackerOf(x, y, side, w.xray) : b.attackerOf(x, y, side, w.xray);
     if (next < 0) break;
     d++;
     gain[d] = w.val[b.rank[attacker]] - gain[d - 1];
