@@ -2,7 +2,7 @@
 import { Rank } from '../core/types';
 import { getProfile, titleOf } from '../profile/profile';
 import { PAL, type StoneColor } from '../render/palette';
-import { hexToRgb, makeCanvas } from '../render/pixel';
+import { fromAscii, hexToRgb, makeCanvas, outline } from '../render/pixel';
 import { surfaceTile } from '../render/stone';
 import { avatar, logoMark, logoTexture, pieceSprite, pixelLogo, stoneTitle } from '../render/sprites';
 import { sfx } from '../audio/sfx';
@@ -133,6 +133,24 @@ export function pieceIcon(rank: Rank, color: StoneColor, scale = 2, up = true) {
   const [c, g] = makeCanvas(src.width, src.height);
   g.drawImage(src, 0, 0);
   return canvasEl(c, scale, 'piece-icon');
+}
+
+/** Шестерёнка кнопки настроек: свет слева-сверху (bone), тень справа-снизу, сквозное отверстие в центре. */
+const GEAR = [
+  '....wwG....',
+  '.ww.wwG.gg.',
+  '.wwwwwwGgg.',
+  '..wwwwwwG..',
+  'wwww...wGgg',
+  'wwww...GGgg',
+  'wwwG...GGgg',
+  '..wGGGGGg..',
+  '.wGGGGGGgg.',
+  '.GG.GGg.gg.',
+  '....Ggg....',
+];
+export function gearIcon(scale = 3) {
+  return canvasEl(outline(fromAscii(GEAR, { w: PAL.bone, G: PAL.concrete200, g: PAL.concrete400 }, 1), PAL.void), scale, 'gear-icon');
 }
 
 export function avatarEl(seed: string, scale = 5) {

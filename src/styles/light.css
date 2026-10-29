@@ -354,6 +354,12 @@ body.no-crt #crt { display: none; }
 .settings { display: flex; flex-direction: column; gap: 16px; }
 .set-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; font-family: var(--f-pix); font-size: 18px; min-height: 46px; }
 .seg { display: flex; gap: 8px; }
+.set-note { font-family: var(--f-mono); font-size: 14px; line-height: 1.45; color: var(--muted); }
+/* окно настроек поверх партии */
+.settings-dialog { min-width: 520px; max-width: 600px; }
+.settings-dialog .settings { text-align: left; margin: 14px 0 6px; }
+.settings-dialog > .set-note { margin: 10px 0 0; }
+.settings-dialog > .row { margin-top: 16px; }
 
 /* ── партия ─────────────────────────────────────────────────────────────── */
 .game {

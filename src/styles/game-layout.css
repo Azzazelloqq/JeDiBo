@@ -22,6 +22,8 @@ body .game .side-body > .presets-panel { margin-top: auto; }
 body .game .side-body > .presets-panel + .controls { margin-top: 0; }
 /* «Сдаться» / «В меню»: одной высоты с подсказкой под полем — нижний край экрана читается одной линией */
 body .game .controls .btn { min-height: 62px; font-size: 16px; padding: 10px 12px 12px; }
+/* настройки — квадратная кнопка с шестерёнкой: две кнопки с подписями делят остаток ряда */
+body .game .controls .btn-gear { flex: 0 0 62px; padding: 0; display: grid; place-items: center; }
 
 /* ── карточка хода (во главе левой колонки) ─────────────────────────────── */
 body .game .topbar { flex: none; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px; padding: 12px 14px; min-height: 0; }

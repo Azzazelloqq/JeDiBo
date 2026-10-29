@@ -3,6 +3,7 @@ import type { LevelId } from '../ai/levels';
 import { getProfile } from '../profile/profile';
 import type { NetSession } from '../session/netSession';
 import { go, type Screen } from './app';
+import { takeResume, type GameResume } from './gameResume';
 import { codexScreen } from './screens/codex';
 import { gameScreen } from './screens/game';
 import { menuScreen } from './screens/menu';
@@ -13,7 +14,7 @@ import { settingsScreen } from './screens/settings';
 export type ScreenId = 'menu' | 'chronicle' | 'codex' | 'rules' | 'settings' | 'game';
 export type GameKind = 'bot' | 'hotseat' | 'net' | 'tutorial';
 /** Аргумент экрана партии: вид партии, либо с уровнем Странника / сетевой сессией. */
-export type GameArg = GameKind | { kind: GameKind; level?: LevelId; net?: NetSession };
+export type GameArg = GameKind | { kind: GameKind; level?: LevelId; net?: NetSession; resume?: GameResume };
 const gameArg = (a: unknown) => (typeof a === 'object' && a ? (a as Exclude<GameArg, GameKind>) : { kind: (a as GameKind | undefined) ?? 'bot' });
 
 type Impl = (root: HTMLElement, arg?: unknown) => (() => void) | void;
@@ -23,7 +24,7 @@ const SCREENS: Record<ScreenId, Impl> = {
   codex: codexScreen,
   rules: rulesScreen,
   settings: settingsScreen,
-  game: (r, a) => (({ kind, net, level }) => gameScreen(r, kind, net, level))(gameArg(a)),
+  game: (r, a) => (({ kind, net, level, resume }) => gameScreen(r, kind, net, level, resume))(gameArg(a)),
 };
 const isScreen = (s: string | null): s is ScreenId => !!s && s in SCREENS;
 
@@ -42,6 +43,12 @@ export function screen(id: ScreenId, arg?: unknown): Screen {
 
 /** Перейти на экран (короткая запись go(screen(id))). */
 export const open = (id: ScreenId, arg?: unknown) => go(screen(id, arg));
+
+/** Партия, сохранённая перед перезагрузкой ради смены темы, — или null. */
+export function resumedGame(): Screen | null {
+  const r = takeResume();
+  return r ? screen('game', { kind: r.kind, level: r.level, resume: r }) : null;
+}
 
 /** Открыть обучение вместо стартового экрана: ?screen=tutorial или самый первый запуск (не перезагрузка страницы). */
 export function wantsTutorial(): boolean {

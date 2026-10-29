@@ -18,12 +18,14 @@ import { banner, floatText, pop, shake } from '../../render/fx';
 import { animSpeed, wait } from '../../render/tween';
 import { Match } from '../../session/match';
 import { endNet, type NetSession } from '../../session/netSession';
+import { saveResume, type ChronicleEntry, type GameResume } from '../gameResume';
 import { open } from '../nav';
 import { cardEl } from '../card';
 import { btn, h, toast } from '../dom';
-import { avatarEl, pieceIcon, titleEl } from '../widgets';
+import { avatarEl, gearIcon, pieceIcon, titleEl } from '../widgets';
 import { tutorialDirector, type TutorialDirector } from '../tutorial';
 import { chooseLevel } from './menu';
+import { settingsPanel } from './settings';
 
 type Kind = 'bot' | 'hotseat' | 'net' | 'tutorial';
 const LETTERS = 'ABCDEFGHIJKL';
@@ -67,8 +69,9 @@ const fmt = (ms: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
 
-/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. botLevel — уровень Странника (kind 'bot'). */
-export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botLevel?: LevelId) {
+/** net — сетевая сессия (kind 'net'): клиент комнаты уже получил start. botLevel — уровень Странника (kind 'bot').
+ *  resume — офлайн-партия, сохранённая перед перезагрузкой ради смены темы. */
+export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botLevel?: LevelId, resume?: GameResume) {
   setMood('game');
   const prof = getProfile();
   const level = levelById(botLevel ?? prof.botLevel);
@@ -86,8 +89,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       ? { names, controllers: me === 0 ? ['human', 'remote'] : ['remote', 'human'], net: client }
       : kind === 'tutorial'
         ? { names, controllers: ['human', 'bot'], initial: tutorialState(names), botAct: tutorialEnemy, botDelay: 750 }
-        : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'], botLevel: level.id },
+        : { names, controllers: kind === 'bot' ? ['human', 'bot'] : ['human', 'human'], botLevel: level.id, initial: resume?.state },
   );
+  if (resume) {
+    match.clocks = resume.clocks;
+    match.stats = resume.stats;
+  }
   const s = match.state;
   const gameSeed = s.seed;
   const board = new BoardView();
@@ -120,7 +127,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   let hoverCell: Pos | null = null;
   /** идёт проигрывание событий: выбор клеток по картам и окно кладбища ждут конца анимаций */
   let animating = false;
-  const chronicle: { text: string; p?: PlayerId; color?: GameState['players'][number]['color'] }[] = [];
+  const chronicle: ChronicleEntry[] = resume?.chronicle ?? [];
 
   // ════════════════════════════════════════════════════════════════════════
   // РАССТАНОВКА
@@ -246,7 +253,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       ),
       // быстрая расстановка — внизу колонки, рядом с «Готово» под полем: меньше тянуться мышью
       presetsPanel(),
-      h('div', { class: 'controls' }, btn('В меню', () => leave(), 'btn-dark btn-small')),
+      h('div', { class: 'controls' }, settingsBtn(), btn('В меню', () => leave(), 'btn-dark btn-small')),
     );
     right.replaceChildren(
       seatCard(rival, rivalNote, false),
@@ -347,7 +354,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     left.replaceChildren(
       seatCard(me, 'расстановка отправлена', false),
       h('section', { class: 'slab hint' }, 'Ваша расстановка скрыта: соперник увидит её только когда закончит свою.'),
-      h('div', { class: 'controls' }, btn('В меню', () => leave(), 'btn-dark btn-small')),
+      h('div', { class: 'controls' }, settingsBtn(), btn('В меню', () => leave(), 'btn-dark btn-small')),
     );
     right.replaceChildren(seatCard(opp, oppReady ? 'готов — начинаем…' : 'расставляется…', true));
     bottom.replaceChildren(h('div', { class: 'prompt slab' }, 'Ждём соперника…'));
@@ -361,8 +368,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     toast(m, 'brand');
   };
 
+  /** Карта, на чей вопрос ответят следующей пачкой событий: по ней поле выбирает «почерк» эффектов. */
+  let fxSource: CardId | null = null;
   match.onEvents = async (events, st) => {
     if (events.some((e) => e.type === 'placed') && st.phase === 'placement') return;
+    const nextFxSource = st.pending && st.pending.source !== 'promotion' ? st.pending.source : null;
     // отстали (свёрнутая вкладка, переподключение) — догоняем без анимаций
     swapPending = events.filter((e) => e.type === 'sidesSwap').length % 2 === 1;
     if (match.backlog > 2) {
@@ -378,8 +388,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       }
       board.sync(st);
       refresh();
+      fxSource = nextFxSource;
       return;
     }
+    board.cardCtx = fxSource;
     const drawnNow = new Set<CardId>();
     // спавны расстановки не анимируем по одному — армии «падают» разом в beginPlay()
     const startAt = events.findIndex((e) => e.type === 'start');
@@ -396,6 +408,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           break;
         case 'turnStart':
           selected = null;
+          board.cardCtx = null;
           // «Ваш ход» — когда улягутся обломки атаки, а не посреди удара
           if (i === lastTurn) await board.settle();
           refresh();
@@ -409,15 +422,18 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         case 'cardDrawn':
           drawnNow.add(e.card);
           await karmaReveal(e.card, e.player, 'drawn');
+          if (CARDS[e.card].timing === 'onReceive') board.cardCtx = e.card;
           break;
         case 'cardPlayed':
           if (!drawnNow.has(e.card)) await karmaReveal(e.card, e.player, 'played');
+          board.cardCtx = e.card;
+          await board.cast(e.card, e.player);
           break;
         case 'cardDiscarded':
           toast(`«${CARDS[e.card].name}»: ${e.reason}`, 'amber');
           break;
         case 'skipTurn':
-          await banner('Пропуск хода', st.players[e.player].name, 'stone', 500);
+          await Promise.all([banner('Пропуск хода', st.players[e.player].name, 'stone', 500), board.snooze(e.player)]);
           break;
         case 'capture': {
           await board.playEvent(e);
@@ -441,6 +457,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       }
     }
     animating = false;
+    board.cardCtx = null;
+    fxSource = nextFxSource;
     board.sync(st);
     refresh();
     const over = events.find((e) => e.type === 'gameOver');
@@ -796,10 +814,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   function controls() {
-    if (tut) return h('div', { class: 'controls' }, btn('Пропустить обучение', () => (saveProfile({ tutorialDone: true }), open('menu')), 'btn-dark btn-small'));
+    if (tut) return h('div', { class: 'controls' }, settingsBtn(), btn('Пропустить обучение', () => (saveProfile({ tutorialDone: true }), open('menu')), 'btn-dark btn-small'));
     return h(
       'div',
       { class: 'controls' },
+      settingsBtn(),
       btn('Сдаться', () => confirmBox('Сдаться?', 'Партия будет засчитана как поражение.', 'Сдаться', 'Играть дальше', () => match.submit({ type: 'resign', by: kind === 'hotseat' ? s.current : me })), 'btn-dark btn-small'),
       btn('В меню', () => leave(), 'btn-dark btn-small'),
     );
@@ -1043,6 +1062,58 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn(yesLabel, () => (close(), yes()), 'btn-brand'), btn(noLabel, close, 'btn-dark'))),
     );
     document.body.appendChild(ov);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // НАСТРОЙКИ поверх партии
+  // ════════════════════════════════════════════════════════════════════════
+  let closeSettings: (() => void) | null = null;
+  const settingsBtn = () => btn(gearIcon(3), () => openSettings(), 'btn-dark btn-small btn-gear', { title: 'Настройки', 'aria-label': 'Настройки' });
+
+  /** Тема собирается при загрузке страницы — её смена перезагружает вкладку. Офлайн-партия сохраняет себя и
+   *  продолжается с того же места; сетевая возвращается в комнату сама; обучение не восстановить — тема заперта. */
+  function openSettings() {
+    if (overlayOpen) return;
+    overlayOpen = true;
+    match.setPaused(true);
+    const close = () => {
+      ov.remove();
+      closeSettings = null;
+      overlayOpen = false;
+      match.setPaused(false);
+      if (s.phase === 'play') refreshBoard();
+    };
+    closeSettings = close;
+    const panel = settingsPanel({
+      themeLocked: tut ? 'сменить можно после обучения' : undefined,
+      beforeReload: kind === 'bot' || kind === 'hotseat' ? () => saveSnapshot(kind) : undefined,
+    });
+    panel.classList.remove('slab');
+    const ov = h(
+      'div',
+      { class: 'overlay in' },
+      h(
+        'div',
+        { class: 'slab dialog settings-dialog' },
+        h('h2', {}, 'Настройки'),
+        panel,
+        kind === 'net' ? h('p', { class: 'set-note' }, 'Смена темы перезагрузит страницу: связь с соперником прервётся на пару секунд.') : null,
+        h('div', { class: 'row' }, btn('К партии', close, 'btn-amber')),
+      ),
+    );
+    document.body.appendChild(ov);
+  }
+
+  function saveSnapshot(k: 'bot' | 'hotseat') {
+    saveResume({
+      kind: k,
+      level: level.id,
+      state: s,
+      clocks: match.clocks,
+      stats: match.stats,
+      chronicle,
+      placement: s.phase === 'placement' ? { for: placingFor, layout: [...layoutMap] } : undefined,
+    });
   }
 
   function curtain(title: string, sub: string) {
@@ -1298,6 +1369,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && closeSettings) return closeSettings();
     if (e.key === 'Escape') {
       selected = null;
       refreshBoard();
@@ -1315,6 +1387,13 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
 
   if (tut) void tutorialIntro();
   else if (s.phase !== 'placement') enterPlayDirect();
+  else if (resume?.placement) {
+    // расстановка после смены темы: тот же игрок, уже поставленные фигуры — на месте
+    startPlacement(resume.placement.for);
+    for (const [k, r] of resume.placement.layout) layoutMap.set(k, r);
+    board.sync(viewState());
+    renderPlacement();
+  }
   else if (kind === 'net' && (client!.placeCommitted || s.players[me].placed)) renderWaiting();
   else startPlacement(me);
   match.start();
