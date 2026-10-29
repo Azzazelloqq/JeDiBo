@@ -92,6 +92,9 @@ const LIGHT_MOODS: typeof DARK_MOODS = {
   win: { a: '#ecdfcf', b: '#fbf3e8', c: '#f2b95e', heat: 0.6, spin: 1.0 },
   lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
 };
+// вариант на выбор (?bg=mirror): меню тёмной темы — негатив светлого: тёплый графит, основа темнее тени, коралловый дым
+if (new URLSearchParams(location.search).get('bg') === 'mirror')
+  DARK_MOODS.menu = { a: '#2f2622', b: '#16110f', c: '#e85a40', heat: 0.3, spin: 0.9 };
 const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
 // обе темы — спокойный дым (стиль 1); стиль 2 — пиксельный вихрь варианта «б»
 const THEME_STYLE = 1;
