@@ -1,5 +1,6 @@
 // BoardView: низкорезный канвас поля (212×212), масштабируемый целиком.
 // Получает состояние + события движка, проигрывает анимации и рисует подсказки.
+import { ksfx } from '../audio/karmaSfx';
 import { sfx } from '../audio/sfx';
 import { canAct, forward, homeRows, isBarrier } from '../core/rules';
 import { Rank, type CardId, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
@@ -457,6 +458,7 @@ export class BoardView {
         for (const c of e.cells) this.dust(c.x, c.y, 10);
         shake(4);
         // от упавших плит по полу расходится пыльная волна
+        ksfx.dustWave();
         await this.layer(320, (t) => {
           const xs = e.cells.map((c) => this.X(c.x));
           const ys = e.cells.map((c) => this.Y(c.y));
@@ -490,7 +492,7 @@ export class BoardView {
           this.g.globalAlpha = 1;
         }, true)
       : null;
-    if (blitz) sfx.zap();
+    if (blitz) ksfx.dash();
     // подготовка — небольшое приседание
     await tween(60, (t) => {
       v.sy = 1 - 0.18 * t;
@@ -650,13 +652,14 @@ export class BoardView {
     this.vis.set(v.id, v);
     let z = 56, wob = 0, lid = 0;
     const off = this.persist(() => this.drawGift(v, z, wob, lid));
-    sfx.spawn();
+    ksfx.giftFall();
     await tween(440, (t) => (z = 56 * (1 - ease.outBounce(t))));
     this.dust(v.x, v.y, 8);
+    ksfx.giftRattle();
     await tween(300, (t) => (wob = Math.sin(t * Math.PI * 5) * (1 - t * 0.5)));
     await tween(90, (t) => (lid = t));
     off();
-    sfx.pop();
+    ksfx.giftPop();
     shake(3);
     this.confetti(this.X(v.x) + 8, this.Y(v.y) + 8, 30, [PAL.amber300, PAL.amber100, PAL.brand500, PAL.patina300, PAL.bone], 1.1);
     v.alpha = 1;
@@ -707,9 +710,10 @@ export class BoardView {
       px(g, cx - 1, y + 3, PAL.granite600, 1, 1);
       px(g, cx - 2, y, PAL.brand100, 1, 1);
     });
+    ksfx.dropFall();
     await tween(260, (t) => (z = 90 * (1 - ease.inCubic(t))));
     off();
-    sfx.splat();
+    ksfx.splat();
     shake(3);
     this.confetti(cx, floor - 2, 18, [PAL.granite500, PAL.granite400, PAL.brand500, PAL.granite700], 0.8);
     // лужа расползается и медленно уходит в камень
@@ -725,6 +729,7 @@ export class BoardView {
     }, true);
     v.alpha = 1;
     v.flash = 1;
+    ksfx.bloodGrow();
     await tween(340, (t) => {
       v.sy = 0.05 + 0.95 * ease.outBack(t);
       v.sx = 1.35 - 0.35 * ease.outCubic(t);
@@ -737,7 +742,7 @@ export class BoardView {
     v.alpha = 0;
     v.z = 26;
     this.vis.set(v.id, v);
-    sfx.rise();
+    ksfx.holyPillar();
     const cx = this.X(v.x) + 8;
     const floor = this.Y(v.y) + 13;
     const pillar = this.layer(1150, (t, now) => {
@@ -763,6 +768,7 @@ export class BoardView {
       v.alpha = Math.min(1, t * 2);
     });
     v.flash = 1;
+    ksfx.holyLand();
     this.dust(v.x, v.y, 6);
     await pillar;
   }
@@ -771,7 +777,7 @@ export class BoardView {
   private async soulSpawn(v: Vis) {
     v.alpha = 0;
     this.vis.set(v.id, v);
-    sfx.soul();
+    ksfx.soulSwirl();
     const cx = this.X(v.x) + 8;
     const cy = this.Y(v.y) + 8;
     const motes = Array.from({ length: 16 }, () => ({ a: Math.random() * Math.PI * 2, r: 18 + Math.random() * 16, d: Math.random() * 0.25 }));
@@ -790,7 +796,7 @@ export class BoardView {
       const s = Math.round(t * 4);
       if (s) px(this.g, cx - s, cy - s, withAlpha(PAL.patina300, 0.35 * t), s * 2, s * 2);
     });
-    sfx.promote();
+    ksfx.soulForm();
     v.alpha = 1;
     v.flash = 1;
     this.sparkle(v.x, v.y, PAL.patina300, 14);
@@ -801,7 +807,7 @@ export class BoardView {
   // ── смерть ──
   /** Двойная смерть: прицел стягивается на фигуре, крест-накрест удар косой, дым. */
   private async reap(v: Vis, victim: Piece) {
-    sfx.lock();
+    ksfx.lockOn();
     await this.layer(300, (t) => this.brackets({ x: v.x, y: v.y }, PAL.brand500, Math.round((1 - ease.outCubic(t)) * 9), true));
     const x0 = this.X(v.x), y0 = this.Y(v.y);
     const cut = (t: number, second: number) => {
@@ -811,13 +817,14 @@ export class BoardView {
       this.line(sx - 1, sy, sx + (ex - sx) * k - 1, sy + (ey - sy) * k, PAL.brand500, 2);
       this.line(sx, sy, sx + (ex - sx) * k, sy + (ey - sy) * k, PAL.bone);
     };
-    sfx.slash();
+    ksfx.slash();
     await this.layer(170, (t) => {
       this.brackets({ x: v.x, y: v.y }, PAL.brand500, 0, true);
       cut(t, 0);
       cut(t, 1);
     });
     shake(6);
+    ksfx.reapBreak();
     void this.layer(320, (t) => {
       this.g.globalAlpha = 1 - t;
       cut(1, 0);
@@ -832,7 +839,7 @@ export class BoardView {
   // ── ранг ──
   /** Карьерный лифт вверх: столб света с бегущими вверх шевронами поднимает фигуру, наверху она перерождается. */
   private async liftUp(v: Vis, to: Rank) {
-    sfx.rise();
+    ksfx.liftRise();
     const cx = this.X(v.x) + 8;
     const floor = this.Y(v.y) + 14;
     const column = this.layer(820, (t) => {
@@ -850,13 +857,14 @@ export class BoardView {
       v.sy = 1 + 0.2 * Math.sin(Math.PI * t);
       v.sx = 1 - 0.1 * Math.sin(Math.PI * t);
     });
-    sfx.promote();
+    ksfx.liftDing();
     v.flash = 1;
     v.rank = to;
     this.sparkle(v.x, v.y, PAL.amber300, 12);
     await this.pop(v);
     await tween(180, (t) => (v.z = 10 * (1 - ease.inCubic(t))));
     v.z = 0;
+    ksfx.liftLand();
     this.dust(v.x, v.y, 6);
     await Promise.all([this.squash(v), column]);
   }
@@ -865,11 +873,12 @@ export class BoardView {
   private async pressDown(v: Vis, to: Rank, color: string) {
     const cx = this.X(v.x) + 8;
     const top = this.Y(v.y) - v.z;
+    ksfx.pressFall();
     await this.layer(300, (t) => {
       const k = ease.inCubic(t);
       for (let i = 0; i < 3; i++) this.chevron(cx - 3, Math.round(top - 26 * (1 - k) - i * 4), 1, i ? withAlpha(color, 0.6 - i * 0.15) : color);
     });
-    sfx.thud();
+    ksfx.pressHit(color === PAL.brand500);
     shake(4);
     v.flash = 1;
     v.rank = to;
@@ -889,7 +898,6 @@ export class BoardView {
   // ── хозяин и перемещения ──
   /** Шпион: фигуру охватывают помехи, цвет мерцает между сторонами — и она уже чужая. */
   private async turncoat(v: Vis, to: PlayerId) {
-    sfx.glitch();
     const from = v.owner;
     const ox = v.x;
     const x0 = this.X(v.x), y0 = this.Y(v.y);
@@ -904,13 +912,14 @@ export class BoardView {
     for (let i = 0; i < 7; i++) {
       v.owner = i % 2 ? from : to;
       v.x = ox + (i < 6 ? (i % 2 ? 1 : -1) / CELL : 0);
+      ksfx.glitchTick();
       await wait(55 + i * 12);
     }
     noise();
     v.owner = to;
     v.x = ox;
     v.flash = 1;
-    sfx.cardFlip();
+    ksfx.turnSide();
     this.sparkle(v.x, v.y, PAL.patina300, 12);
     await this.pop(v);
   }
@@ -918,11 +927,11 @@ export class BoardView {
   /** Отступление: фигура отъезжает назад низко, по полу, оставляя пыльный след. */
   private async retreat(v: Vis, to: Pos) {
     const fx = v.x, fy = v.y;
-    sfx.move();
     await tween(90, (t) => {
       v.sx = 1 + 0.1 * t;
       v.sy = 1 - 0.1 * t;
     });
+    ksfx.scrape();
     await tween(300, (t) => {
       const e = ease.outCubic(t);
       v.x = fx + (to.x - fx) * e;
@@ -934,13 +943,14 @@ export class BoardView {
     v.x = to.x;
     v.y = to.y;
     v.z = 0;
+    sfx.move();
     this.dust(to.x, to.y, 5);
     await this.squash(v);
   }
 
   /** Предательство: сверху опускаются нити кукловода, фигуру поднимают и переставляют, она болтается. */
   private async puppet(v: Vis, to: Pos) {
-    sfx.creak();
+    ksfx.twang();
     let len = 0;
     const strings = this.persist(() => {
       const bx = this.X(v.x);
@@ -957,7 +967,10 @@ export class BoardView {
     });
     await tween(180, (t) => (len = t));
     const fx = v.x, fy = v.y;
+    ksfx.creak(0.16);
     await tween(160, (t) => (v.z = 9 * ease.outCubic(t)));
+    ksfx.creak(0.23);
+    ksfx.creak(0.23, 0.23);
     await tween(460, (t) => {
       const e = ease.inOut(t);
       v.x = fx + (to.x - fx) * e;
@@ -973,6 +986,7 @@ export class BoardView {
     sfx.move();
     this.dust(to.x, to.y, 6);
     void this.squash(v);
+    ksfx.twang(true);
     await tween(160, (t) => (len = 1 - t));
     strings();
   }
@@ -1007,7 +1021,7 @@ export class BoardView {
       pts.push([M + W, y0]);
       return { pts, delay: i * 0.18 };
     });
-    sfx.zap();
+    ksfx.bolts();
     shake(5);
     await this.layer(700, (t) => {
       const flash = Math.max(0, 1 - t * 4);
@@ -1037,16 +1051,17 @@ export class BoardView {
   /** Депрессия: поле темнеет, идёт дождь, над Квадратами и Кругами игрока собираются тучки, фигуры понуро оседают. */
   private async castRain(slowed: Vis[]) {
     const W = N * CELL;
-    sfx.rain();
-    slowed.forEach(
-      (v, i) =>
-        void tween(700, (t) => {
-          const w = Math.sin(t * Math.PI);
-          v.sy = 1 - 0.16 * w;
-          v.sx = 1 + 0.08 * w;
-        }, 150 + i * 40),
+    ksfx.rain();
+    // фигуры оседают волной, но вся волна укладывается в дождь: анимация не переживает пачку событий
+    const step = Math.min(40, 400 / Math.max(1, slowed.length));
+    const sag = slowed.map((v, i) =>
+      tween(700, (t) => {
+        const w = Math.sin(t * Math.PI);
+        v.sy = 1 - 0.16 * w;
+        v.sx = 1 + 0.08 * w;
+      }, 150 + i * step),
     );
-    await this.layer(1300, (t) => {
+    const rain = this.layer(1300, (t) => {
       const a = Math.sin(t * Math.PI);
       this.g.fillStyle = withAlpha(PAL.void, 0.32 * a);
       this.g.fillRect(M, M, W, W);
@@ -1054,6 +1069,7 @@ export class BoardView {
         this.emit(4, () => ({ x: M + Math.random() * W, y: M + Math.random() * W * 0.6, vx: -0.35, vy: 2.6, max: 260 + Math.random() * 200, color: Math.random() < 0.7 ? PAL.concrete400 : PAL.patina300 }));
       for (const v of slowed) this.drawCloud(this.X(v.x) + 1, this.Y(v.y) - 2 - v.z, Math.min(1, t * 3), Math.floor(t * 20));
     });
+    await Promise.all([rain, ...sag]);
   }
 
   /** Тучка над фигурой (Депрессия): k — непрозрачность, f — кадр капели. */
@@ -1070,14 +1086,13 @@ export class BoardView {
 
   /** Тихоход: над фигурами раскручиваются спирали, фигуры вязко покачиваются. */
   private async castSnail(slowed: Vis[]) {
-    sfx.slow();
-    slowed.forEach(
-      (v) =>
-        void tween(900, (t) => {
-          const w = Math.sin(t * Math.PI * 2) * (1 - t);
-          v.sx = 1 + 0.14 * w;
-          v.sy = 1 - 0.1 * w;
-        }),
+    ksfx.snail();
+    const wobble = slowed.map((v) =>
+      tween(900, (t) => {
+        const w = Math.sin(t * Math.PI * 2) * (1 - t);
+        v.sx = 1 + 0.14 * w;
+        v.sy = 1 - 0.1 * w;
+      }),
     );
     await this.layer(950, (t) => {
       for (const v of slowed) {
@@ -1092,11 +1107,12 @@ export class BoardView {
         }
       }
     });
+    await Promise.all(wobble);
   }
 
   /** Круговая защита: вокруг Треугольников и Квадратов раскрывается щит, искры летят во все 8 сторон. */
   private async castShield(guards: Vis[]) {
-    sfx.shield();
+    ksfx.shield();
     await this.layer(650, (t) => {
       const k = ease.outCubic(t);
       for (const v of guards) {
@@ -1115,8 +1131,8 @@ export class BoardView {
 
   /** Прыгун: фигуры игрока (кроме Треугольников) волной подпрыгивают, как на пружинах. */
   private async castJumper(jumpers: Vis[]) {
-    sfx.spring();
     const order = [...jumpers].sort((a, b) => a.x - b.x || a.y - b.y);
+    ksfx.boings(order.length);
     await Promise.all(
       order.map((v, i) =>
         tween(300, (t) => {
@@ -1136,6 +1152,7 @@ export class BoardView {
   async snooze(p: PlayerId) {
     if (!this.el.isConnected) return;
     const zs = [...this.vis.values()].filter((v) => !v.dead && v.owner === p).map((v) => ({ v, d: Math.random() * 0.4 }));
+    ksfx.snooze();
     await this.layer(1100, (t) => {
       this.g.fillStyle = withAlpha(PAL.void, 0.28 * Math.sin(t * Math.PI));
       this.g.fillRect(M, M, N * CELL, N * CELL);

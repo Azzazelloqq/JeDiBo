@@ -61,6 +61,61 @@ function noise(dur: number, gain: number, freq: number, q = 1, delay = 0) {
   src.start(t);
 }
 
+/** Голос с атакой и спадом: скольжение частоты (to), вибрато (vib: [Гц, доля частоты]). Для звуков, привязанных к анимации. */
+export function voice(o: { f: number; dur: number; gain: number; type?: OscillatorType; to?: number; attack?: number; delay?: number; vib?: [number, number] }) {
+  const a = ac();
+  if (!a || !master) return;
+  const t = a.currentTime + (o.delay ?? 0);
+  const end = t + o.dur;
+  const osc = a.createOscillator();
+  const g = a.createGain();
+  osc.type = o.type ?? 'sine';
+  osc.frequency.setValueAtTime(o.f, t);
+  if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), end);
+  const att = Math.min(o.attack ?? 0.005, o.dur * 0.9);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(o.gain, t + att);
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  if (o.vib) {
+    const lfo = a.createOscillator();
+    const depth = a.createGain();
+    lfo.frequency.value = o.vib[0];
+    depth.gain.value = o.f * o.vib[1];
+    lfo.connect(depth).connect(osc.frequency);
+    lfo.start(t);
+    lfo.stop(end + 0.02);
+  }
+  osc.connect(g).connect(master);
+  osc.start(t);
+  osc.stop(end + 0.02);
+}
+
+/** Шум через полосовой фильтр, частота фильтра может скользить (to) — свист, шорох, удар, дождь. */
+export function hiss(o: { dur: number; gain: number; f: number; to?: number; q?: number; attack?: number; delay?: number }) {
+  const a = ac();
+  if (!a || !master) return;
+  const t = a.currentTime + (o.delay ?? 0);
+  const end = t + o.dur;
+  const len = Math.max(1, Math.floor(a.sampleRate * o.dur));
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const f = a.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.setValueAtTime(o.f, t);
+  if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), end);
+  f.Q.value = o.q ?? 1;
+  const g = a.createGain();
+  const att = Math.min(o.attack ?? 0.003, o.dur * 0.9);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(o.gain, t + att);
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+}
+
 export const sfx = {
   hover: () => tone(880, 0.03, 'square', 0.03),
   click: () => {
@@ -121,55 +176,4 @@ export const sfx = {
     [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.22, 'square', 0.06, 0, 0.08 + i * 0.07));
     tone(2093, 0.5, 'triangle', 0.08, 0, 0.38);
   },
-  // ── Карты Кармы ──
-  /** Блицкриг: треск разряда */
-  zap: () => {
-    for (let i = 0; i < 3; i++) noise(0.07, 0.45, 2600 + i * 900, 2, i * 0.06);
-    tone(1800, 0.25, 'sawtooth', 0.05, -1500);
-  },
-  /** Депрессия: шум дождя и опускающийся гул */
-  rain: () => {
-    noise(1.1, 0.35, 5200, 0.4);
-    tone(196, 0.9, 'triangle', 0.08, -90);
-  },
-  /** Тихоход: тягучее «вяз-з» */
-  slow: () => tone(260, 0.7, 'triangle', 0.12, -180),
-  /** Круговая защита: щит раскрывается */
-  shield: () => [392, 523, 784].forEach((f, i) => tone(f, 0.25, 'square', 0.05, 40, i * 0.05)),
-  /** Прыгун: пружина */
-  spring: () => tone(180, 0.22, 'square', 0.07, 520),
-  /** Двойная смерть: прицел захватывает цель, затем удар косой */
-  lock: () => tone(2200, 0.05, 'square', 0.04, -600),
-  slash: () => {
-    noise(0.16, 0.7, 3200, 1.2);
-    tone(900, 0.18, 'sawtooth', 0.06, -800);
-  },
-  /** Подарок: коробка лопается */
-  pop: () => {
-    noise(0.05, 0.6, 1800, 1);
-    [784, 1046, 1318].forEach((f, i) => tone(f, 0.14, 'triangle', 0.08, 0, 0.03 + i * 0.05));
-  },
-  /** Свежая кровь: тяжёлая капля */
-  splat: () => {
-    noise(0.2, 0.7, 500, 0.9);
-    tone(140, 0.16, 'sine', 0.3, -70);
-  },
-  /** Воскрешение и Карьерный лифт вверх: восходящий свет */
-  rise: () => [262, 330, 392, 523, 659].forEach((f, i) => tone(f, 0.4, 'triangle', 0.06, 0, i * 0.07)),
-  /** Бессмертие: души слетаются */
-  soul: () => {
-    noise(0.5, 0.25, 900, 0.5);
-    tone(440, 0.5, 'sine', 0.1, 440);
-  },
-  /** Понижение ранга: груз падает */
-  thud: () => {
-    noise(0.18, 0.8, 120, 0.7);
-    tone(90, 0.22, 'sine', 0.4, -50);
-  },
-  /** Шпион: помехи */
-  glitch: () => {
-    for (let i = 0; i < 5; i++) tone(300 + Math.random() * 1200, 0.04, 'square', 0.05, 0, i * 0.06);
-  },
-  /** Предательство: скрип нитей кукловода */
-  creak: () => tone(150, 0.4, 'sawtooth', 0.05, 90),
 };
