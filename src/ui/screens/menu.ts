@@ -4,7 +4,7 @@ import { setMood } from '../../render/background';
 import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
 import { logoEl, profileChip, tileArt } from '../widgets';
-import { open } from '../variants/registry';
+import { open } from '../nav';
 import { lobbyScreen } from './lobby';
 
 export const VERSION = '0.1.0-PROTO';
@@ -15,7 +15,7 @@ const LEVEL_NOTE: Record<LevelId, string> = {
   master: 'считает на ход вперёд',
 };
 
-/** Выбор уровня Странника перед партией (общий для всех вариантов). Уровень запоминается в профиле, но в окне не подсвечивается. */
+/** Выбор уровня Странника перед партией. Уровень запоминается в профиле, но в окне не подсвечивается. */
 export function chooseLevel() {
   const close = () => ov.remove();
   const start = (id: LevelId) => {

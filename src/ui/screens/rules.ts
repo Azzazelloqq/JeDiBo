@@ -1,7 +1,7 @@
 // Сжатые правила режима «Классика».
 import { Rank } from '../../core/types';
 import { setMood } from '../../render/background';
-import { open } from '../variants/registry';
+import { open } from '../nav';
 import { btn, h } from '../dom';
 import { pieceIcon } from '../widgets';
 

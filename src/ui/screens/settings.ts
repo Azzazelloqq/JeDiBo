@@ -4,7 +4,7 @@ import { setMood } from '../../render/background';
 import { THEME } from '../../render/palette';
 import { setShakeEnabled } from '../../render/fx';
 import { setAnimSpeed } from '../../render/tween';
-import { open } from '../variants/registry';
+import { open } from '../nav';
 import { btn, h } from '../dom';
 import { pixelSlider } from '../widgets';
 

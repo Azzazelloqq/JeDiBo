@@ -8,7 +8,7 @@ import { Match } from '../session/match';
 import { endNet, hostNet, joinNet, netSession } from '../session/netSession';
 import { go } from '../ui/app';
 import { lobbyScreen } from '../ui/screens/lobby';
-import { open } from '../ui/variants/registry';
+import { open } from '../ui/nav';
 import type { RoomClient } from './client';
 import { stableStringify, stateHash } from './hash';
 

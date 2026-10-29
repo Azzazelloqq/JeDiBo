@@ -1,7 +1,7 @@
 // Мини-профиль: аватар, имя, звание, рейтинг, статистика, последние партии.
 import { getProfile, saveProfile, titleOf } from '../../profile/profile';
 import { setMood } from '../../render/background';
-import { open } from '../variants/registry';
+import { open } from '../nav';
 import { btn, h } from '../dom';
 import { avatarEl } from '../widgets';
 

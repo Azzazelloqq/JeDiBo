@@ -549,8 +549,6 @@ body.no-crt #crt { display: none; }
   mix-blend-mode: screen; opacity: 0; transition: opacity 0.15s steps(3);
 }
 .kcard.hovered .kcard-shine { opacity: 1; }
-.kcard.illus .kcard-front .kcard-shine { mix-blend-mode: soft-light; opacity: 0; }
-.kcard.illus.hovered .kcard-front .kcard-shine { opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) {
   .kcard.idle { animation: none; }
   .kcard-inner { transition: none; }

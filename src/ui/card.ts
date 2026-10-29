@@ -2,12 +2,11 @@
 import { CARDS, tierOf } from '../core/karma/cards';
 import type { CardId } from '../core/types';
 import { getSettings } from '../profile/profile';
-import { CARD_H, CARD_W, cardFace, illusFace } from '../render/cardArt';
+import { CARD_H, CARD_W, cardFace } from '../render/cardArt';
 import { PAL } from '../render/palette';
 import { makeCanvas, withAlpha } from '../render/pixel';
 import { cardBack } from '../render/sprites';
 import { h } from './dom';
-import { cardArtMode } from './variants/registry';
 
 let backCache: HTMLCanvasElement | null = null;
 const cloneCanvas = (src: HTMLCanvasElement) => {
@@ -21,10 +20,8 @@ const cloneCanvas = (src: HTMLCanvasElement) => {
 /** Прямоугольник в пикселях карты (52×72), где блика быть не должно. */
 export type Rect = { x: number; y: number; w: number; h: number };
 
-/** Иконочная лицевая сторона: плашка названия и строка тира. Рамка по бокам остаётся «глянцевой». */
+/** Лицевая сторона: плашка названия и строка тира. Рамка по бокам остаётся «глянцевой». */
 const ICON_FACE_SAFE: Rect[] = [{ x: 3, y: 44, w: CARD_W - 6, h: CARD_H - 44 }];
-/** Иллюстрированная сторона: плашка названия поверх нижней трети и строка тира. */
-const ILLUS_FACE_SAFE: Rect[] = [{ x: 2, y: 43, w: CARD_W - 4, h: CARD_H - 45 }];
 
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -96,10 +93,9 @@ export function cardEl(
   let front: HTMLDivElement | null = null;
   let frontShine: HTMLCanvasElement | null = null;
   let tier = 'simple';
-  const illus = !!id && cardArtMode() === 'illustrated';
   if (id) {
     const def = CARDS[id];
-    const art = illus ? illusFace(id) : cloneCanvas(cardFace(id));
+    const art = cloneCanvas(cardFace(id));
     art.className = 'pix kcard-art';
     tier = tierOf(def);
     frontShine = shineCanvas();
@@ -114,12 +110,12 @@ export function cardEl(
   }
   const backFace = h('div', { class: 'kcard-face kcard-back' }, back, backShine);
   const inner = h('div', { class: 'kcard-inner' }, front ?? '', backFace);
-  const el = h('div', { class: `kcard ${opts.idle !== false ? 'idle' : ''} ${illus ? 'illus' : ''}`, style: `width:${w}px;height:${hgt}px;--s:${scale}` }, inner);
+  const el = h('div', { class: `kcard ${opts.idle !== false ? 'idle' : ''}`, style: `width:${w}px;height:${hgt}px;--s:${scale}` }, inner);
   el.style.setProperty('--phase', `${Math.random() * -6}s`);
   if (opts.faceUp !== false && id) el.classList.add('face-up');
 
   if (opts.tilt !== false) {
-    const safe = opts.shineSafe ?? (illus ? ILLUS_FACE_SAFE : ICON_FACE_SAFE);
+    const safe = opts.shineSafe ?? ICON_FACE_SAFE;
     const tint = tier === 'fatal' ? PAL.brand100 : tier === 'rare' ? PAL.amber100 : PAL.bone;
     let sparks: [number, number][] = [];
     let last = { nx: 0.5, ny: 0.5 };

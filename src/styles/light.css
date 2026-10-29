@@ -499,8 +499,6 @@ body.no-crt #crt { display: none; }
 }
 .kcard.hovered .kcard-shine { opacity: 1; }
 /* иллюстрированная лицевая сторона (задача B): мягче, чтобы не выбеливать рисунок */
-.kcard.illus .kcard-front .kcard-shine { mix-blend-mode: soft-light; opacity: 0; }
-.kcard.illus.hovered .kcard-front .kcard-shine { opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) {
   .kcard.idle { animation: none; }
   .kcard-inner { transition: none; }

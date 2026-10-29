@@ -6,7 +6,7 @@ import { setMood } from '../../render/background';
 import { endNet, hostNet, inviteLink, joinNet, netSession, normalizeCode, resumeNet, takeInviteCode, type NetSession } from '../../session/netSession';
 import type { Screen } from '../app';
 import { btn, h, toast } from '../dom';
-import { open } from '../variants/registry';
+import { open } from '../nav';
 
 const FAIL_TEXT: Record<GuestFailure, string> = {
   notFound: 'Комната не найдена. Проверьте код. Если хост с телефона — пусть откроет игру и не сворачивает браузер.',
