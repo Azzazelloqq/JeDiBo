@@ -959,7 +959,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       });
       fresh.forEach((em, i) =>
         setTimeout(() => {
-          sfx.emblem();
+          // звук один на всю пачку эмблем — с первым тостом
+          if (i === 0) sfx.emblem();
           toast(`Новая эмблема: ${em.name}`, 'amber');
         }, 900 + i * 700),
       );
