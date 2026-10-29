@@ -456,10 +456,12 @@ const defs: CardDef[] = [
     timing: 'onReceive',
     takesTurn: false,
     text: 'До конца партии вы играете фигурами противника.',
-    rule: 'Игроки меняются фигурами на поле и кладбищами. Цвета, таймеры и Карты Кармы не меняются. Игрок продолжает ход.',
+    rule: 'Игроки меняются фигурами на поле и кладбищами: кто играл красными, теперь играет чёрными. Цвет фигур, таймеры и Карты Кармы не меняются. Игрок продолжает ход.',
     play(c) {
       const [a, b] = c.s.players;
+      // игрок пересаживается за чужую армию: её сторона, цвет и кладбище теперь его, фигуры не перекрашиваются
       [a.side, b.side] = [b.side, a.side];
+      [a.color, b.color] = [b.color, a.color];
       [a.graveyard, b.graveyard] = [b.graveyard, a.graveyard];
       for (const pc of c.s.pieces) {
         pc.owner = other(pc.owner);

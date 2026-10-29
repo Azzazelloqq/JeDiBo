@@ -11,12 +11,13 @@ import { ALL_CARDS, fullDeck } from '../src/core/karma/cards';
 import { CLASSIC } from '../src/core/modes';
 import { PRESETS } from '../src/core/presets';
 import { tutorialEnemy, tutorialState, tutorialStep } from '../src/core/tutorial';
-import { heldExpiresThisTurn, homeRows, isAttacked, legalTargets, targetsOf } from '../src/core/rules';
+import { heldExpiresThisTurn, homeRows, isAttacked, legalTargets, piecesOf, targetsOf } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
 import { checkBoard, collectPositions, lcg } from './lib/boardcheck';
 import { fuzz } from './lib/fuzz';
+import { stateHash } from '../src/net/hash';
 
 // ── мини-раннер ─────────────────────────────────────────────────────────────
 const tests: { name: string; fn: () => void }[] = [];
@@ -727,19 +728,67 @@ test('Линия смерти: уничтожает все фигуры стол
   assert(s.current === 1, 'Линия смерти занимает ход — ход должен перейти');
 });
 
-test('Смена поля: фигуры и кладбища меняются, цвета и карты — нет; получивший продолжает ход фигурами соперника', () => {
+test('Смена поля: игроки меняются армиями вместе с цветом и кладбищем; цвет фигур, часы и карты — нет; получивший продолжает ход', () => {
   const s = receive('sideChange', [[0, Rank.Triangle, 'A2'], [0, Rank.Circle, 'F6']], (g) => {
     g.players[0].graveyard = [{ uid: 1, rank: Rank.Triangle, turn: 0 }];
     g.players[1].graveyard = [{ uid: 2, rank: Rank.Square, turn: 0 }, { uid: 3, rank: Rank.Square, turn: 0 }];
     g.players[1].held = { card: 'jumper', untilOwnTurn: 12 };
   });
-  const colors = s.players.map((p) => p.color).join();
   assert(s.played.includes('sideChange'), 'Смена поля не сыграна');
   assert(piecesNamed(s, 0).join() === 'TL10' && piecesNamed(s, 1).join() === 'CF6,TA2', `фигуры: ${piecesNamed(s, 0)} / ${piecesNamed(s, 1)}`);
   assert(s.players[0].graveyard.length === 2 && s.players[1].graveyard.length === 1, 'кладбища не поменялись');
-  assert(s.players.map((p) => p.color).join() === colors && s.players[1].held?.card === 'jumper', 'цвета и карты не должны меняться');
+  assert(s.players[0].side === 1 && s.players[1].side === 0, 'стороны не поменялись');
+  assert(s.players[0].held === null && s.players[1].held?.card === 'jumper', 'Карты Кармы не должны меняться');
   assert(s.current === 0 && s.ap === s.mode.ap, 'получивший карту должен продолжить ход');
   assert(moveFrom(s, 'L10', 'L9').ok, 'треугольник соперника должен ходить в своём прежнем направлении');
+});
+
+test('Смена поля: каждая фигура сохраняет цвет — игрок «красных» теперь играет чёрными', () => {
+  const s = position([[0, Rank.Triangle, 'A2'], [0, Rank.Circle, 'F6'], [1, Rank.Triangle, 'L10'], [1, Rank.Square, 'C11']], 1);
+  s.players[0].ownTurns = 6;
+  s.actedThisTurn = true;
+  s.deck = ['sideChange'];
+  const pieceColor = (g: GameState) => g.pieces.map((q) => `${q.id}:${g.players[q.owner].color}`).join();
+  const before = pieceColor(s);
+  const colors = s.players.map((p) => p.color);
+  const r = dispatch(s, { type: 'endTurn', by: 1 });
+  assert(r.ok && s.played.includes('sideChange'), 'Смена поля не сыграна');
+  assert(pieceColor(s) === before, `фигуры перекрасились: ${before} → ${pieceColor(s)}`);
+  assert(s.players[0].color === colors[1] && s.players[1].color === colors[0], 'игроки должны поменяться цветами');
+  // UI показывает карту по cardDrawn и только после «Принять» проигрывает sidesSwap: событие должно идти после карты
+  const types = r.events.map((e) => e.type);
+  assert(types.indexOf('turnStart') < types.indexOf('cardDrawn') && types.indexOf('cardDrawn') < types.indexOf('sidesSwap'), `порядок событий: ${types.join(' ')}`);
+});
+
+test('Смена поля: часы и победа — по игроку, а не по армии; одинаковый поток действий даёт одинаковое состояние', () => {
+  const build = () => {
+    const g = position([[0, Rank.Circle, 'E7'], [1, Rank.Triangle, 'F8'], [1, Rank.Triangle, 'A10']], 1);
+    g.players[0].ownTurns = 6;
+    g.actedThisTurn = true;
+    g.deck = ['sideChange'];
+    return g;
+  };
+  const s = build();
+  const clocks = newClocks(s.mode);
+  clocks.total = [111, 222];
+  const r = dispatch(s, { type: 'endTurn', by: 1 });
+  clocksAfter(s, clocks, r.events);
+  assert(clocks.total[0] === 111 && clocks.total[1] === 222, `часы игроков поменялись: ${clocks.total}`);
+  // игрок 0 теперь водит треугольники; у игрока 1 остался только круг — его взятие выигрывает партию за игрока 0
+  const hit = (g: GameState) => {
+    for (const pc of piecesOf(g, 0)) {
+      const a = legalTargets(g, pc).find((x) => x.attack);
+      if (a) return dispatch(g, { type: 'move', by: 0, pieceId: pc.id, to: a.to });
+    }
+    return null;
+  };
+  assert(piecesOf(s, 1).length === 1 && piecesOf(s, 1)[0].rank === Rank.Circle, 'у игрока 1 должен остаться круг');
+  assert(hit(s)?.ok, 'новая армия игрока 0 не может взять круг');
+  assert(s.phase === 'over' && s.winner === 0, `ожидалась победа игрока 0: ${s.phase} ${s.winner}`);
+  const t = build();
+  dispatch(t, { type: 'endTurn', by: 1 });
+  hit(t);
+  assert(stateHash(s) === stateHash(t), 'Смена поля недетерминирована');
 });
 
 test('реестр Карт Кармы совпадает с таблицей ГДД: 34 карты, количество, момент розыгрыша, занимает ли ход', () => {
