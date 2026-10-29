@@ -3,13 +3,15 @@
 // Свет слева-сверху: у царапины и скола тёмная кромка сверху, светлая снизу.
 import { makeCanvas, seeded, type Canvas } from './pixel';
 
-export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein';
+export type StoneStyle = 'worn' | 'strata' | 'scratch' | 'slate' | 'vein' | 'wornscratch' | 'edgeworn';
 type RGB = [number, number, number];
 
 // упорядоченный дизеринг 4×4 — для мягких краёв потёртостей без градиентов
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-export function stoneTile(w: number, h: number, base: RGB, seed: number, style: StoneStyle): Canvas {
+/** whole — плитка и есть вся поверхность (табличка, плитка меню): тогда видны её края и по ним можно стереть камень.
+ *  Для повторяющегося CSS-фона края плитки — не края панели, там потёртостей по краям нет. */
+export function stoneTile(w: number, h: number, base: RGB, seed: number, style: StoneStyle, whole = false): Canvas {
   const rnd = seeded(seed * 7 + 3);
   const d = new Float32Array(w * h); // сдвиг яркости каждого пикселя
   const lum = 0.3 * base[0] + 0.59 * base[1] + 0.11 * base[2];
@@ -145,6 +147,33 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
     }
   };
 
+  /** Потёртости по краям: камень стёрт у кромки, вглубь — неровно, дизерингом. */
+  const edgeWear = (amp: number, depth: number) => {
+    const n = noise(8);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const e = Math.min(x, y, w - 1 - x, h - 1 - y);
+        const reach = depth * (0.6 + (n(x, y) + 0.5) * 0.9);
+        const dens = Math.max(0, Math.min(1, 1 - e / reach));
+        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) add(x, y, wear * amp * k);
+      }
+  };
+
+  /** Сколы у кромки: чаще всего по краям поверхности. */
+  const edgeChips = (count: number) => {
+    for (let i = 0; i < count; i++) {
+      const side = Math.floor(rnd() * 4);
+      const t = rnd();
+      const inset = Math.floor(rnd() * rnd() * 6);
+      const x = side === 0 ? inset : side === 1 ? w - 1 - inset : Math.floor(t * w);
+      const y = side === 2 ? inset : side === 3 ? h - 1 - inset : Math.floor(t * h);
+      const sz = 1 + Math.floor(rnd() * 3);
+      for (let a = 0; a < sz; a++) for (let b = 0; b < sz; b++) if (rnd() < 0.8) add(x + a, y + b, -8 * k);
+      add(x + sz, y + sz - 1, 6);
+      add(x + sz - 1, y + sz, 6);
+    }
+  };
+
   const grain = (amp: number) => {
     for (let i = 0; i < d.length; i++) d[i] += (rnd() - 0.5) * amp * k;
   };
@@ -176,6 +205,28 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
       chips(Math.floor((w * h) / 600));
       grain(2.5);
       break;
+    case 'wornscratch': { // потёртый + исцарапанный
+      mottle(1.2);
+      scuffs(6, -0.02);
+      const dir = rnd() * Math.PI;
+      for (let i = 0; i < 22; i++) scratch(6 + rnd() * 28, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
+      chips(Math.floor((w * h) / 700));
+      grain(2.5);
+      break;
+    }
+    case 'edgeworn': { // основа почти целая, больше царапин, стёртые края и сколы по кромке
+      mottle(1);
+      scuffs(4, -0.22);
+      const dir = rnd() * Math.PI;
+      for (let i = 0; i < 34; i++) scratch(5 + rnd() * 30, 3 + rnd() * 5, rnd() < 0.5 ? dir + (rnd() - 0.5) * 0.3 : undefined);
+      chips(Math.floor((w * h) / 1100));
+      if (whole) {
+        edgeWear(7, 7);
+        edgeChips(Math.floor((w + h) / 9));
+      }
+      grain(2);
+      break;
+    }
     case 'vein': // прожилки: тёмный/светлый мрамор с жилами
       mottle(1.2);
       veins(3, 7);
@@ -195,4 +246,57 @@ export function stoneTile(w: number, h: number, base: RGB, seed: number, style: 
   }
   g.putImageData(img, 0, 0);
   return c;
+}
+
+/** Потёртости по кромке для CSS-панелей (их фон — повторяющаяся плитка, края которой не совпадают с краями панели).
+ *  Четыре полупрозрачные полосы: сверху, снизу, слева, справа; накладываются слоями фона поверх фактуры.
+ *  onLight — панель светлая (следы тёмные), иначе следы светлые. Возвращает значение для CSS `background`. */
+export function edgeWearLayers(onLight: boolean, seed: number): string {
+  const L = 160; // длина полосы в пикселях фактуры
+  const D = 9; // глубина потёртости от кромки
+  const rnd = seeded(seed);
+  const wearCol = onLight ? 'rgba(42,29,26,0.16)' : 'rgba(255,255,255,0.09)';
+  const strip = () => {
+    // полоса «сверху»: кромка на y = 0
+    const [c, g] = makeCanvas(L, D);
+    const gw = 20;
+    const lv = Array.from({ length: gw }, () => rnd());
+    const reachAt = (x: number) => {
+      const f = (x / L) * gw;
+      const i = Math.floor(f);
+      const t = f - i;
+      return 2 + (lv[i % gw] * (1 - t) + lv[(i + 1) % gw] * t) * (D - 2);
+    };
+    g.fillStyle = wearCol;
+    for (let x = 0; x < L; x++)
+      for (let y = 0; y < D; y++) {
+        const dens = Math.max(0, 1 - y / reachAt(x));
+        if (BAYER[(y % 4) * 4 + (x % 4)] / 16 < dens * dens) g.fillRect(x, y, 1, 1);
+      }
+    // сколы у кромки
+    for (let i = 0; i < 5; i++) {
+      const x = Math.floor(rnd() * (L - 3));
+      const sz = 1 + Math.floor(rnd() * 3);
+      g.fillStyle = 'rgba(0,0,0,0.28)';
+      for (let a = 0; a < sz; a++) for (let b = 0; b < sz - (a === sz - 1 ? 1 : 0); b++) g.fillRect(x + a, b, 1, 1);
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(x, sz, sz, 1);
+    }
+    return c;
+  };
+  // поворот полосы в нужную сторону и масштаб ×2 (пиксель фактуры = 2 CSS px)
+  const orient = (src: Canvas, rot: 0 | 1 | 2 | 3) => {
+    const vertical = rot % 2 === 1;
+    const [c, g] = makeCanvas(vertical ? D * 2 : L * 2, vertical ? L * 2 : D * 2);
+    g.imageSmoothingEnabled = false;
+    g.translate(c.width / 2, c.height / 2);
+    g.rotate((rot * Math.PI) / 2);
+    g.drawImage(src, -L, -D, L * 2, D * 2);
+    return c.toDataURL();
+  };
+  const top = orient(strip(), 0);
+  const right = orient(strip(), 1);
+  const bottom = orient(strip(), 2);
+  const left = orient(strip(), 3);
+  return `url(${top}) left top repeat-x, url(${bottom}) left bottom repeat-x, url(${left}) left top repeat-y, url(${right}) right top repeat-y`;
 }

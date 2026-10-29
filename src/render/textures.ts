@@ -17,7 +17,7 @@ const BLOTS = {
 } as const;
 type Blot = keyof typeof BLOTS;
 
-const STONES: StoneStyle[] = ['worn', 'strata', 'scratch', 'slate', 'vein'];
+const STONES: StoneStyle[] = ['wornscratch', 'edgeworn', 'worn', 'strata', 'scratch', 'slate', 'vein'];
 export type TexConcept = 'concrete' | 'cool' | 'smooth' | 'dither' | 'terrazzo' | Blot | StoneStyle;
 export const TEX_CONCEPTS: TexConcept[] = ['concrete', ...STONES, 'l1s1', 'l1s2', 'l1s3', 'l1s2d', 'l2s2', 'l2s3', 'l2s3d', 'cool', 'smooth', 'dither', 'terrazzo'];
 export const TEX_NAMES: Record<TexConcept, string> = {
@@ -28,6 +28,8 @@ export const TEX_NAMES: Record<TexConcept, string> = {
   l2s2: 'Почти белый · пятна 2',
   l2s3: 'Почти белый · пятна 3',
   l2s3d: 'Почти белый · пятна 3 + детали',
+  wornscratch: 'Потёртый + царапины',
+  edgeworn: 'Края, царапины, сколы',
   worn: 'Потёртый',
   strata: 'Слоистый',
   scratch: 'Исцарапанный',
@@ -213,13 +215,13 @@ type Opts = { pores?: number; cracks?: boolean; amp?: number };
 
 /** Поверхность UI (панель, табличка, плитка меню) в выбранном концепте. opts — параметры бетона;
  *  darker — соседний более тёмный тон палитры для дизеринга (по умолчанию основа −14). */
-export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB): Canvas {
+export function surfaceTile(w: number, h: number, base: RGB, seed: number, opts: Opts = {}, darker?: RGB, whole = true): Canvas {
   const concept = texConcept();
   const dark = darker ?? ([base[0] - 14, base[1] - 14, base[2] - 14] as RGB);
   if ((STONES as string[]).includes(concept)) {
     // светлая тема — камень светлее, чтобы тёмные следы читались как на тёмном
     const lift = THEME.scheme === 'light' ? 0.4 : 0;
-    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, concept as StoneStyle);
+    return stoneTile(w, h, [base[0] + (255 - base[0]) * lift, base[1] + (255 - base[1]) * lift, base[2] + (253 - base[2]) * lift], seed, concept as StoneStyle, whole);
   }
   if (concept in BLOTS) {
     const b = BLOTS[concept as Blot];
@@ -247,5 +249,5 @@ export function panelTexture(hex: string, darkerHex: string, seed: number, soft:
   const opts = soft ? { pores: 40, amp: 8 } : { pores: 60, amp: 9 };
   // у камня крупнее плитка: царапины и слои на маленькой плитке складываются в заметный повтор
   const n = (STONES as string[]).includes(texConcept()) ? 160 : 96;
-  return scaleCanvas(surfaceTile(n, n, hexToRgb(hex), seed, opts, hexToRgb(darkerHex)), 2).toDataURL();
+  return scaleCanvas(surfaceTile(n, n, hexToRgb(hex), seed, opts, hexToRgb(darkerHex), false), 2).toDataURL();
 }

@@ -4,7 +4,8 @@ import { applyCssPalette, PAL, THEME } from './render/palette';
 import { startBackground } from './render/background';
 import { scaleCanvas } from './render/pixel';
 import { logoMark } from './render/sprites';
-import { panelTexture } from './render/textures';
+import { edgeWearLayers } from './render/stone';
+import { panelTexture, texConcept } from './render/textures';
 import { go } from './ui/app';
 import { bootScreen } from './ui/screens/lobby';
 import { initialScreen, screen } from './ui/variants/registry';
@@ -42,6 +43,8 @@ function applyTheme() {
   tex('--tex-inset', PAL.concrete400, PAL.concrete500, 17);
   tex('--tex-slab', PAL.slab800, PAL.slab900, 3, false);
   tex('--tex-slab-light', PAL.slab700, PAL.slab800, 5, false);
+  // потёртые края CSS-панелей — только у концепта «края, царапины, сколы»
+  root.setProperty('--tex-edges', texConcept() === 'edgeworn' ? edgeWearLayers(THEME.scheme === 'light', 21) : 'none');
 }
 
 async function boot() {
