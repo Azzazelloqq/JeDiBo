@@ -5,8 +5,8 @@
 import { CARDS } from '../core/karma/cards';
 import { dispatch } from '../core/engine';
 import { PRESETS } from '../core/presets';
-import { sideOf } from '../core/rules';
-import { other, type Action, type GameState, type PlayerId } from '../core/types';
+import { homeRows, sideOf } from '../core/rules';
+import { Rank, other, type Action, type GameState, type PlayerId } from '../core/types';
 import { FastBoard, newUndo } from './board';
 import { DEFAULT_WEIGHTS, WIN, evaluate, type Weights } from './eval';
 import { searchTurn, type Scored, type SearchOpts } from './search';
@@ -118,10 +118,20 @@ function pick(scored: Scored[], temperature: number, rnd: () => number): Scored 
   return scored[0];
 }
 
-/** Расстановка: случайный пресет. */
+/**
+ * Расстановка: случайный пресет. «Случайно» раскладывается своим ГСЧ бота — пресет берёт время,
+ * и партия бота с тем же seed не повторялась бы.
+ */
 export function placement(s: GameState, me: PlayerId, rnd: () => number = Math.random): Action {
   const preset = PRESETS[Math.floor(rnd() * PRESETS.length)];
-  return { type: 'place', by: me, layout: preset.build(s, sideOf(s, me)) };
+  if (preset.id !== 'random') return { type: 'place', by: me, layout: preset.build(s, sideOf(s, me)) };
+  const cells = homeRows(s, sideOf(s, me)).flatMap((y) => Array.from({ length: s.mode.size }, (_, x) => ({ x, y })));
+  for (let i = cells.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [cells[i], cells[j]] = [cells[j], cells[i]];
+  }
+  const ranks = [...Array(12).fill(Rank.Triangle), ...Array(6).fill(Rank.Square), ...Array(3).fill(Rank.Circle)];
+  return { type: 'place', by: me, layout: ranks.map((rank, i) => ({ ...cells[i], rank })) };
 }
 
 const clone = (s: GameState): GameState => JSON.parse(JSON.stringify(s));
