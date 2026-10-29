@@ -191,9 +191,17 @@ export function hunter(seed: number): BotFn {
 
 /** Мастер с весами до исправления размена: 1/2.75/3.5, угроза 0.66, размен на один шаг — агрессивный, весь ход. */
 export function oldMaster(seed: number): BotFn {
-  const cfg = levelById('master').config;
-  return createAgent({ ...cfg, budgetMs: undefined, weights: { ...cfg.weights, val: [1, 2.75, 3.5], threat: 0.66, see: 2 } }, seed);
+  return createAgent({ ...PREV_MASTER, weights: { ...PREV_MASTER.weights, val: [1, 2.75, 3.5], threat: 0.66, see: 2 } }, seed);
 }
+
+/** Мастер до подкреплений и характеров: три полухода, оценка размена «с места». */
+const PREV_MASTER: AgentConfig = {
+  ...levelById('master').config,
+  budgetMs: undefined,
+  weights: { ...DEFAULT_WEIGHTS, reach: false },
+  search: { candidates: 10, reply: { width: 3, lookahead: 1 }, followup: { width: 2, lookahead: 1 } },
+};
+export const prevMaster = (seed: number): BotFn => createAgent(PREV_MASTER, seed);
 
 /** Случайный: любое допустимое действие наугад; после первого действия с вероятностью 1/3 заканчивает ход. */
 export function randomPlayer(seed: number): BotFn {
@@ -278,7 +286,7 @@ export function rusher(seed: number): BotFn {
   };
 }
 
-/** Голова Мастера со своим характером (весами и случайностью) — для стилей «черепаха», «рейдер», «разменщик», «шумный». */
+/** Голова нынешнего Мастера со своим характером (весами и случайностью) — для стилей «черепаха», «рейдер», «разменщик», «шумный». */
 function styled(seed: number, w: Partial<AgentConfig['weights']>, extra: Partial<AgentConfig> = {}): BotFn {
   const cfg = levelById('master').config;
   return createAgent({ ...cfg, ...extra, budgetMs: undefined, weights: { ...cfg.weights, ...w } }, seed);
@@ -291,6 +299,8 @@ export function opponentByName(name: string, seed: number): BotFn | undefined {
   if (name === 'rusher') return rusher(seed);
   // черепаха: очень осторожен, не идёт вперёд, не сближается — тянет партию
   if (name === 'turtle') return styled(seed, { threat: 1.5, myThreat: 0, advance: 0, chase: 0 });
+  // черепаха, которая видит подкрепления в разменах: крепость, которую не взять «в лоб»
+  if (name === 'turtle-r') return styled(seed, { threat: 1.5, myThreat: 0, advance: 0, chase: 0, reach: true });
   // рейдер: азартный — свои угрозы важнее чужих
   if (name === 'raider') return styled(seed, { threat: 0.4, myThreat: 1 });
   // разменщик: размен видит на шаг, все фигуры почти равны — меняется охотно
@@ -300,6 +310,7 @@ export function opponentByName(name: string, seed: number): BotFn | undefined {
   if (name === 'punisher') return punisher(seed);
   if (name === 'hunter') return hunter(seed);
   if (name === 'oldmaster') return oldMaster(seed);
+  if (name === 'prevmaster') return prevMaster(seed);
   if (name === 'sniper') return sniper(levelById('master').config, seed);
   if (name.startsWith('sniper-')) return sniper(levelById(name.slice(7)).config, seed);
   return undefined;

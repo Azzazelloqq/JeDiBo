@@ -42,7 +42,7 @@ function botFactory(name: string): ((seed: number) => BotFn) | undefined {
   const turn = { width: Number(o.w ?? base.turn.width), lookahead: Number(o.la ?? base.turn.lookahead) };
   const r = Number(o.r ?? base.search.reply?.width ?? 0);
   const f = Number(o.f ?? base.search.followup?.width ?? 0);
-  const search = { candidates: Number(o.c ?? base.search.candidates), reply: r > 0 ? { width: r, lookahead: turn.lookahead } : null, followup: f > 0 ? { width: f, lookahead: turn.lookahead } : undefined, personas: o.pe ? PERSONAS(Number(o.pe)) : undefined, leaf: o.l ? { width: Number(o.l), lookahead: turn.lookahead } : undefined };
+  const search = { candidates: Number(o.c ?? base.search.candidates), reply: r > 0 ? { width: r, lookahead: turn.lookahead } : null, followup: f > 0 ? { width: f, lookahead: turn.lookahead } : undefined, personas: o.pe ? PERSONAS(Number(o.pe), o.pw ? Number(o.pw) : undefined) : undefined, minChecked: o.mc ? Number(o.mc) : undefined, leaf: o.l ? { width: Number(o.l), lookahead: turn.lookahead } : undefined };
   // веса оценки: v1, v2 — ценность квадрата и круга, adv, th, my, ch — advance, threat, myThreat, chase, see — глубина размена
   const dw = base.weights;
   const weights = {
@@ -60,9 +60,9 @@ function botFactory(name: string): ((seed: number) => BotFn) | undefined {
 }
 
 // pe=K — эксперимент: ещё по K кандидатов от «осторожного» и «азартного» характеров (проверяются тем же ответом)
-const PERSONAS = (k: number) => [
-  { weights: { advance: 0, threat: 1.5, myThreat: 0 }, top: k },
-  { weights: { threat: 0.5, myThreat: 0.6 }, top: k },
+const PERSONAS = (k: number, w?: number) => [
+  { weights: { advance: 0, threat: 1.5, myThreat: 0 }, top: k, width: w },
+  { weights: { threat: 0.5, myThreat: 0.6 }, top: k, width: w },
 ];
 
 interface Job { nameA: string; nameB: string; games: number[]; limit: number }

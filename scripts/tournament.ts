@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const ALL = ['random', 'rusher', 'greedy', 'punisher', 'hunter', 'noisy', 'trader', 'raider', 'turtle', 'sniper', 'oldmaster'];
+const ALL = ['random', 'rusher', 'greedy', 'punisher', 'hunter', 'noisy', 'trader', 'raider', 'turtle', 'sniper', 'oldmaster', 'prevmaster'];
 const [level = 'master', nArg = '150', listArg] = process.argv.slice(2);
 const opponents = listArg ? listArg.split(',') : ALL;
 const arena = fileURLToPath(new URL('./arena.mjs', import.meta.url));
