@@ -173,8 +173,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       return;
     }
     const k = key(c);
-    if (layoutMap.has(k)) {
+    const removed = layoutMap.get(k);
+    if (removed !== undefined) {
       layoutMap.delete(k);
+      // снятая фигура сразу готова к постановке — иначе выбор остаётся на уже полном типе
+      placeRank = removed;
       sfx.crumble();
     } else {
       if (counts()[placeRank] >= LIMIT[placeRank]) {
@@ -260,23 +263,23 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     );
     // под полем: сколько стоит, полоса прогресса и что ставим сейчас — рядом с главной кнопкой
     const done = total === 21;
+    const placing = (r: Rank, n: number) =>
+      h('div', { class: 'pp-text' }, 'Ставим', h('span', { class: 'spawn-rank' }, pieceIcon(r, color, 2, up), RANK_NAME[r]), h('span', { class: 'muted' }, `ещё ${n}`));
     bottom.replaceChildren(
       h(
         'div',
         { class: `prompt slab place-progress ${done ? 'done' : ''}` },
-        h('div', { class: 'pp-count' }, h('b', {}, String(total)), h('span', {}, '/21')),
+        // невидимые «21» и все варианты текста задают размер плашки: смена текста не двигает поле
+        h('div', { class: 'pp-count pp-stack' }, h('div', {}, h('b', {}, String(total)), h('span', {}, '/21')), h('div', { class: 'pp-sizer', 'aria-hidden': 'true' }, h('b', {}, '21'), h('span', {}, '/21'))),
         h(
           'div',
           { class: 'pp-body' },
-          done
-            ? h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать')
-            : h(
-                'div',
-                { class: 'pp-text' },
-                'Ставим',
-                h('span', { class: 'spawn-rank' }, pieceIcon(placeRank, color, 2, up), RANK_NAME[placeRank]),
-                h('span', { class: 'muted' }, `ещё ${LIMIT[placeRank] - c[placeRank]}`),
-              ),
+          h(
+            'div',
+            { class: 'pp-stack' },
+            done ? h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать') : placing(placeRank, LIMIT[placeRank] - c[placeRank]),
+            ...[h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать'), ...PLACE_ORDER.map((r) => placing(r, LIMIT[r]))].map((el) => (el.classList.add('pp-sizer'), el.setAttribute('aria-hidden', 'true'), el)),
+          ),
           h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${(total / 21) * 100}%` })),
         ),
       ),
@@ -304,6 +307,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       h('div', { class: 'presets' }, ...PRESETS.map((p) => btn(p.name, () => applyPreset(p.id), 'btn-stone btn-small'))),
       btn('Очистить', () => {
         layoutMap.clear();
+        placeRank = PLACE_ORDER[0];
         board.sync(viewState());
         renderPlacement();
       }, 'btn-dark btn-small presets-clear', { disabled: layoutMap.size === 0 }),
