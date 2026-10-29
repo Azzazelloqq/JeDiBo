@@ -195,8 +195,108 @@ export function oldMaster(seed: number): BotFn {
   return createAgent({ ...cfg, budgetMs: undefined, weights: { ...cfg.weights, val: [1, 2.75, 3.5], threat: 0.66, see: 2 } }, seed);
 }
 
-/** Соперник по имени для скриптов: punisher, hunter, oldmaster, sniper (голова Мастера), sniper-<уровень>. */
+/** Случайный: любое допустимое действие наугад; после первого действия с вероятностью 1/3 заканчивает ход. */
+export function randomPlayer(seed: number): BotFn {
+  let x = seed | 0 || 1;
+  const rnd = () => ((x = (x * 1103515245 + 12345) & 0x7fffffff) / 0x80000000);
+  const place = createAgent(levelById('novice').config, seed);
+  const P = new Int16Array(512);
+  const T = new Int32Array(512);
+  return (s, me) => {
+    if (s.phase === 'placement') return place(s, me);
+    if (s.pending) {
+      const p = s.pending;
+      const n = p.options.length + (p.canSkip ? 1 : 0);
+      const k = Math.floor(rnd() * n);
+      return k < p.options.length ? { type: 'choose', by: me, option: p.options[k] } : n ? { type: 'skip', by: me } : null;
+    }
+    if (heldPlayable(s, me) && rnd() < 0.5) return { type: 'playCard', by: me };
+    if (s.actedThisTurn && rnd() < 1 / 3) return { type: 'endTurn', by: me };
+    const b = FastBoard.fromState(s);
+    const n = b.movesOf(P, T);
+    if (!n) return { type: 'endTurn', by: me };
+    const k = Math.floor(rnd() * n);
+    const to = T[k] & CELL_MASK;
+    return { type: 'move', by: me, pieceId: b.id[P[k]], to: { x: to % b.n, y: (to / b.n) | 0 } };
+  };
+}
+
+/**
+ * «Рвач»: бьёт, что берётся без потери; иначе гонит треугольники и квадраты вперёд к повышению
+ * (самую продвинутую фигуру, у которой есть ход вперёд), кругами не ходит без нужды.
+ */
+export function rusher(seed: number): BotFn {
+  const base = punisher(seed);
+  const P = new Int16Array(512);
+  const T = new Int32Array(512);
+  const u = newUndo();
+  return (s, me) => {
+    if (s.phase !== 'play' || s.pending || s.current !== me) return base(s, me);
+    if (heldPlayable(s, me)) return { type: 'playCard', by: me };
+    const b = FastBoard.fromState(s);
+    const n = b.movesOf(P, T);
+    if (!n) return { type: 'endTurn', by: me };
+    const opp = (1 - me) as PlayerId;
+    let cap = -1;
+    let capGain = 0;
+    let fwd = -1;
+    let fwdScore = -1;
+    for (let k = 0; k < n; k++) {
+      const c = T[k] & CELL_MASK;
+      const ty = (c / b.n) | 0;
+      if (T[k] & ATTACK) {
+        const gain = VAL[b.rank[b.pieceAt(c % b.n, ty)]];
+        b.make(P[k], T[k], u);
+        const lost = b.attacked(b.px[P[k]], b.py[P[k]], opp) ? VAL[b.rank[P[k]]] : 0;
+        b.unmake(u);
+        if (gain - lost > capGain) {
+          capGain = gain - lost;
+          cap = k;
+        }
+        continue;
+      }
+      if (b.rank[P[k]] === 2) continue;
+      const f = b.fwd[me];
+      const gainRows = (ty - b.py[P[k]]) * f;
+      if (gainRows <= 0) continue;
+      // чем дальше фигура уже продвинулась, тем охотнее её толкаем
+      const progress = f < 0 ? b.n - 1 - b.py[P[k]] : b.py[P[k]];
+      const sc = progress * 10 + gainRows;
+      if (sc > fwdScore) {
+        fwdScore = sc;
+        fwd = k;
+      }
+    }
+    const pick = (k: number): Action => {
+      const to = T[k] & CELL_MASK;
+      return { type: 'move', by: me, pieceId: b.id[P[k]], to: { x: to % b.n, y: (to / b.n) | 0 } };
+    };
+    if (fwd >= 0 && b.ap > 1) return pick(fwd);
+    if (cap >= 0) return pick(cap);
+    if (fwd >= 0) return pick(fwd);
+    return s.actedThisTurn ? { type: 'endTurn', by: me } : pick(0);
+  };
+}
+
+/** Голова Мастера со своим характером (весами и случайностью) — для стилей «черепаха», «рейдер», «разменщик», «шумный». */
+function styled(seed: number, w: Partial<AgentConfig['weights']>, extra: Partial<AgentConfig> = {}): BotFn {
+  const cfg = levelById('master').config;
+  return createAgent({ ...cfg, ...extra, budgetMs: undefined, weights: { ...cfg.weights, ...w } }, seed);
+}
+
+/** Соперник по имени для скриптов: punisher, hunter, oldmaster, sniper (голова Мастера), sniper-<уровень>,
+ *  random, rusher, turtle, raider, trader, noisy. */
 export function opponentByName(name: string, seed: number): BotFn | undefined {
+  if (name === 'random') return randomPlayer(seed);
+  if (name === 'rusher') return rusher(seed);
+  // черепаха: очень осторожен, не идёт вперёд, не сближается — тянет партию
+  if (name === 'turtle') return styled(seed, { threat: 1.5, myThreat: 0, advance: 0, chase: 0 });
+  // рейдер: азартный — свои угрозы важнее чужих
+  if (name === 'raider') return styled(seed, { threat: 0.4, myThreat: 1 });
+  // разменщик: размен видит на шаг, все фигуры почти равны — меняется охотно
+  if (name === 'trader') return styled(seed, { val: [1, 2, 2.5], see: 2, threat: 0.7 });
+  // шумный: голова Мастера, но выбирает почти наугад среди неплохих планов
+  if (name === 'noisy') return styled(seed, {}, { temperature: 2 });
   if (name === 'punisher') return punisher(seed);
   if (name === 'hunter') return hunter(seed);
   if (name === 'oldmaster') return oldMaster(seed);
