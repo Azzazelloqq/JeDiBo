@@ -34,7 +34,11 @@ const box = (r: Rect) => `left:${(r.x / CARD_W) * 100}%;top:${(r.y / CARD_H) * 1
 function faceLabels(id: CardId) {
   const def = CARDS[id];
   // когда действует — на сплошной плашке внизу карты (поверх крапчатого бетона мелкий текст не читался)
-  const when = h('div', { class: 'kcard-tier' }, h('span', {}, def.timing === 'period' ? 'в течение периода' : 'после получения'), def.takesTurn ? h('span', { class: 'kcard-turn' }, 'занимает ход') : null);
+  const when = h(
+    'div',
+    { class: 'kcard-tier' },
+    h('div', { class: 'kcard-when' }, h('span', {}, def.timing === 'period' ? 'в течение периода' : 'после получения'), def.takesTurn ? h('span', { class: 'kcard-turn' }, 'занимает ход') : null),
+  );
   if (KARMA_VARIANT === 'a')
     return [h('div', { class: 'kcard-name kv-a-name', style: box(NAME_PLATE) }, def.name), h('div', { class: 'kcard-tier kv-a-tier' }, `◆ ${timingLabel(id)}`)];
   if (KARMA_VARIANT === 'd')
