@@ -1,7 +1,6 @@
 import { LEVELS, type LevelId } from '../../ai/levels';
 import { getProfile, saveProfile } from '../../profile/profile';
 import { setMood } from '../../render/background';
-import { MENU_BGS, menuBg, mountMenuBackdrop, saveMenuBg, type MenuBg } from '../../render/menuBackdrop';
 import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
 import { logoEl, profileChip, tileArt } from '../widgets';
@@ -42,29 +41,8 @@ export function chooseLevel() {
   document.body.appendChild(ov);
 }
 
-/** Служебный переключатель вариантов фона меню (dev или `?menubg=`), пока владелец не выбрал один. */
-function bgSwitcher(cur: MenuBg, pick: (id: MenuBg) => void) {
-  return h(
-    'div',
-    { class: 'bg-switch' },
-    h('span', {}, 'Фон'),
-    ...MENU_BGS.map((b) => h('button', { class: b.id === cur ? 'on' : '', onclick: () => pick(b.id) }, b.name)),
-  );
-}
-
 export function menuScreen(root: HTMLElement) {
   setMood('menu');
-  let bg = menuBg();
-  let unmount = mountMenuBackdrop(root, bg);
-  const q = new URLSearchParams(location.search);
-  const showSwitch = (import.meta.env.DEV || q.has('menubg')) && !q.has('shot');
-  const pickBg = (id: MenuBg) => {
-    bg = id;
-    saveMenuBg(id);
-    unmount();
-    unmount = mountMenuBackdrop(root, bg);
-    root.querySelector('.bg-switch')?.replaceWith(bgSwitcher(bg, pickBg));
-  };
   const tile = (kind: 'bot' | 'hotseat' | 'net', title: string, sub: string, onClick: (() => void) | null) => {
     const el = h(
       'button',
@@ -104,7 +82,5 @@ export function menuScreen(root: HTMLElement) {
         btn('Настройки', () => open('settings')),
       ),
     ),
-    ...(showSwitch ? [bgSwitcher(bg, pickBg)] : []),
   );
-  return () => unmount();
 }
