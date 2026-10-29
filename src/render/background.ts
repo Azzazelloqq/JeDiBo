@@ -1,5 +1,5 @@
 // Фон: закрученный «дым над бетоном» во фрагментном шейдере, рендер в низком разрешении.
-// Вид зависит от темы: тёмная — исходный красный дым, светлая — мягкий тёплый дым.
+// Обе темы — один и тот же спокойный дым ступенями, отличаются только цвета (тёмная — зеркало светлой).
 import { THEME } from './palette';
 import { onFrame } from './tween';
 
@@ -10,7 +10,7 @@ uniform vec2 res;
 uniform float time;
 uniform float heat;   // 0 — холодный бетон, 1 — раскалённый (Карма)
 uniform float spin;
-uniform float style;  // 0 — дым (тёмная тема), 1 — спокойный дым (светлая тема), 2 — пиксельный вихрь (вариант «б»)
+uniform float style;  // 1 — спокойный дым (обе темы), 2 — пиксельный вихрь (вариант «б»)
 uniform vec3 colA;
 uniform vec3 colB;
 uniform vec3 colC;
@@ -59,15 +59,8 @@ void main(){
   vec3 col;
   if (style > 1.5) {
     col = swirl(uv, r);
-  } else if (style < 0.5) {
-    // тёмная, камень: исходный закрученный дым с зерном и виньеткой
-    col = smoke(uv, r, 0.0);
-    float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)) + time) * 43758.5453);
-    col += (grain - 0.5) * 0.035;
-    col *= 1.0 - smoothstep(0.45, 1.25, r);
-    col = floor(col * 18.0) / 18.0;
   } else {
-    // светлая, камень: медленный крупный дым без зерна, ступени по яркости (без цветной «радуги»)
+    // обе темы: медленный крупный дым без зерна, ступени по яркости (без цветной «радуги»)
     col = smoke(uv, r, 1.0);
     col *= 1.0 - 0.12 * smoothstep(0.7, 1.6, r);
     float l = max(dot(col, vec3(0.299, 0.587, 0.114)), 0.001);
@@ -81,13 +74,13 @@ const hex = (h: string) => {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 };
 
-// a — тени, b — основной тон, c — «дым».
+// a — тени, b — основной тон, c — «дым». Тёмная тема — зеркало светлой: те же формы и ступени, тень ↔ основа, тот же красный дым.
 const DARK_MOODS = {
-  menu: { a: '#121214', b: '#2a2a2f', c: '#7a1515', heat: 0.35, spin: 0.9 },
-  game: { a: '#0d0d0f', b: '#1f1f23', c: '#4a0d0d', heat: 0.1, spin: 0.5 },
-  karma: { a: '#150606', b: '#2b1010', c: '#d4862a', heat: 1, spin: 1.6 },
-  win: { a: '#141210', b: '#3a3226', c: '#d4862a', heat: 0.7, spin: 1.1 },
-  lose: { a: '#0a0a0b', b: '#18181b', c: '#2a0707', heat: 0.2, spin: 0.3 },
+  menu: { a: '#131316', b: '#2c2c31', c: '#a3271d', heat: 0.3, spin: 0.9 },
+  game: { a: '#0f0d0e', b: '#2e2526', c: '#b8301f', heat: 0.9, spin: 0.6 },
+  karma: { a: '#1a120b', b: '#33281c', c: '#d4862a', heat: 0.8, spin: 1.3 },
+  win: { a: '#16130f', b: '#342c22', c: '#d4862a', heat: 0.6, spin: 1.0 },
+  lose: { a: '#121213', b: '#232325', c: '#3a3739', heat: 0.1, spin: 0.25 },
 };
 const LIGHT_MOODS: typeof DARK_MOODS = {
   menu: { a: '#e3d6ca', b: '#f6eee5', c: '#ec6a55', heat: 0.3, spin: 0.9 },
@@ -97,27 +90,9 @@ const LIGHT_MOODS: typeof DARK_MOODS = {
   win: { a: '#ecdfcf', b: '#fbf3e8', c: '#f2b95e', heat: 0.6, spin: 1.0 },
   lose: { a: '#d6d2cf', b: '#e8e5e2', c: '#bab4b0', heat: 0.1, spin: 0.25 },
 };
-// Концепт (временно, ?bg=calm | calm2): тёмная тема на основе фона светлой — тот же спокойный крупный дым
-// со ступенями по яркости, без зерна и тяжёлой виньетки; цвета — зеркально светлым (тень ↔ основа, тот же красный дым).
-const DARK_CALM: typeof DARK_MOODS = {
-  menu: { a: '#131316', b: '#2c2c31', c: '#a3271d', heat: 0.3, spin: 0.9 },
-  game: { a: '#0f0d0e', b: '#2e2526', c: '#b8301f', heat: 0.9, spin: 0.6 },
-  karma: { a: '#1a120b', b: '#33281c', c: '#d4862a', heat: 0.8, spin: 1.3 },
-  win: { a: '#16130f', b: '#342c22', c: '#d4862a', heat: 0.6, spin: 1.0 },
-  lose: { a: '#121213', b: '#232325', c: '#3a3739', heat: 0.1, spin: 0.25 },
-};
-// вариант 2: приглушённее — меньше красного, основа темнее
-const DARK_CALM2: typeof DARK_MOODS = {
-  menu: { a: '#111113', b: '#232327', c: '#5c1813', heat: 0.3, spin: 0.9 },
-  game: { a: '#0c0c0d', b: '#211d1e', c: '#6e1a12', heat: 0.9, spin: 0.6 },
-  karma: { a: '#17100a', b: '#2b2218', c: '#a86a22', heat: 0.8, spin: 1.3 },
-  win: { a: '#14110d', b: '#2c251d', c: '#a86a22', heat: 0.6, spin: 1.0 },
-  lose: { a: '#101011', b: '#1d1d1f', c: '#2e2c2d', heat: 0.1, spin: 0.25 },
-};
-const BG_CONCEPT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('bg') : null;
-const DARK_SET = BG_CONCEPT === 'calm' ? DARK_CALM : BG_CONCEPT === 'calm2' ? DARK_CALM2 : DARK_MOODS;
-const MOODS = THEME.scheme === 'dark' ? DARK_SET : LIGHT_MOODS;
-const THEME_STYLE = THEME.scheme === 'dark' && DARK_SET === DARK_MOODS ? 0 : 1;
+const MOODS = THEME.scheme === 'dark' ? DARK_MOODS : LIGHT_MOODS;
+// обе темы — спокойный дым (стиль 1); стиль 2 — пиксельный вихрь варианта «б»
+const THEME_STYLE = 1;
 /** Стиль фона: свой у темы или пиксельный вихрь варианта «б» (крупнее «пиксель»). */
 let style = THEME_STYLE;
 let pix = 5;
