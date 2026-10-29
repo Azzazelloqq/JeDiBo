@@ -959,12 +959,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         'div',
         { class: 'result' },
         titleEl('ПОБЕДА', 5),
-        h('div', { class: 'result-sub' }, 'Обучение пройдено'),
         // главное — в бой; правила тише, под ним
         h(
           'div',
           { class: 'tut-end-actions' },
-          btn('В бой против Странника', () => (ov.remove(), open('menu'), chooseLevel()), 'btn-brand btn-big'),
+          btn('Тренировочный бой', () => (ov.remove(), open('menu'), chooseLevel()), 'btn-brand btn-big'),
           btn('Правила', () => (ov.remove(), open('rules')), 'btn-stone'),
         ),
       ),
