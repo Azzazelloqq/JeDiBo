@@ -260,7 +260,7 @@ export class FastBoard {
     for (let k = 1; k < dist; k++) {
       const v = this.cell[(this.py[i] + sy * k) * n + this.px[i] + sx * k];
       if (v === 0) continue;
-      if (xray && v > 0 && this.owner[v - 1] === p) continue;
+      if (xray && v > 0 && this.owner[v - 1] === p && this.canVacate(v - 1, sx, sy)) continue;
       if (jumps > 0) {
         jumps--;
         continue;
@@ -268,6 +268,28 @@ export class FastBoard {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Может ли фигура j уйти с линии (sx, sy) одним ходом: есть свободная соседняя клетка в направлении её хода,
+   * не лежащем на этой линии. Иначе (треугольник упёрся, квадрат зажат) x-ray сквозь неё — самообман.
+   */
+  canVacate(j: number, sx: number, sy: number): boolean {
+    const r = this.rank[j];
+    const f = this.fwd[this.owner[j]];
+    const x = this.px[j];
+    const y = this.py[j];
+    const n = this.n;
+    const free = (dx: number, dy: number) => {
+      if ((dx === sx && dy === sy) || (dx === -sx && dy === -sy)) return false;
+      const nx = x + dx;
+      const ny = y + dy;
+      return nx >= 0 && ny >= 0 && nx < n && ny < n && this.cell[ny * n + nx] === 0;
+    };
+    if (r === Rank.Triangle) return free(0, f);
+    if (r === Rank.Square) return free(0, f) || free(-1, f) || free(1, f) || free(-1, 0) || free(1, 0);
+    for (let d = 0; d < 8; d++) if (free(DX[d], DY[d])) return true;
+    return false;
   }
 
   // ── ход и откат ─────────────────────────────────────────────────────────

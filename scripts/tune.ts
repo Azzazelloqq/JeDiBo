@@ -2,12 +2,18 @@
 // две версии играют между собой, и веса смещаются в сторону победившей.
 // npm run tune -- [шагов] [партий на шаг] [файл журнала] [журнал прошлого прогона — продолжить с его весов]
 // Партии на шаге — парами с одинаковым seed и сменой мест, чтобы расстановка и карты не давали перекоса.
+//
+// POOL=1 — вместо игры θ+ против θ− каждая версия играет против смеси соперников на одних и тех же партиях:
+// «снайпер» (голова Мастера, один ход за ход), «наказатель» и исходная версия весов. Игра бота против самого себя
+// слепа к рискованным разменам (соперник не наказывает их), смесь — нет. К очкам партии добавляется
+// небольшая доля разницы материала в конце (1/3/5), чтобы сигнал был и в выигранных партиях.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { DEFAULT_CONFIG, createAgent, type AgentConfig } from '../src/ai/agent';
 import { DEFAULT_WEIGHTS, type Weights } from '../src/ai/eval';
 import { createGame, dispatch } from '../src/core/engine';
+import { opponentByName } from './lib/opponents';
 import { CLASSIC } from '../src/core/modes';
 import type { PlayerId } from '../src/core/types';
 
@@ -38,7 +44,46 @@ export function configOf(t: Theta, base: AgentConfig = DEFAULT_CONFIG): AgentCon
 /** Конфигурация для подстройки: как Мастер, но дешевле. */
 const TUNE_BASE: AgentConfig = { ...DEFAULT_CONFIG, search: { candidates: 4, reply: { width: 2, lookahead: 1 } } };
 
-interface Job { a: Theta; b: Theta; seeds: number[]; limit: number }
+interface Job { a: Theta; b: Theta; seeds: number[]; limit: number; pool?: string[]; base?: Theta }
+
+const VAL = [1, 3, 5];
+/** Очки партии для места `seat`: победа 1, ничья/незаконченная 0.5, поражение 0, плюс 0.01 разницы материала. */
+function gameScore(s: ReturnType<typeof createGame>, seat: PlayerId): number {
+  const mat = (p: PlayerId) => s.pieces.filter((q) => q.owner === p).reduce((x, q) => x + VAL[q.rank], 0);
+  const res = s.phase !== 'over' || s.winner === 'draw' ? 0.5 : s.winner === seat ? 1 : 0;
+  return res + 0.01 * (mat(seat) - mat((1 - seat) as PlayerId));
+}
+
+function runGame(bots: ReturnType<typeof createAgent>[], seed: number, limit: number) {
+  const s = createGame(CLASSIC, seed, ['A', 'B']);
+  let steps = 0;
+  while (s.phase !== 'over' && s.turn <= limit && steps++ < limit * 40) {
+    const who: PlayerId = s.pending ? s.pending.chooser : s.phase === 'placement' ? (s.players[0].placed ? 1 : 0) : s.current;
+    const a = bots[who](s, who);
+    if (!a) break;
+    try {
+      dispatch(s, a);
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
+/** Против смеси: разница очков θa и θb против одних и тех же соперников на одних и тех же партиях. */
+function playPool(job: Job): number {
+  let diff = 0;
+  for (const seed of job.seeds)
+    for (const opp of job.pool!)
+      for (const seat of [0, 1] as PlayerId[])
+        for (const [theta, sign] of [[job.a, 1], [job.b, -1]] as [Theta, number][]) {
+          const me = createAgent(configOf(theta, TUNE_BASE), seed);
+          const other = opp === 'base' ? createAgent(configOf(job.base!, TUNE_BASE), seed + 1) : opponentByName(opp, seed + 1)!;
+          const s = runGame(seat === 0 ? [me, other] : [other, me], seed, job.limit);
+          diff += sign * gameScore(s, seat);
+        }
+  return diff;
+}
 
 /** Очки версии a (победа 1, ничья и незаконченная 0.5). Каждый seed играется дважды со сменой мест. */
 function play(job: Job): number {
@@ -66,7 +111,8 @@ function play(job: Job): number {
 }
 
 if (!isMainThread) {
-  parentPort!.postMessage(play(workerData as Job));
+  const job = workerData as Job;
+  parentPort!.postMessage(job.pool ? playPool(job) : play(job));
 } else {
   const [stepsArg = '150', gamesArg = '88', logArg = 'tune-log.tsv', fromArg] = process.argv.slice(2);
   const STEPS = Number(stepsArg);
@@ -80,6 +126,8 @@ if (!isMainThread) {
   }
   writeFileSync(logArg, ['step', 'score+', ...PARAMS.map((p) => p.name)].join('\t') + '\n');
 
+  const POOL = process.env.POOL ? ['sniper', 'punisher', 'base'] : undefined;
+  const base0 = [...theta];
   const runPair = (a: Theta, b: Theta, seeds: number[]) => {
     const parts: number[][] = Array.from({ length: Math.min(jobs, seeds.length) }, () => []);
     seeds.forEach((sd, i) => parts[i % parts.length].push(sd));
@@ -87,12 +135,16 @@ if (!isMainThread) {
       parts.map(
         (part) =>
           new Promise<number>((resolve, reject) => {
-            const w = new Worker(new URL(import.meta.url), { workerData: { a, b, seeds: part, limit: 600 } satisfies Job });
+            const w = new Worker(new URL(import.meta.url), { workerData: { a, b, seeds: part, limit: 600, pool: POOL, base: base0 } satisfies Job });
             w.once('message', resolve);
             w.once('error', reject);
           }),
       ),
-    ).then((xs) => xs.reduce((x, y) => x + y, 0) / (seeds.length * 2));
+    ).then((xs) => {
+      const sum = xs.reduce((x, y) => x + y, 0);
+      // против смеси — средняя разница очков θ+ и θ− на партию, приведённая к «доле очков θ+» вокруг 0.5
+      return POOL ? 0.5 + sum / (seeds.length * POOL.length * 2) / 2 : sum / (seeds.length * 2);
+    });
   };
 
   for (let k = 1; k <= STEPS; k++) {

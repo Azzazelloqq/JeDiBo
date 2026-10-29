@@ -15,6 +15,7 @@ import { heldExpiresThisTurn, homeRows, legalTargets } from '../src/core/rules';
 import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
+import tradeBlunders from './fixtures/trade-blunders.json';
 import { checkBoard, collectPositions, lcg } from './lib/boardcheck';
 import { fuzz } from './lib/fuzz';
 
@@ -780,6 +781,30 @@ test('фаззер: случайные допустимые действия н�
   const r = fuzz({ games: 120, seed: 7 });
   assert(!r.error, r.error!);
   assert(r.questions > 300, `мало вопросов карт и повышений: ${r.questions}`);
+});
+
+test('размены: в позициях, где прежний Мастер бил и терял фигуру, новый не теряет материал', () => {
+  // позиции из партий против «наказателя» (бьёт всё подставленное): прежняя оценка смотрела на одно ответное
+  // взятие и считала круг за 3.5 — и отдавала фигуру. Итог плана считается честно: взятое за ход минус лучший
+  // размен соперника (полная цепочка, без x-ray, 1/3/5).
+  const truth: Weights = { ...DEFAULT_WEIGHTS, val: [1, 3, 5], xray: false, see: 8 };
+  const VAL = [1, 3, 5];
+  for (const [i, { state, me }] of (tradeBlunders as { state: GameState; me: PlayerId }[]).entries()) {
+    const cfg = levelById('master').config;
+    const b = FastBoard.fromState(state);
+    const steps = searchTurn(b, me, cfg.weights, cfg.turn, cfg.search).scored[0].steps;
+    let took = 0;
+    for (const st of steps) {
+      if (st.t & ATTACK) {
+        const c = st.t & CELL_MASK;
+        took += VAL[b.rank[b.pieceAt(c % 12, Math.floor(c / 12))]];
+      }
+      b.make(st.pi, st.t, newUndo());
+    }
+    passTurn(b);
+    const net = took - bestCapture(b, (1 - me) as PlayerId, truth);
+    assert(net >= 0, `позиция ${i}: итог хода ${net} (взял ${took})`);
+  }
 });
 
 test('Мастер обыгрывает старого жадного бота без Кармы (10 партий)', () => {

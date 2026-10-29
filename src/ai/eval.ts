@@ -17,39 +17,72 @@ export interface Weights {
   chase: number;
   /** видеть атаки «сквозь свои фигуры» (соперник уводит блокирующую фигуру и бьёт); слабые уровни не видят */
   xray: boolean;
+  /**
+   * Глубина размена на клетке (взятий подряд, по одному за ход): 2 — «возьмёт, и я возьму в ответ»,
+   * больше — полная цепочка, где каждая сторона бьёт самой дешёвой фигурой и может остановиться.
+   */
+  see: number;
 }
 
-// подобраны SPSA на арене (npm run tune), начиная с ручных 1/3/5, 0.8, 0.9, 0.3, 0.05
+// Ценности 1/3/5 и полный штраф за угрозу: веса, подобранные в игре бота против самого себя (1/2.75/3.5, угроза 0.66),
+// учили рискованным разменам, которые бот-соперник не наказывает, а человек наказывает. Остальное — из того подбора.
 export const DEFAULT_WEIGHTS: Weights = {
-  val: [1, 2.75, 3.5],
+  val: [1, 3, 5],
   advance: 0.65,
-  threat: 0.66,
+  threat: 1,
   myThreat: 0.11,
   chase: 0.093,
   xray: true,
+  see: 8,
 };
 
 export const WIN = 1e6;
 
-const u = newUndo();
+const seeUndo = Array.from({ length: 16 }, newUndo);
+const gain = new Float64Array(16);
 
-/** Лучшее одно взятие игрока `by` в позиции с учётом ответного взятия; 0 — взять нечего выгодно. */
+/**
+ * Итог размена на клетке фигуры v для игрока `by`, который бьёт первым фигурой a: обе стороны по очереди бьют
+ * на этой клетке самой дешёвой фигурой и могут остановиться (классический подсчёт размена, SEE).
+ * За ход возможно одно взятие, так что каждое следующее взятие — следующий ход; между ними стороны могут
+ * отвести блокирующие фигуры, поэтому атакующие ищутся с учётом x-ray (если он включён).
+ */
+function exchange(b: FastBoard, v: number, a: number, by: PlayerId, w: Weights): number {
+  const x = b.px[v];
+  const y = b.py[v];
+  const cell = y * b.n + x;
+  const depth = Math.min(w.see, seeUndo.length);
+  gain[0] = w.val[b.rank[v]];
+  let d = 0;
+  let made = 0;
+  let attacker = a;
+  let side = by;
+  for (;;) {
+    b.make(attacker, cell | ATTACK, seeUndo[made++]);
+    side = (1 - side) as PlayerId;
+    if (d + 1 >= depth) break;
+    const next = b.attackerOf(x, y, side, w.xray);
+    if (next < 0) break;
+    d++;
+    gain[d] = w.val[b.rank[attacker]] - gain[d - 1];
+    attacker = next;
+  }
+  while (made > 0) b.unmake(seeUndo[--made]);
+  for (; d > 0; d--) gain[d - 1] = -Math.max(-gain[d - 1], gain[d]);
+  return gain[0];
+}
+
+/** Лучшее одно взятие игрока `by` в позиции с учётом размена; 0 — взять нечего выгодно. */
 export function bestCapture(b: FastBoard, by: PlayerId, w: Weights): number {
   const def = (1 - by) as PlayerId;
   let best = 0;
   for (let v = 0; v < b.count; v++) {
     if (!b.alive[v] || b.owner[v] !== def) continue;
-    const gainMax = w.val[b.rank[v]];
-    if (gainMax <= best) continue;
+    if (w.val[b.rank[v]] <= best) continue;
     const a = b.attackerOf(b.px[v], b.py[v], by, w.xray);
     if (a < 0) continue;
-    // размен: после взятия может ли защитник взять атакующего на той же клетке
-    const cell = b.py[v] * b.n + b.px[v];
-    b.make(a, cell | ATTACK, u);
-    const recaptured = b.attacked(b.px[a], b.py[a], def, w.xray);
-    b.unmake(u);
-    const gain = gainMax - (recaptured ? w.val[b.rank[a]] : 0);
-    if (gain > best) best = gain;
+    const g = exchange(b, v, a, by, w);
+    if (g > best) best = g;
   }
   return best;
 }
