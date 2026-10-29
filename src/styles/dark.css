@@ -1,5 +1,5 @@
 /* JeDiBo — тёмная тема: исходный дизайн (бруталистский бетон × пиксель-джус).
-   Цвета приходят из render/palette.ts (applyCssPalette, палитра DARK), фактуры — из concreteCss().
+   Цвета приходят из render/palette.ts (applyCssPalette, палитра DARK), фактуры камня — из panelTexture() в main.ts.
    Новые компоненты (логотип, слайдер, блик карты) — в конце файла. */
 
 :root {

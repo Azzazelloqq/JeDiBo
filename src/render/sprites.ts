@@ -2,7 +2,7 @@
 import { Rank } from '../core/types';
 import { PAL, STONE, THEME, type StoneColor } from './palette';
 import { concreteTile, fromAscii, hardenAlpha, hashStr, hexToRgb, makeCanvas, outline, px, scaleCanvas, seeded, type Canvas, type Mask } from './pixel';
-import { surfaceTile } from './textures';
+import { surfaceTile } from './stone';
 
 export const CELL = 16;
 const FACE_W = 12;
@@ -134,10 +134,10 @@ export function logoMark(k = 3, color: string = PAL.logo): Canvas {
 export function cardBack(w = 52, h = 72): Canvas {
   const [c, g] = makeCanvas(w, h);
   const dark = THEME.scheme === 'dark';
-  g.drawImage(surfaceTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77, { pores: 30, amp: 6 }), 0, 0);
+  g.drawImage(surfaceTile(w, h, hexToRgb(dark ? PAL.slab900 : PAL.concrete500), 77), 0, 0);
   // внутренняя плита
   const ix = 4, iy = 4, iw = w - 8, ih = h - 8;
-  g.drawImage(surfaceTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78, { pores: 40, cracks: true, amp: 10 }), ix, iy);
+  g.drawImage(surfaceTile(iw, ih, hexToRgb(dark ? PAL.slab700 : PAL.concrete200), 78), ix, iy);
   const k = w >= 48 ? 4 : 3;
   const mark = logoMark(k, PAL.logo);
   const mx = Math.floor((w - mark.width) / 2);
@@ -263,11 +263,4 @@ export function logoTexture(): string {
   }
   logoTex = scaleCanvas(c, 2).toDataURL();
   return logoTex;
-}
-
-/** Плитка бетона для CSS-фона панелей (data URL). Пиксель фактуры = 2 CSS px — та же сетка, что у рамок и шрифта.
- *  Контраст низкий: поверх лежит текст. */
-export function concreteCss(hex: string, seed: number, w = 96, h = 96, soft = false): string {
-  // soft — лёгкий рельеф (светлая тема); без трещин — на повторяющейся плитке они складываются в узор
-  return scaleCanvas(concreteTile(w, h, hexToRgb(hex), seed, soft ? { pores: 40, amp: 8 } : { pores: 60, amp: 9 }), 2).toDataURL();
 }
