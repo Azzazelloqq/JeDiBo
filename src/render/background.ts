@@ -10,6 +10,7 @@ uniform vec2 res;
 uniform float time;
 uniform float heat;   // 0 — холодный бетон, 1 — раскалённый (Карма)
 uniform float spin;
+uniform float levels; // ступеней яркости дыма: в тёмной теме больше — тёмные тона ближе друг к другу
 uniform float style;  // 1 — спокойный дым (обе темы), 2 — пиксельный вихрь (вариант «б»)
 uniform vec3 colA;
 uniform vec3 colB;
@@ -64,7 +65,7 @@ void main(){
     col = smoke(uv, r, 1.0);
     col *= 1.0 - 0.12 * smoothstep(0.7, 1.6, r);
     float l = max(dot(col, vec3(0.299, 0.587, 0.114)), 0.001);
-    col *= (floor(l * 14.0) / 14.0 + 0.035) / l;
+    col *= (floor(l * levels) / levels + 0.5 / levels) / l;
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -76,7 +77,8 @@ const hex = (h: string) => {
 
 // a — тени, b — основной тон, c — «дым». Тёмная тема — зеркало светлой: те же формы и ступени, тень ↔ основа, тот же красный дым.
 const DARK_MOODS = {
-  menu: { a: '#131316', b: '#2c2c31', c: '#a3271d', heat: 0.3, spin: 0.9 },
+  // меню: шире разброс между тенью и основой и ярче дым, чтобы волн было видно столько же, сколько в светлой
+  menu: { a: '#121214', b: '#38383e', c: '#b02a22', heat: 0.65, spin: 0.9 },
   game: { a: '#0f0d0e', b: '#2e2526', c: '#b8301f', heat: 0.9, spin: 0.6 },
   karma: { a: '#1a120b', b: '#33281c', c: '#d4862a', heat: 0.8, spin: 1.3 },
   win: { a: '#16130f', b: '#342c22', c: '#d4862a', heat: 0.6, spin: 1.0 },
@@ -176,7 +178,7 @@ export function startBackground(canvas: HTMLCanvasElement) {
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   const u = (n: string) => gl.getUniformLocation(prog, n);
   const uRes = u('res'), uTime = u('time'), uHeat = u('heat'), uSpin = u('spin');
-  const uA = u('colA'), uB = u('colB'), uC = u('colC'), uStyle = u('style');
+  const uA = u('colA'), uB = u('colB'), uC = u('colC'), uStyle = u('style'), uLevels = u('levels');
 
   // текущие (сглаженные) значения
   const cur = { a: hex(MOODS.menu.a), b: hex(MOODS.menu.b), c: hex(MOODS.menu.c), heat: MOODS.menu.heat, spin: MOODS.menu.spin };
@@ -205,6 +207,7 @@ export function startBackground(canvas: HTMLCanvasElement) {
     gl.uniform1f(uHeat, cur.heat);
     gl.uniform1f(uSpin, cur.spin);
     gl.uniform1f(uStyle, style);
+    gl.uniform1f(uLevels, THEME.scheme === 'dark' ? 30 : 14);
     gl.uniform3fv(uA, cur.a);
     gl.uniform3fv(uB, cur.b);
     gl.uniform3fv(uC, cur.c);
