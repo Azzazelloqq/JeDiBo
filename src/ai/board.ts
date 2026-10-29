@@ -10,7 +10,7 @@ export const JUMP = 1 << 13;
 export const CELL_MASK = ATTACK - 1;
 
 const BARRIER = -1;
-const reachBuf = new Int32Array(256);
+const reachCand = new Int16Array(128);
 const CAP = 128;
 
 // направления: 0..7 — ALL8 в порядке движка
@@ -234,47 +234,91 @@ export class FastBoard {
   }
 
   /**
-   * Эксперимент: самая дешёвая фигура игрока `by`, которая бьёт клетку сейчас или после одного тихого хода
+   * Самая дешёвая фигура игрока `by`, которая бьёт клетку сейчас или после одного тихого хода
    * (подкрепление: в размене на несколько ходов каждая сторона успевает подтянуть фигуры). -1 — нет такой.
+   * Сначала прямые удары, потом подкрепления по возрастанию ранга — дорогие проверки кругов только если дешевле нет.
    */
   reachAttackerOf(x: number, y: number, by: PlayerId, xray = false): number {
+    // один проход: прямые удары сразу, кандидаты в подкрепление — по рангам
     let best = -1;
-    const n = this.n;
+    let nc = 0;
     for (let i = 0; i < this.count; i++) {
       if (!this.alive[i] || this.owner[i] !== by) continue;
-      if (best >= 0 && this.rank[i] >= this.rank[best]) continue;
-      if (this.px[i] === x && this.py[i] === y) continue;
-      if (this.hits(i, x, y, xray)) {
-        best = i;
-        continue;
-      }
-      // дальше хода плюс удара фигура не дотянется
       const r = this.rank[i];
-      const reach = r === Rank.Triangle ? 2 : this.shortRange[by] ? 2 : r === Rank.Square ? 6 : 10;
-      if (Math.abs(this.px[i] - x) > reach || Math.abs(this.py[i] - y) > reach) continue;
-      const len = this.targets(i, reachBuf);
-      const from = this.py[i] * n + this.px[i];
-      const fx = this.px[i];
-      const fy = this.py[i];
-      this.cell[from] = 0;
-      let ok = false;
-      for (let k = 0; k < len && !ok; k++) {
-        const t = reachBuf[k];
-        if (t & ATTACK) continue;
-        const c = t & CELL_MASK;
-        if (c === y * n + x) continue;
-        this.px[i] = c % n;
-        this.py[i] = (c / n) | 0;
-        this.cell[c] = i + 1;
-        ok = this.hits(i, x, y, xray);
-        this.cell[c] = 0;
+      if (best >= 0 && r >= this.rank[best]) continue;
+      if (this.px[i] === x && this.py[i] === y) continue;
+      if (this.hits(i, x, y, xray)) best = i;
+      else reachCand[nc++] = i;
+    }
+    for (let r = Rank.Triangle; r <= Rank.Circle; r++) {
+      if (best >= 0 && this.rank[best] <= r) return best;
+      for (let k = 0; k < nc; k++) {
+        const i = reachCand[k];
+        if (this.rank[i] === r && this.reachesAfterMove(i, x, y, xray)) return i;
       }
-      this.px[i] = fx;
-      this.py[i] = fy;
-      this.cell[from] = i + 1;
-      if (ok) best = i;
     }
     return best;
+  }
+
+  /** Может ли фигура i одним тихим ходом встать на клетку, откуда бьёт (x, y) (без Прыгуна). */
+  private reachesAfterMove(i: number, x: number, y: number, xray: boolean): boolean {
+    const p = this.owner[i];
+    const r = this.rank[i];
+    const f = this.fwd[p];
+    const n = this.n;
+    const px = this.px[i];
+    const py = this.py[i];
+    const short = r !== Rank.Triangle && this.shortRange[p] === 1;
+    const arange = r === Rank.Triangle || short ? 1 : r === Rank.Square ? 3 : 5;
+    const mrange = arange;
+    // дальше хода плюс удара фигура не дотянется
+    const lim = arange + mrange;
+    if (Math.abs(px - x) > lim || Math.abs(py - y) > lim) return false;
+    const allAttack = r === Rank.Circle || this.roundProtection[p] === 1;
+    for (let d = 0; d < 8; d++) {
+      const dx = DX[d];
+      const dy = DY[d];
+      // направление удара (от клетки удара к цели) — должно быть в рисунке атаки фигуры
+      if (!allAttack) {
+        const forwardish = dy === f;
+        const sideways = r === Rank.Square && dy === 0;
+        if (r === Rank.Triangle ? !forwardish : !forwardish && !sideways) continue;
+      }
+      for (let k = 1; k <= arange; k++) {
+        const cx = x - dx * k;
+        const cy = y - dy * k;
+        if (cx < 0 || cy < 0 || cx >= n || cy >= n) break;
+        if (cx === px && cy === py) continue;
+        const v = this.cell[cy * n + cx];
+        if (v !== 0) {
+          // своя фигура, которая может уйти с линии, линию не закрывает (x-ray), но и встать на неё нельзя
+          if (xray && v > 0 && this.owner[v - 1] === p && this.canVacate(v - 1, dx, dy)) continue;
+          break;
+        }
+        if (this.canMoveTo(i, cx, cy, mrange)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Тихий ход фигуры i на пустую клетку (cx, cy) по рисунку хода, путь свободен (без Прыгуна). */
+  private canMoveTo(i: number, cx: number, cy: number, range: number): boolean {
+    const r = this.rank[i];
+    const f = this.fwd[this.owner[i]];
+    const dx = cx - this.px[i];
+    const dy = cy - this.py[i];
+    const adx = dx < 0 ? -dx : dx;
+    const ady = dy < 0 ? -dy : dy;
+    if (adx !== 0 && ady !== 0 && adx !== ady) return false;
+    const dist = adx > ady ? adx : ady;
+    if (dist === 0 || dist > range) return false;
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
+    if (r === Rank.Triangle && !(sx === 0 && sy === f)) return false;
+    if (r === Rank.Square && sy !== f && sy !== 0) return false;
+    const n = this.n;
+    for (let k = 1; k < dist; k++) if (this.cell[(this.py[i] + sy * k) * n + this.px[i] + sx * k] !== 0) return false;
+    return true;
   }
 
   /** Бьёт ли фигура i клетку (x, y) по геометрии атаки, с учётом препятствий. */

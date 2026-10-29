@@ -19,10 +19,10 @@ export interface SearchOpts {
    */
   minChecked?: number;
   /**
-   * Эксперимент: дополнительные кандидаты от планировщика с другими весами («характерами»), чтобы проверке ответом
-   * было из чего выбирать, когда все лучшие планы по основной оценке — вариации одной идеи.
+   * Дополнительные кандидаты от планировщика с другими весами («характерами»): без них все лучшие планы по основной
+   * оценке бывают вариациями одной идеи (например, «все квадраты вперёд»), и проверке ответом не из чего выбрать.
    */
-  personas?: { weights: Partial<Weights>; top: number }[];
+  personas?: { weights: Partial<Weights>; top: number; width?: number }[];
   /** эксперимент: четвёртый полуход — после моего следующего хода соперник ещё раз ходит (дешёвым планировщиком) */
   leaf?: TurnOpts;
 }
@@ -50,19 +50,29 @@ const leafU = Array.from({ length: 10 }, newUndo);
  */
 export function searchTurn(b: FastBoard, me: PlayerId, w: Weights, turn: TurnOpts, so: SearchOpts, deadline?: number): SearchResult {
   const first = planTurn(b, me, w, { ...turn, top: so.reply ? so.candidates : 1 });
-  if (so.reply && so.personas) {
-    const key = (st: Step[]) => st.map((x) => `${x.pi}:${x.t}`).sort().join(' ');
-    const have = new Set(first.alts.map((a) => key(a.steps)));
+  if (so.reply && so.personas?.length) {
+    // планы «характеров» проверяются вперемешку с основными (основной, осторожный, азартный, основной…):
+    // при нехватке времени лучшие планы каждого всё равно попадают в обязательные проверки
+    const lists = [first.alts];
     for (const p of so.personas) {
-      const r = planTurn(b, me, { ...w, ...p.weights }, { ...turn, top: p.top });
+      // планы характеров — сверх основного: на медленном устройстве при нехватке времени их нет
+      if (deadline !== undefined && performance.now() > deadline) break;
+      const r = planTurn(b, me, { ...w, ...p.weights }, { ...turn, width: p.width ?? turn.width, top: p.top, deadline });
       first.nodes += r.nodes;
-      for (const a of r.alts) {
-        const k = key(a.steps);
-        if (have.has(k)) continue;
-        have.add(k);
-        first.alts.push(a);
-      }
+      lists.push(r.alts);
     }
+    const key = (st: Step[]) => st.map((x) => `${x.pi}:${x.t}`).sort().join(' ');
+    const have = new Set<string>();
+    const merged: typeof first.alts = [];
+    for (let k = 0; lists.some((l) => k < l.length); k++)
+      for (const l of lists) {
+        if (k >= l.length) continue;
+        const kk = key(l[k].steps);
+        if (have.has(kk)) continue;
+        have.add(kk);
+        merged.push(l[k]);
+      }
+    first.alts = merged;
   }
   if (!so.reply || first.alts.length <= 1) return { scored: first.alts.length ? first.alts : [{ steps: first.steps, score: first.score }], nodes: first.nodes };
   const opp = (1 - me) as PlayerId;
