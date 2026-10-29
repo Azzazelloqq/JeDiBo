@@ -332,7 +332,7 @@ body.no-crt #crt { display: none; }
 .kt-label { font-family: var(--f-pix); font-size: 14px; color: var(--concrete-100); margin-top: 3px; text-transform: uppercase; }
 .kt-label.now { color: var(--amber-300); animation: blink 0.6s steps(2) infinite; }
 .held { display: flex; gap: 12px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--slab-600); }
-.held-info { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.held-info { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
 .held-info b { font-family: var(--f-pix); font-size: 16px; }
 .held.burning { border-top-color: var(--brand-500); }
 .held-burn { color: var(--brand-500); font-weight: 700; animation: blink 0.8s steps(2) infinite; }

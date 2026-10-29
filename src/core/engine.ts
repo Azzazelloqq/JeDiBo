@@ -139,12 +139,7 @@ function validate(s: GameState, a: Action): string | null {
   if (a.by !== s.current) return 'Не ваш ход';
   if (s.pending) return 'Сначала завершите выбор';
   if (a.type === 'endTurn') return s.actedThisTurn || !anyLegalAction(s) ? null : 'Сделайте хотя бы одно действие';
-  if (a.type === 'playCard') {
-    const h = s.players[a.by].held;
-    if (!h) return 'Нет карты';
-    const def = CARDS[h.card];
-    return !def.canPlay || def.canPlay(s, a.by) ? null : 'Сейчас карту не разыграть';
-  }
+  if (a.type === 'playCard') return heldBlock(s, a.by);
   if (a.type === 'move') {
     const pc = s.pieces.find((q) => q.id === a.pieceId);
     if (!pc || !canAct(s, pc)) return 'Фигура не может действовать';
@@ -305,6 +300,17 @@ function liveOptions(s: GameState, p: Pending): string[] {
     return p.options.filter((o) => uids.has(o));
   }
   return p.source === 'promotion' ? p.options : CARDS[p.source].refresh?.(s, p) ?? p.options;
+}
+
+/** Почему игрок `p` не может прямо сейчас разыграть карту из руки; null — может. Тем же пользуется UI. */
+export function heldBlock(s: GameState, p: PlayerId): string | null {
+  const h = s.players[p].held;
+  if (!h) return 'Нет карты';
+  if (s.phase !== 'play') return 'Партия не идёт';
+  if (s.current !== p) return 'Разыграть можно в свой ход';
+  if (s.pending) return 'Сначала завершите выбор';
+  const def = CARDS[h.card];
+  return !def.canPlay || def.canPlay(s, p) ? null : def.whyNot ?? 'Сейчас карту не разыграть';
 }
 
 const heldPlayable = (s: GameState) => {

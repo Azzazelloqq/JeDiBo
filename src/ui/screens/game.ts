@@ -1,6 +1,7 @@
 // Экран партии: расстановка → игра → итог. Связывает Match, BoardView и HUD.
 import { levelById, type LevelId } from '../../ai/levels';
 import { sfx } from '../../audio/sfx';
+import { heldBlock } from '../../core/engine';
 import { CARDS } from '../../core/karma/cards';
 import { RANK_NAME } from '../../core/ops';
 import { PRESETS } from '../../core/presets';
@@ -704,7 +705,9 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const up = pl.side === 0;
     const held = pl.held;
     const burning = heldExpiresThisTurn(s, p);
-    const canPlayHeld = held && match.isHuman(p) && s.current === p && !s.pending && !match.isBusy && (!CARDS[held.card].canPlay || CARDS[held.card].canPlay!(s, p));
+    // isBusy здесь не учитываем: панель перерисовывается из onEvents, пока ход ещё «занят», и кнопка залипала бы
+    // выключенной. Нажатие во время анимации просто встанет в очередь, движок проверит его сам.
+    const block = held && match.isHuman(p) ? heldBlock(s, p) : null;
     return h(
       'section',
       { class: `slab player ${active ? 'active' : ''} pl-${pl.color} ${p === viewer() ? 'pl-own' : 'pl-opp'}`, 'data-player': String(p) },
@@ -737,7 +740,9 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
               { class: 'held-info' },
               h('b', {}, CARDS[held.card].name),
               burning ? h('div', { class: 'held-burn small' }, 'сгорит в конце хода') : h('div', { class: 'muted small' }, `до хода ${held.untilOwnTurn}`),
-              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-amber btn-small', { disabled: !canPlayHeld }) : null,
+              match.isHuman(p) ? btn('Разыграть', () => match.submit({ type: 'playCard', by: p }), 'btn-amber btn-small', { disabled: !!block }) : null,
+              // в чужой ход и так ясно, почему кнопка погашена; в свой — говорим причину
+              block && s.current === p ? h('div', { class: 'held-why muted small' }, block) : null,
             ),
           )
         : null,
