@@ -2,11 +2,11 @@
 // Получает состояние + события движка, проигрывает анимации и рисует подсказки.
 import { sfx } from '../audio/sfx';
 import { forward, homeRows, isBarrier } from '../core/rules';
-import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type Pos } from '../core/types';
+import { Rank, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
 import { PAL, STONE } from './palette';
 import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
-import { ease, onFrame, tween, wait } from './tween';
+import { animSpeed, ease, onFrame, tween, wait } from './tween';
 import { shake } from './fx';
 
 const M = 10; // поля под координаты
@@ -25,6 +25,11 @@ interface Vis {
   flash: number;
   alpha: number;
   dead: boolean;
+}
+
+interface Seat {
+  color: PlayerState['color'];
+  side: Side;
 }
 
 interface Particle {
@@ -66,6 +71,9 @@ export class BoardView {
   private vis = new Map<number, Vis>();
   private parts: Particle[] = [];
   private s: GameState | null = null;
+  /** Цвет и сторона игроков, какими их видит зритель. Движок меняет состояние сразу, а «Смена поля»
+   *  должна случиться на поле только в своей анимации — после «Принять», поэтому их не читаем из живого `s`. */
+  private seats: Seat[] = [];
   private hover: Pos | null = null;
   private beam: { x: number; t: number } | null = null;
   /** Линия смерти «прочёсывает» поле: pos — экранный столбец (дробный), lock — вспышки на выбранном столбце */
@@ -134,7 +142,10 @@ export class BoardView {
 
   /** Поле повёрнуто: зритель играет стороной 1 (верхней в координатах движка). */
   get flipped() {
-    return this.viewer !== null && !!this.s && this.s.players[this.viewer].side === 1;
+    return this.viewer !== null && this.seat(this.viewer)?.side === 1;
+  }
+  private seat(p: PlayerId): Seat | undefined {
+    return this.seats[p] ?? this.s?.players[p];
   }
   /** Клетка движка → пиксель канваса (левый/верхний край клетки); дробные клетки — для анимаций. */
   private X(x: number) {
@@ -145,7 +156,7 @@ export class BoardView {
   }
   /** Спрайт фигуры «смотрит» вверх экрана: сторона 0 — вверх, при повороте — наоборот. */
   private faceUp(owner: PlayerId, s: GameState) {
-    return forward(s.players[owner].side) < 0 !== this.flipped;
+    return forward((this.seat(owner) ?? s.players[owner]).side) < 0 !== this.flipped;
   }
 
   // ── статичная подложка: рама + плиты + координаты ────────────────────────
@@ -201,6 +212,7 @@ export class BoardView {
   // ── синхронизация с состоянием ───────────────────────────────────────────
   sync(s: GameState) {
     this.s = s;
+    this.seats = s.players.map((p) => ({ color: p.color, side: p.side }));
     const alive = new Set<number>();
     for (const pc of s.pieces) {
       alive.add(pc.id);
@@ -342,7 +354,23 @@ export class BoardView {
           this.sparkle(v.x, v.y, PAL.patina300, 3);
         }
         await wait(160);
-        for (const v of this.vis.values()) v.owner = v.owner === 0 ? 1 : 0;
+        // игроки пересаживаются: каждая армия со своим цветом и направлением достаётся другому игроку
+        const swap = () => {
+          this.seats.reverse();
+          for (const v of this.vis.values()) v.owner = v.owner === 0 ? 1 : 0;
+        };
+        // стороны зрителя меняются местами — значит, поле повернётся на 180°
+        if (this.viewer !== null && this.el.isConnected) {
+          // поле поворачивается к зрителю его новой армией; в конце поворота подменяем картинку тем же видом без поворота
+          const spin = this.canvas.animate(
+            [{ transform: 'rotate(0deg) scale(1)' }, { transform: 'rotate(90deg) scale(0.72)' }, { transform: 'rotate(180deg) scale(1)' }],
+            { duration: 620 / animSpeed(), easing: 'ease-in-out', fill: 'forwards' },
+          );
+          await spin.finished.catch(() => {});
+          swap();
+          this.frame(performance.now(), 0);
+          spin.cancel();
+        } else swap();
         await wait(200);
         return;
       }
@@ -459,7 +487,7 @@ export class BoardView {
   // ── частицы ─────────────────────────────────────────────────────────────
   private smash(v: Vis, pc: Piece, n: number) {
     v.dead = true;
-    const st = STONE[this.s?.players[pc.owner].color ?? 'red'];
+    const st = STONE[this.seat(pc.owner)?.color ?? 'red'];
     const cols = [st.base, st.light, st.side, st.hi, st.outline];
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -602,7 +630,7 @@ export class BoardView {
     if (this.ov.ghost) {
       const gh = this.ov.ghost;
       g.globalAlpha = 0.45 + pulse * 0.2;
-      g.drawImage(pieceSprite(gh.rank, s.players[gh.owner].color, this.faceUp(gh.owner, s)), this.X(gh.pos.x), this.Y(gh.pos.y));
+      g.drawImage(pieceSprite(gh.rank, (this.seat(gh.owner) ?? s.players[gh.owner]).color, this.faceUp(gh.owner, s)), this.X(gh.pos.x), this.Y(gh.pos.y));
       g.globalAlpha = 1;
     }
 
@@ -671,7 +699,7 @@ export class BoardView {
 
   private drawPiece(v: Vis, s: GameState, pulse: number) {
     const g = this.g;
-    const color = s.players[v.owner].color;
+    const color = (this.seat(v.owner) ?? s.players[v.owner]).color;
     const up = this.faceUp(v.owner, s);
     const sprite = pieceSprite(v.rank, color, up);
     const w = CELL * v.sx;

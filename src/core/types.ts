@@ -52,7 +52,7 @@ export interface HeldCard {
 export interface PlayerState {
   id: PlayerId;
   name: string;
-  /** цвет не меняется даже после «Смены поля» */
+  /** цвет армии игрока; «Смена поля» меняет его вместе со стороной (фигуры своего цвета не меняют) */
   color: 'red' | 'black';
   side: Side;
   ownTurns: number;

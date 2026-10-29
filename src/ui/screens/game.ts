@@ -120,7 +120,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   let hoverCell: Pos | null = null;
   /** идёт проигрывание событий: выбор клеток по картам и окно кладбища ждут конца анимаций */
   let animating = false;
-  const chronicle: { text: string; p?: PlayerId }[] = [];
+  const chronicle: { text: string; p?: PlayerId; color?: GameState['players'][number]['color'] }[] = [];
 
   // ════════════════════════════════════════════════════════════════════════
   // РАССТАНОВКА
@@ -150,6 +150,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   /** Чьими глазами смотрим на поле и чья панель слева: по сети и против бота — своё место,
    *  в хотсите — кто расставляется, в партии — игрок 1 (устройство одно, поле не крутится каждый ход). */
   const viewer = (): PlayerId => (kind !== 'hotseat' ? me : s.phase === 'placement' ? placingFor : 0);
+  /** «Смена поля» уже в состоянии, но ещё не показана: до анимации (после «Принять») цвет и сторону игрока
+   *  показываем прежними — их пока «держит» соперник. */
+  let swapPending = false;
+  const seatOf = (p: PlayerId) => s.players[swapPending ? other(p) : p];
+  /** Фигурки игрока на панелях смотрят так же, как его армия на поле у зрителя. */
+  const facesUp = (p: PlayerId) => seatOf(p).side === seatOf(board.viewer ?? 0).side;
 
   function startPlacement(p: PlayerId) {
     placingFor = p;
@@ -358,8 +364,12 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   match.onEvents = async (events, st) => {
     if (events.some((e) => e.type === 'placed') && st.phase === 'placement') return;
     // отстали (свёрнутая вкладка, переподключение) — догоняем без анимаций
+    swapPending = events.filter((e) => e.type === 'sidesSwap').length % 2 === 1;
     if (match.backlog > 2) {
-      for (const e of events) chronicleFrom(e, st);
+      for (const e of events) {
+        chronicleFrom(e, st);
+        if (e.type === 'sidesSwap') swapPending = !swapPending;
+      }
       if (events.some((e) => e.type === 'start')) {
         board.viewer = viewer();
         board.ov = { ...board.ov, zone: null, ghost: null };
@@ -416,6 +426,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           break;
         }
         case 'gameOver':
+          break;
+        case 'sidesSwap':
+          await board.playEvent(e);
+          swapPending = !swapPending;
+          refresh();
           break;
         default:
           await board.playEvent(e);
@@ -641,7 +656,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const cur = s.players[s.current];
     updatePips();
     top.replaceChildren(
-      h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${cur.color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
+      h('div', { class: 'tb-turn' }, h('span', { class: `chip chip-${seatOf(s.current).color}` }), cur.name, h('span', { class: 'muted' }, ` · ход ${cur.ownTurns}`)),
       h('div', { class: 'tb-ap' }, h('span', { class: 'h-label' }, 'Действия'), apPips, apNum),
       h('div', { class: 'tb-time' }, choiceLabel, h('div', { class: 'tb-clock-row' }, turnClock, totals), turnBar),
     );
@@ -677,8 +692,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       prompt = human ? `${src}: ${s.pending.prompt}` : `${s.players[p].name} выбирает (${src})…`;
       // новая фигура: какую ставим — иконкой и названием
       if (human && rank !== undefined) {
-        const pl = s.players[s.pending.beneficiary];
-        const up = pl.side === (board.viewer === null ? 0 : s.players[board.viewer].side);
+        const pl = seatOf(s.pending.beneficiary);
+        const up = facesUp(s.pending.beneficiary);
         prompt = h(
           'span',
           { class: 'prompt-spawn' },
@@ -706,7 +721,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const inCycle = pl.ownTurns % k;
     const karmaNow = pl.ownTurns > 0 && inCycle === 0 && s.current === p;
     const until = karmaNow ? 0 : k - inCycle;
-    const up = pl.side === 0;
+    const up = facesUp(p);
+    const color = seatOf(p).color;
     const held = pl.held;
     const burning = heldExpiresThisTurn(s, p);
     // isBusy здесь не учитываем: панель перерисовывается из onEvents, пока ход ещё «занят», и кнопка залипала бы
@@ -714,7 +730,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     const block = held && match.isHuman(p) ? heldBlock(s, p) : null;
     return h(
       'section',
-      { class: `slab player ${active ? 'active' : ''} pl-${pl.color} ${p === viewer() ? 'pl-own' : 'pl-opp'}`, 'data-player': String(p) },
+      { class: `slab player ${active ? 'active' : ''} pl-${color} ${p === viewer() ? 'pl-own' : 'pl-opp'}`, 'data-player': String(p) },
       h(
         'div',
         { class: 'pl-head' },
@@ -725,7 +741,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       h(
         'div',
         { class: 'pl-pieces' },
-        ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, pl.color, 2, up), h('b', {}, String(cnt[r])))),
+        ...[0, 1, 2].map((r) => h('div', { class: 'pl-pc' }, pieceIcon(r as Rank, color, 2, up), h('b', {}, String(cnt[r])))),
       ),
       h(
         'div',
@@ -773,7 +789,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         { class: 'effects' },
         ...list.map((e) => {
           const left = e.untilOwnTurn - s.players[e.owner].ownTurns + 1;
-          return h('div', { class: `effect fx-${s.players[e.owner].color}` }, h('span', {}, EFFECT_NAME[e.kind]), h('span', { class: 'muted small' }, `${s.players[e.owner].name} · ${left <= 1 ? 'этот ход' : `ещё ${left} х.`}`));
+          return h('div', { class: `effect fx-${seatOf(e.owner).color}` }, h('span', {}, EFFECT_NAME[e.kind]), h('span', { class: 'muted small' }, `${s.players[e.owner].name} · ${left <= 1 ? 'этот ход' : `ещё ${left} х.`}`));
         }),
       ),
     );
@@ -818,7 +834,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         h('span', { class: 'log-count' }, String(chronicle.length)),
         h('span', { class: 'log-last' }, last?.text ?? ''),
       ),
-      h('div', { class: 'log-list' }, ...chronicle.slice(-40).reverse().map((l) => h('div', { class: `log-row ${l.p !== undefined ? `lr-${s.players[l.p].color}` : ''}` }, l.text))),
+      h('div', { class: 'log-list' }, ...chronicle.slice(-40).reverse().map((l) => h('div', { class: `log-row ${l.color ? `lr-${l.color}` : ''}` }, l.text))),
     );
     d.addEventListener('toggle', () => {
       chronicleOpen = d.open;
@@ -832,7 +848,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   }
 
   function chronicleFrom(e: GameEvent, st: GameState) {
-    const push = (text: string, p?: PlayerId) => chronicle.push({ text, p });
+    // цвет — на момент записи: после «Смены поля» прежние ходы игрока остаются его прежнего цвета
+    const push = (text: string, p?: PlayerId) => chronicle.push({ text, p, color: p === undefined ? undefined : seatOf(p).color });
     const rankOf = (id: number) => st.pieces.find((q) => q.id === id)?.rank;
     switch (e.type) {
       case 'turnStart':
@@ -1009,7 +1026,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
                   match.submit({ type: 'choose', by: pend.chooser, option: o });
                 },
               },
-              pieceIcon(e.rank, pl.color, 3, pl.side === 0),
+              pieceIcon(e.rank, pl.color, 3, facesUp(pend.beneficiary)),
               h('span', {}, RANK_NAME[e.rank]),
             );
           }),
