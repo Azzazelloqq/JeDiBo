@@ -21,6 +21,8 @@ export interface CardDef {
   rule: string;
   /** можно ли сыграть прямо сейчас (для карт «в течение периода») */
   canPlay?(s: GameState, p: PlayerId): boolean;
+  /** почему canPlay ложно — подпись у карты в руке */
+  whyNot?: string;
   /** розыгрыш; false — карта не может быть разыграна и уходит в сброс */
   play(c: Ctx, p: PlayerId): boolean;
   /** ответ на вопрос карты; option === null — игрок закончил досрочно */
@@ -125,6 +127,7 @@ const defs: CardDef[] = [
     rule: 'Вернуть одну свою фигуру, уничтоженную в текущем Периоде Кармы, в стартовую зону (или 4-й ряд). Возвращённая фигура может действовать в тот же ход.',
     canPlay: (s, p) =>
       s.players[p].graveyard.some((g) => g.turn >= s.players[p].periodStart) && spawnCells(s, p).length > 0,
+    whyNot: 'Нет фигур, погибших в этом Периоде, или свободных клеток в стартовой зоне',
     play(c, p) {
       const opts = c.s.players[p].graveyard.filter((g) => g.turn >= c.s.players[p].periodStart);
       if (!opts.length || !spawnCells(c.s, p).length) return false;
@@ -427,6 +430,7 @@ const defs: CardDef[] = [
     text: 'Любая фигура, кроме Треугольника, может перепрыгнуть препятствие размером в одну клетку.',
     rule: 'До конца Периода Кармы одна своя фигура (не треугольник) может один раз перепрыгнуть препятствие шириной в клетку. Прыжок не увеличивает дальность. Карта расходуется при первом прыжке.',
     canPlay: (s, p) => piecesOf(s, p).some((q) => q.rank !== Rank.Triangle),
+    whyNot: 'Остались только Треугольники — прыгать некому',
     play(c, p) {
       addEffect(c, { kind: 'jumper', owner: p, untilOwnTurn: periodEnd(c.s, p) });
       return true;

@@ -6,8 +6,8 @@ import { DEFAULT_WEIGHTS, bestCapture, type Weights } from '../src/ai/eval';
 import { LEVELS, levelById, type LevelId } from '../src/ai/levels';
 import { searchTurn } from '../src/ai/search';
 import { clocksAfter, expiredClock, newClocks, spendTime, type Clocks } from '../src/core/clocks';
-import { createGame, dispatch } from '../src/core/engine';
-import { ALL_CARDS, fullDeck } from '../src/core/karma/cards';
+import { createGame, dispatch, heldBlock } from '../src/core/engine';
+import { ALL_CARDS, CARDS, fullDeck } from '../src/core/karma/cards';
 import { CLASSIC } from '../src/core/modes';
 import { PRESETS } from '../src/core/presets';
 import { tutorialEnemy, tutorialState, tutorialStep } from '../src/core/tutorial';
@@ -502,6 +502,33 @@ test('отложенная карта: «сгорит» только на пос
     if (own < 13) anyMoveAndEnd(s);
   }
   assert(s.players[0].held === null && s.discard.includes('jumper'), 'после 13-го хода карта должна сгореть');
+});
+
+test('Прыгун с руки: разыгрывается в свой ход, даёт прыжок и тратится на нём; когда нельзя — причина та же, что в UI', () => {
+  // квадрат A1 упирается в свой треугольник A2: без Прыгуна вверх ему не пройти
+  const s = position([[0, Rank.Square, 'A1'], [0, Rank.Triangle, 'A2'], [1, Rank.Circle, 'L12']], 0);
+  s.players[0].held = { card: 'jumper', untilOwnTurn: 7 };
+  const sq = pieceOn(s, 'A1')!;
+  assert(!targetsOf(s, sq).some((t) => t.jump), 'без эффекта прыжков быть не должно');
+  // кнопка «Разыграть» доступна ровно тогда, когда движок примет playCard
+  assert(heldBlock(s, 1) !== null, 'чужую карту не разыграть');
+  assert(heldBlock(s, 0) === null, `Прыгун должен разыгрываться в свой ход: ${heldBlock(s, 0)}`);
+  const r = dispatch(s, { type: 'playCard', by: 0 });
+  assert(r.ok, `playCard отклонён: ${r.error}`);
+  assert(s.players[0].held === null && s.current === 0, 'карта ушла из руки, ход продолжается');
+  const jump = legalTargets(s, sq).find((t) => t.jump && t.to.x === at('A3').x && t.to.y === at('A3').y);
+  assert(jump, 'после Прыгуна квадрат перепрыгивает A2 на A3');
+  assert(dispatch(s, { type: 'move', by: 0, pieceId: sq.id, to: jump.to }).ok, 'прыжок отклонён');
+  assert(!s.effects.some((e) => e.kind === 'jumper'), 'Прыгун расходуется на первом прыжке');
+
+  // одни треугольники: карта не играется, и UI получает ту же причину, что и движок
+  const t = position([[0, Rank.Triangle, 'A1'], [1, Rank.Circle, 'L12']], 0);
+  t.players[0].held = { card: 'jumper', untilOwnTurn: 7 };
+  const why = heldBlock(t, 0);
+  assert(why === CARDS.jumper.whyNot, `ожидалась причина «${CARDS.jumper.whyNot}», а не «${why}»`);
+  const bad = dispatch(t, { type: 'playCard', by: 0 });
+  assert(!bad.ok && bad.error === why, `движок должен отказать с той же причиной: ${bad.error}`);
+  assert(t.players[0].held?.card === 'jumper', 'карта остаётся в руке');
 });
 
 // ── правила по ГДД: места, где легко ошибиться ─────────────────────────────
