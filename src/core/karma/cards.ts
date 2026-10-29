@@ -21,6 +21,8 @@ export interface CardDef {
   rule: string;
   /** можно ли сыграть прямо сейчас (для карт «в течение периода») */
   canPlay?(s: GameState, p: PlayerId): boolean;
+  /** почему canPlay ложно — подпись у карты в руке */
+  whyNot?: string;
   /** розыгрыш; false — карта не может быть разыграна и уходит в сброс */
   play(c: Ctx, p: PlayerId): boolean;
   /** ответ на вопрос карты; option === null — игрок закончил досрочно */
@@ -125,6 +127,7 @@ const defs: CardDef[] = [
     rule: 'Вернуть одну свою фигуру, уничтоженную в текущем Периоде Кармы, в стартовую зону (или 4-й ряд). Возвращённая фигура может действовать в тот же ход.',
     canPlay: (s, p) =>
       s.players[p].graveyard.some((g) => g.turn >= s.players[p].periodStart) && spawnCells(s, p).length > 0,
+    whyNot: 'Нет фигур, погибших в этом Периоде, или свободных клеток в стартовой зоне',
     play(c, p) {
       const opts = c.s.players[p].graveyard.filter((g) => g.turn >= c.s.players[p].periodStart);
       if (!opts.length || !spawnCells(c.s, p).length) return false;
@@ -427,6 +430,7 @@ const defs: CardDef[] = [
     text: 'Любая фигура, кроме Треугольника, может перепрыгнуть препятствие размером в одну клетку.',
     rule: 'До конца Периода Кармы одна своя фигура (не треугольник) может один раз перепрыгнуть препятствие шириной в клетку. Прыжок не увеличивает дальность. Карта расходуется при первом прыжке.',
     canPlay: (s, p) => piecesOf(s, p).some((q) => q.rank !== Rank.Triangle),
+    whyNot: 'Остались только Треугольники — прыгать некому',
     play(c, p) {
       addEffect(c, { kind: 'jumper', owner: p, untilOwnTurn: periodEnd(c.s, p) });
       return true;
@@ -456,10 +460,12 @@ const defs: CardDef[] = [
     timing: 'onReceive',
     takesTurn: false,
     text: 'До конца партии вы играете фигурами противника.',
-    rule: 'Игроки меняются фигурами на поле и кладбищами. Цвета, таймеры и Карты Кармы не меняются. Игрок продолжает ход.',
+    rule: 'Игроки меняются фигурами на поле и кладбищами: кто играл красными, теперь играет чёрными. Цвет фигур, таймеры и Карты Кармы не меняются. Игрок продолжает ход.',
     play(c) {
       const [a, b] = c.s.players;
+      // игрок пересаживается за чужую армию: её сторона, цвет и кладбище теперь его, фигуры не перекрашиваются
       [a.side, b.side] = [b.side, a.side];
+      [a.color, b.color] = [b.color, a.color];
       [a.graveyard, b.graveyard] = [b.graveyard, a.graveyard];
       for (const pc of c.s.pieces) {
         pc.owner = other(pc.owner);
