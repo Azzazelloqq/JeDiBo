@@ -20,18 +20,12 @@ const cloneCanvas = (src: HTMLCanvasElement) => {
 /** Прямоугольник в пикселях карты (52×72), где блика быть не должно. */
 export type Rect = { x: number; y: number; w: number; h: number };
 
-/** Лицевая сторона: плашка названия и строка тира. Рамка по бокам остаётся «глянцевой». */
+/** Лицевая сторона: плашка названия. Рамка по бокам остаётся «глянцевой». */
 const ICON_FACE_SAFE: Rect[] = [{ x: 3, y: 44, w: CARD_W - 6, h: CARD_H - 44 }];
 
-/** Название и срок действия на лице карты. Срок — на сплошной плашке: поверх крапчатого бетона мелкий текст не читался. */
+/** Название на лице карты. */
 function faceLabels(id: CardId) {
-  const def = CARDS[id];
-  const when = h(
-    'div',
-    { class: 'kcard-tier' },
-    h('div', { class: 'kcard-when' }, h('span', {}, def.timing === 'period' ? 'в течение периода' : 'после получения'), def.takesTurn ? h('span', { class: 'kcard-turn' }, 'занимает ход') : null),
-  );
-  return [h('div', { class: 'kcard-name' }, def.name), when];
+  return [h('div', { class: 'kcard-name' }, CARDS[id].name)];
 }
 
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;

@@ -1436,10 +1436,10 @@ export class BoardView {
     const bx = this.X(v.x) + (CELL - w) / 2;
     const by = this.Y(v.y) + (CELL - h) - v.z + 1;
     const pc = s.pieces.find((q) => q.id === v.id);
-    // походившая фигура «призрак»: утоплена на пиксель и просвечивает — одинаково читается у обоих цветов
+    // походившая фигура «призрак»: просвечивает на своём месте — одинаково читается у обоих цветов
     const dim = pc && s.phase === 'play' && pc.owner === s.current && pc.acted && !s.pending && !canAct(s, pc);
     g.globalAlpha = (dim ? 0.38 : 1) * v.alpha;
-    g.drawImage(sprite, Math.round(bx), Math.round(by) + (dim ? 1 : 0), Math.round(w), Math.round(h));
+    g.drawImage(sprite, Math.round(bx), Math.round(by), Math.round(w), Math.round(h));
     if (v.flash > 0) {
       g.globalAlpha = v.flash;
       g.drawImage(pieceSprite(v.rank, color, up, 'flash'), Math.round(bx), Math.round(by), Math.round(w), Math.round(h));

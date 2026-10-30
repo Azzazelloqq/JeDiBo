@@ -526,19 +526,6 @@ body.no-crt #crt { display: none; }
   background: color-mix(in srgb, var(--void) 78%, transparent); padding: calc(var(--s) * 1px) calc(var(--s) * 3px);
   color: var(--bone); text-shadow: calc(var(--s) * 0.6px) calc(var(--s) * 0.6px) 0 var(--void);
 }
-.kcard-tier {
-  position: absolute; left: 8%; right: 8%; bottom: calc(var(--s) * 3px); z-index: 2;
-  display: flex; justify-content: center;
-}
-/* плашка по ширине текста, с отступами по бокам: длинная подпись переносится, а не упирается в края */
-.kcard-when {
-  display: flex; flex-direction: column; align-items: center; gap: calc(var(--s) * 1px);
-  padding: calc(var(--s) * 1.5px) calc(var(--s) * 3px);
-  background: var(--void); color: var(--bone);
-  font-family: var(--f-pix); text-transform: uppercase; text-align: center;
-  font-size: calc(var(--s) * 4px); line-height: 1; /* Tiny5 чёткий при кегле, кратном 8 */
-}
-.kcard-turn { color: var(--granite-400); }
 /* блик: канвас в разрешении карты (ui/card.ts → drawShine), растянут целым множителем --s.
    Плашка названия и строка тира — выше по z-index и вне маски блика */
 .kcard-shine {
