@@ -12,9 +12,10 @@ body .game {
 /* колонки прокручиваются (overflow), поэтому даём запас под «выдвинутую» активную панель, подъём кнопки
    при наведении и жёсткую тень — иначе они обрезаются краем колонки. Отрицательные поля сохраняют сетку. */
 body .game .side { padding: 6px 8px 12px; margin: -6px -8px 0; }
-body .game .side-left { grid-area: rail; }
+/* сдвиг колонок к середине пустого места у поля — считает game.ts (centerSides) */
+body .game .side-left { grid-area: rail; position: relative; left: var(--side-shift-l, 0px); }
 body .game .center { grid-area: stage; gap: 12px; }
-body .game .side-right { grid-area: aux; }
+body .game .side-right { grid-area: aux; position: relative; right: var(--side-shift-r, 0px); }
 body .game .side-body { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
 body .game .side-body > .controls { margin-top: auto; }
 /* расстановка: быстрая расстановка прижата к низу колонки, сразу над «В меню» */

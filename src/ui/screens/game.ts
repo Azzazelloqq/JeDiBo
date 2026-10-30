@@ -118,6 +118,28 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const fit = () => {
     const r = boardSlot.getBoundingClientRect();
     board.fit(r.width - 8, r.height - 8);
+    centerSides(r);
+  };
+  /** боковые колонки — посередине пустого места между краем экрана и полем (а не прижаты к краю) */
+  const narrow = window.matchMedia('(max-width: 860px)');
+  const centerSides = (slot: DOMRect) => {
+    if (narrow.matches) {
+      layout.style.removeProperty('--side-shift-l');
+      layout.style.removeProperty('--side-shift-r');
+      return;
+    }
+    // край поля — по раскладке, без transform-анимации появления доски
+    const half = board.el.offsetWidth / 2;
+    const boardL = slot.left + slot.width / 2 - half;
+    const boardR = slot.left + slot.width / 2 + half;
+    const lay = layout.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(layout).paddingLeft) || 0;
+    const l = leftCol.getBoundingClientRect();
+    const rr = right.getBoundingClientRect();
+    const shiftL = Math.max(0, Math.round((boardL - (lay.left + pad) - l.width) / 2));
+    const shiftR = Math.max(0, Math.round((lay.right - pad - boardR - rr.width) / 2));
+    layout.style.setProperty('--side-shift-l', `${shiftL}px`);
+    layout.style.setProperty('--side-shift-r', `${shiftR}px`);
   };
   /** обучение: режиссёр подсказок и тактов (null в обычной партии) */
   const tut: TutorialDirector | null = kind === 'tutorial' ? tutorialDirector(s, board, boardSlot, () => refreshBoard()) : null;
