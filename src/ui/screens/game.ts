@@ -21,6 +21,7 @@ import { endNet, type NetSession } from '../../session/netSession';
 import { saveResume, type ChronicleEntry, type GameResume } from '../gameResume';
 import { open } from '../nav';
 import { localRect, pointToStage, stage } from '../stage';
+import { cardTip } from '../tooltip';
 import { cardEl } from '../card';
 import { calmMotion, dissolve, entrance, lift, toHand } from '../karmaDraw';
 import { btn, h, toast } from '../dom';
@@ -802,7 +803,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ? h(
             'div',
             { class: `held ${burning ? 'burning' : ''}` },
-            cardEl(held.card, { scale: 2, idle: true }).el,
+            cardTip(cardEl(held.card, { scale: 2, idle: true }).el, held.card),
             h(
               'div',
               { class: 'held-info' },

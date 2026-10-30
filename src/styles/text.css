@@ -5,7 +5,7 @@
 :root { --tp: 1.3333px; }
 body .rule-block p, body .rule-piece > div > div, body .cd-quote, body .cd-rule, body .cd-en,
 body .page-sub, body .set-note, body .dialog p, body .lobby-card p, body .lobby-fail, body p.muted,
-body .kr-text, body .tut-hint, body .tut-karma-note .muted, body .hint, body .presets-sub,
+body .kr-text, body .tip-text, body .tut-hint, body .tut-karma-note .muted, body .hint, body .presets-sub,
 body .emb-desc, body .small, body .net-strip {
   font-family: var(--f-text);
   font-size: calc(var(--tp) * 12);
