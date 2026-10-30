@@ -4,14 +4,82 @@
     {
       "name": "jedibo-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "jedibo-b",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5186", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5186",
+        "--strictPort"
+      ],
       "port": 5186
+    },
+    {
+      "name": "jedibo-bot-worktree",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../JeDiBo-bot",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5191",
+        "--strictPort"
+      ],
+      "port": 5191
+    },
+    {
+      "name": "jedibo-qa",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../JeDiBo-qa",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5193",
+        "--strictPort"
+      ],
+      "port": 5193
+    },
+    {
+      "name": "jedibo-music",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5197",
+        "--strictPort"
+      ],
+      "port": 5197
+    },
+    {
+      "name": "jedibo-side-center",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/UnityProjects/JeDiBo/.claude/worktrees/side-panels-center",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5203",
+        "--strictPort"
+      ],
+      "port": 5203
     }
   ]
 }
