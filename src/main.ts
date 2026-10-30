@@ -11,6 +11,7 @@ import { initialScreen, resumedGame, screen, wantsTutorial } from './ui/nav';
 import './styles/game-layout.css';
 import './styles/fonts.css';
 import './styles/tutorial.css';
+import './styles/karma-draw.css';
 import { applySettings } from './ui/screens/settings';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */

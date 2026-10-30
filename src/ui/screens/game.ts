@@ -21,6 +21,7 @@ import { endNet, type NetSession } from '../../session/netSession';
 import { saveResume, type ChronicleEntry, type GameResume } from '../gameResume';
 import { open } from '../nav';
 import { cardEl } from '../card';
+import { calmMotion, dissolve, entrance, lift, toHand } from '../karmaDraw';
 import { btn, h, toast } from '../dom';
 import { avatarEl, gearIcon, pieceIcon, titleEl } from '../widgets';
 import { tutorialDirector, type TutorialDirector } from '../tutorial';
@@ -937,6 +938,8 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     setMood('karma');
     sfx.karma();
     const c = cardEl(card, { scale: 4, faceUp: false, idle: true });
+    // обучение крутит барабан — там свой выход карты; при «спокойной» анимации — прежний влёт сбоку
+    const juicy = !(tut && mode === 'drawn') && !calmMotion();
     const desc = h('div', { class: 'kr-desc' });
     const note = tut && mode === 'drawn' ? tut.karmaNote(p) : null;
     const btnHost = h('div', { class: 'kr-actions' });
@@ -945,16 +948,21 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       { class: 'overlay karma-overlay' },
       h('div', { class: 'kr-head' }, h('div', { class: 'kr-title' }, mode === 'drawn' ? 'Карма' : 'Разыграна карта'), h('div', { class: `kr-who who-${seatOf(p).color}` }, s.players[p].name)),
       note ? h('div', { class: 'tut-karma-note' }, h('div', {}, note.title), h('div', { class: 'muted' }, note.sub)) : null,
-      h('div', { class: 'kr-card fly-in' }, c.el),
+      h('div', { class: `kr-card ${juicy ? '' : 'fly-in'}` }, c.el),
       desc,
       btnHost,
     );
     document.body.appendChild(ov);
-    await wait(550);
-    if (note) {
+    if (juicy) {
+      // взятая карта вылетает из колоды, разыгранная — из руки
+      const src = mode === 'drawn' ? layout.querySelector('.deck-stack') : layout.querySelector(`.player[data-player="${p}"] .held .kcard`);
+      await entrance(c.el.parentElement!, c, card, src?.getBoundingClientRect() ?? null);
+    } else if (note) {
+      await wait(550);
       await roulette(c.el.parentElement!, c.el, tut!.roulette(p));
       await wait(120);
     } else {
+      await wait(550);
       c.flip(true);
       sfx.cardFlip();
       await wait(380);
@@ -975,11 +983,37 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       if (!human || kind !== 'hotseat') ov.addEventListener('click', done);
       if (!human) setTimeout(done, 2600);
     });
+    if (juicy) {
+      // карта остаётся на экране, оверлей гаснет под ней; в руку — только карта Периода
+      const fly = lift(c);
+      ov.classList.add('out');
+      setMood('game');
+      if (def.timing === 'period' && mode === 'drawn') {
+        refresh();
+        await toHand(fly, layout.querySelector<HTMLElement>(`.player[data-player="${p}"] .held .kcard`), card);
+      } else await dissolve(fly, card);
+      ov.remove();
+      overlayOpen = false;
+      return;
+    }
     ov.classList.add('out');
     setMood('game');
     await wait(260);
     ov.remove();
     overlayOpen = false;
+  }
+
+  /** Отладка: показать получение карты (по умолчанию — случайной карты Периода себе в руку). Состояние партии не честное. */
+  async function drawDemo(card?: CardId) {
+    if (overlayOpen || s.phase !== 'play') return;
+    const p = viewer();
+    const pool = (Object.keys(CARDS) as CardId[]).filter((id) => CARDS[id].timing === 'period');
+    const id = card ?? pool[Math.floor(Math.random() * pool.length)];
+    s.players[p].held = null;
+    refresh();
+    if (CARDS[id].timing === 'period') s.players[p].held = { card: id, untilOwnTurn: s.players[p].ownTurns + 2 };
+    await karmaReveal(id, p, 'drawn');
+    refresh();
   }
 
   /** Обучение: лица карт мелькают, как барабан, который тормозит. Каждый щелчок чуть дольше предыдущего,
@@ -1413,7 +1447,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   window.addEventListener('keydown', onKey);
 
   // отладка из консоли: __match.state, __match.submit(...)
-  if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }) });
+  if (import.meta.env.DEV) Object.assign(window, { __match: match, __board: board, __dbg: () => ({ selected, overlayOpen, humanActs: humanActs() }), __drawDemo: drawDemo });
 
   if (tut) void tutorialIntro();
   else if (s.phase !== 'placement') enterPlayDirect();
@@ -1439,6 +1473,6 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     clearInterval(clockTimer);
     window.removeEventListener('keydown', onKey);
     tut?.dispose();
-    document.querySelectorAll('.overlay, .banner, .turn-fly').forEach((e) => e.remove());
+    document.querySelectorAll('.overlay, .banner, .turn-fly, .kd-fly').forEach((e) => e.remove());
   };
 }

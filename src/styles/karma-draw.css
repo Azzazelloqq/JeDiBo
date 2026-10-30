@@ -1,0 +1,26 @@
+/* Получение карты Кармы (src/ui/karmaDraw.ts): искры, волны, лучи, полёт в руку. */
+.kd-spark, .kd-ring, .kd-ghost, .kd-fly { position: fixed; pointer-events: none; z-index: 60; }
+.kd-spark { box-shadow: 2px 2px 0 var(--void); }
+.kd-ring { border: 4px solid; box-sizing: border-box; background: transparent; box-shadow: 4px 4px 0 var(--void); }
+.kd-flash { position: absolute; inset: 0; background: var(--bone); pointer-events: none; z-index: 5; }
+.kd-fly { z-index: 65; }
+.kd-fly .kcard { width: 100% !important; height: 100% !important; }
+.kd-ghost { border: 4px solid; box-sizing: border-box; z-index: 64; transform-origin: center; }
+
+/* лучи: ступенчатые лопасти; маска гасит их к краям ступенями, без размытия */
+.kr-card { position: relative; isolation: isolate; }
+.kd-rays {
+  position: absolute; left: 50%; top: 50%; width: 760px; height: 760px; z-index: -1; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--ray) 34%, transparent) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask: radial-gradient(circle, black 0 22%, rgba(0, 0, 0, 0.6) 22% 34%, rgba(0, 0, 0, 0.3) 34% 46%, transparent 46%);
+  mask: radial-gradient(circle, black 0 22%, rgba(0, 0, 0, 0.6) 22% 34%, rgba(0, 0, 0, 0.3) 34% 46%, transparent 46%);
+}
+.kd-rays.spin { animation: kdSpin 16s steps(96, end) infinite; }
+@keyframes kdSpin { from { transform: translate(-50%, -50%) rotate(25deg); } to { transform: translate(-50%, -50%) rotate(385deg); } }
+
+/* слот руки, поймавший карту: рамка вспыхивает янтарём */
+.held.kd-caught { animation: kdCaught 0.6s steps(6, end); }
+@keyframes kdCaught {
+  0% { background: color-mix(in srgb, var(--amber-300) 40%, transparent); border-top-color: var(--amber-300); }
+  100% { background: transparent; }
+}
