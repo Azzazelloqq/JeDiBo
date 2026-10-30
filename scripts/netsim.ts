@@ -109,6 +109,12 @@ async function roomChecks() {
   check('честные раскрытия → партия началась', s.phase === 'play' && a.got.filter((m) => m.t === 'action').length === 2);
   const placeMsgs = b.got.filter((m): m is Extract<ServerMsg, { t: 'action' }> => m.t === 'action');
   check('раскрытия идут с солью (гость может проверить)', placeMsgs.every((m) => !!m.salt));
+  const errsB = () => b.got.filter((m) => m.t === 'error').length;
+  const errsBefore = errsB();
+  await b.send({ t: 'placeCommit', hash: cb.hash });
+  check('та же заявка расстановки после начала партии (запоздавший повтор) → тихо игнорируется', errsB() === errsBefore);
+  await b.send({ t: 'placeCommit', hash: ca.hash });
+  check('другая заявка расстановки после начала партии → badMsg', b.last('error')?.code === 'badMsg' && errsB() === errsBefore + 1);
 
   const cur = s.current;
   const idle = cur === 0 ? b : a;

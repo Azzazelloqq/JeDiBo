@@ -283,7 +283,9 @@ export class Room {
   // Скрытая расстановка: сначала оба обязательства, потом раскрытия; применяются строго в порядке 0, 1.
   private placeCommit(conn: ConnId, seat: PlayerId, hash: unknown) {
     const slot = this.d.place[seat];
-    if (this.d.status === 'placement' && slot.hash && slot.hash === hash) return; // повтор после переподключения
+    // повтор после переподключения: клиент шлёт заявку заново, а она могла дойти уже после того,
+    // как обе расстановки применились (статус play). Слоты чистятся только в startGame, так что тот же хэш — эта же партия
+    if (slot.hash && slot.hash === hash) return;
     if (this.d.status !== 'placement' || slot.hash) return this.fail(conn, 'badMsg', 'Расстановка уже заявлена');
     if (typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) return this.fail(conn, 'badMsg', 'Неверный хэш');
     slot.hash = hash;
