@@ -2,6 +2,8 @@
 // каждый играет по кругу. Переходы — мягкие: между треками и между списками — кроссфейд.
 // Новый трек — просто положить .mp3/.ogg в нужную папку.
 
+import { masterGain, onMasterVolume } from './master';
+
 export type Playlist = 'menu' | 'game';
 
 const FILES = import.meta.glob<string>('../assets/music/*/*.{mp3,ogg}', { eager: true, query: '?url', import: 'default' });
@@ -37,7 +39,10 @@ let waitingGesture = false;
 let silenced = document.hidden;
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('jedibo-music') : null;
 
-const apply = (v: Voice) => (v.el.volume = Math.min(1, v.level * volume));
+/** Положение ползунка 0..1 → громкость: шкала в децибелах, 100% — полная, 50% — 0.05 (−26 дБ), 0 — тишина. */
+export const musicGain = (v: number) => (v <= 0 ? 0 : 10 ** ((-52 * (1 - Math.min(1, v))) / 20));
+
+const apply = (v: Voice) => (v.el.volume = Math.min(1, v.level * musicGain(volume) * masterGain()));
 
 function play(v: Voice) {
   if (silenced) return;
@@ -153,8 +158,11 @@ export function setMusicVolume(v: number) {
   for (const x of voices) apply(x);
 }
 
+const offMaster = onMasterVolume(() => setMusicVolume(volume));
+
 // при правке этого файла Vite подменяет модуль на лету — старые треки иначе остались бы играть без хозяина
 import.meta.hot?.dispose(() => {
+  offMaster();
   clearInterval(timer);
   channel?.close();
   document.removeEventListener('visibilitychange', onVisibility);

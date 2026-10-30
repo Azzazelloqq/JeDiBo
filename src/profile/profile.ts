@@ -38,6 +38,8 @@ export interface Profile {
 }
 
 export interface Settings {
+  /** общая громкость, множитель поверх звуков и музыки, 0..1 */
+  masterVolume: number;
   volume: number;
   /** громкость фоновой музыки меню, 0..1 */
   musicVolume: number;
@@ -46,7 +48,11 @@ export interface Settings {
   theme?: 'dark' | 'light';
   shake: boolean;
   animSpeed: number;
+  /** версия шкал громкости (audio/sfx.ts, audio/music.ts): при смене шкалы ползунки сбрасываются на 50% */
+  audioScale?: number;
 }
+
+const AUDIO_SCALE = 2;
 
 const PKEY = 'jedibo.profile.v1';
 const SKEY = 'jedibo.settings.v1';
@@ -77,7 +83,9 @@ export function defaultProfile(): Profile {
 const stored = read<Profile>(PKEY);
 let profile: Profile = { ...defaultProfile(), ...(stored ?? {}) };
 if (!stored) write(PKEY, profile);
-let settings: Settings = { volume: 0.5, musicVolume: 0.5, crt: true, shake: true, animSpeed: 1, ...(read<Settings>(SKEY) ?? {}) };
+let settings: Settings = { masterVolume: 1, volume: 0.5, musicVolume: 0.5, crt: true, shake: true, animSpeed: 1, ...(read<Settings>(SKEY) ?? {}) };
+// прежние значения ползунков на новой шкале звучали бы иначе — 50/50 теперь и есть выверенный баланс
+if (settings.audioScale !== AUDIO_SCALE) settings = { ...settings, volume: 0.5, musicVolume: 0.5, audioScale: AUDIO_SCALE };
 
 export const getProfile = () => profile;
 export const getSettings = () => settings;

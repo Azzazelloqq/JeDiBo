@@ -1,17 +1,31 @@
 // Синтезированные звуки (WebAudio): камень, щелчки, карты. Без внешних ассетов.
 
+import { masterGain, onMasterVolume } from './master';
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let volume = 0.5;
 
+/** Положение ползунка 0..1 → усиление: 50% — исходная громкость звуков (×1), 100% — ×2 (пики срезает лимитер). */
+export const sfxGain = (v: number) => 2 * Math.max(0, v);
+
+const gain = () => sfxGain(volume) * masterGain();
+
 function ac(): AudioContext | null {
-  if (volume <= 0) return null;
+  if (gain() <= 0) return null;
   if (!ctx) {
     try {
       ctx = new AudioContext();
       master = ctx.createGain();
-      master.gain.value = volume;
-      master.connect(ctx.destination);
+      master.gain.value = gain();
+      // лимитер: выше ×1 наложившиеся удары иначе хрипели бы
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -3;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.1;
+      master.connect(limiter).connect(ctx.destination);
     } catch {
       return null;
     }
@@ -22,8 +36,11 @@ function ac(): AudioContext | null {
 
 export function setVolume(v: number) {
   volume = v;
-  if (master) master.gain.value = v;
+  if (master) master.gain.value = gain();
 }
+
+const offMaster = onMasterVolume(() => setVolume(volume));
+import.meta.hot?.dispose(offMaster);
 
 function tone(freq: number, dur: number, type: OscillatorType, gain: number, slide = 0, delay = 0) {
   const a = ac();

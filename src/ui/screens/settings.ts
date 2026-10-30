@@ -1,3 +1,4 @@
+import { setMasterVolume } from '../../audio/master';
 import { setMusicVolume } from '../../audio/music';
 import { setVolume } from '../../audio/sfx';
 import { getSettings, saveSettings, type Settings } from '../../profile/profile';
@@ -10,6 +11,7 @@ import { btn, h } from '../dom';
 import { pixelSlider } from '../widgets';
 
 export function applySettings(s: Settings = getSettings()) {
+  setMasterVolume(s.masterVolume);
   setVolume(s.volume);
   setMusicVolume(s.musicVolume);
   setShakeEnabled(s.shake);
@@ -56,6 +58,7 @@ export function settingsPanel(opts: SettingsOpts = {}): HTMLElement {
       location.href = location.pathname;
     };
     el.replaceChildren(
+      volumeRow('Общая громкость', s.masterVolume, setMasterVolume, (v) => saveSettings({ masterVolume: v })),
       volumeRow('Звуки', s.volume, setVolume, (v) => saveSettings({ volume: v })),
       volumeRow('Музыка', s.musicVolume, setMusicVolume, (v) => saveSettings({ musicVolume: v })),
       opts.themeLocked
