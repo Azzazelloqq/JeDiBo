@@ -6,3 +6,11 @@
   unicode-range: U+0030-0039;
   font-display: block;
 }
+
+/* Текст описаний (--f-text): свой пиксельный, строчные 6 px, заглавные 8 — scripts/pixel-text.mjs.
+   Кегль ставит ui/textPixel.ts: пиксель шрифта = целое число пикселей экрана. */
+@font-face {
+  font-family: 'JeDiBo Text';
+  src: url('../assets/fonts/jedibo-text.ttf') format('truetype');
+  font-display: block;
+}

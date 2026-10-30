@@ -14,6 +14,7 @@ import './styles/tutorial.css';
 import './styles/karma-draw.css';
 import './styles/text.css';
 import { applySettings } from './ui/screens/settings';
+import { trackTextPixel } from './ui/textPixel';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
 function setFavicon() {
@@ -47,12 +48,13 @@ async function boot() {
   setFavicon();
   startBackground(document.getElementById('bg') as HTMLCanvasElement);
   applySettings();
+  trackTextPixel();
   // пиксельный шрифт нужен до генерации заголовков на canvas
   try {
     const fonts = [document.fonts.load('24px "Tiny5"', 'Аа')];
     fonts.push(document.fonts.load('24px "JeDiBo Digits"', '0'));
     // текст описаний (styles/text.css) — чтобы правила и подсказки не перескакивали с запасного шрифта
-    fonts.push(document.fonts.load('15px "IBM Plex Mono"', 'Аа'), document.fonts.load('600 16px "IBM Plex Mono"', 'Аа'));
+    fonts.push(document.fonts.load('16px "JeDiBo Text"', 'Аа'));
     await Promise.race([Promise.all(fonts), new Promise((r) => setTimeout(r, 1500))]);
   } catch {
     /* офлайн — останется моноширинный запасной */

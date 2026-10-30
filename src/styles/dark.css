@@ -5,7 +5,7 @@
 :root {
   --f-pix: 'JeDiBo Digits', 'Tiny5', 'Courier New', monospace;
   --f-mono: 'IBM Plex Mono', 'Consolas', monospace;
-  --f-text: var(--f-mono); /* описания, правила, подсказки — styles/text.css */
+  --f-text: 'JeDiBo Text', var(--f-mono); /* описания, правила, подсказки — styles/text.css */
   --edge: 0 5px 0 rgba(0, 0, 0, 0.55);
   --drop: rgba(0, 0, 0, 0.5);
   --bounce: cubic-bezier(0.2, 1.6, 0.4, 1);
