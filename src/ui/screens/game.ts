@@ -311,15 +311,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         h('div', { class: 'pp-count pp-stack' }, h('div', {}, h('b', {}, String(total)), h('span', {}, '/21')), h('div', { class: 'pp-sizer', 'aria-hidden': 'true' }, h('b', {}, '21'), h('span', {}, '/21'))),
         h(
           'div',
-          { class: 'pp-body' },
-          h(
-            'div',
-            { class: 'pp-stack' },
-            done ? h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать') : placing(placeRank, LIMIT[placeRank] - c[placeRank]),
-            ...[h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать'), ...PLACE_ORDER.map((r) => placing(r, LIMIT[r]))].map((el) => (el.classList.add('pp-sizer'), el.setAttribute('aria-hidden', 'true'), el)),
-          ),
-          h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${(total / 21) * 100}%` })),
+          { class: 'pp-stack' },
+          done ? h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать') : placing(placeRank, LIMIT[placeRank] - c[placeRank]),
+          ...[h('div', { class: 'pp-text' }, 'Армия собрана — можно начинать'), ...PLACE_ORDER.map((r) => placing(r, LIMIT[r]))].map((el) => (el.classList.add('pp-sizer'), el.setAttribute('aria-hidden', 'true'), el)),
         ),
+        h('div', { class: 'meter' }, h('div', { class: 'meter-fill', style: `width:${(total / 21) * 100}%` })),
       ),
       h('div', { class: 'bb-actions' }, btn('Готово', () => ready(), `btn-amber btn-big bb-main ${done ? 'ready-pulse' : ''}`, { disabled: !done })),
     );

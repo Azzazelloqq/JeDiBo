@@ -50,8 +50,10 @@ body .game .sc-total { display: inline-flex; align-items: center; gap: 6px; }
 /* ── панель действий под полем ──────────────────────────────────────────── */
 /* по центру под полем: сверху кнопки действий, под ними — подсказка (одной ширины во всех состояниях) */
 body .game .bottombar { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 0; min-height: 0; margin-bottom: 12px; /* = нижний запас колонок: низ подсказки на одной линии с «Сдаться»/«В меню» */ }
-body .game .bottombar .prompt { width: min(100%, 680px); display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; min-height: 62px; padding: 10px 18px; }
-body .game .bb-actions { order: -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; align-items: stretch; }
+body .game .bottombar .prompt { width: min(100%, 680px); display: flex; align-items: center; justify-content: center; text-align: center; min-width: 0; min-height: var(--prompt-h, 62px); padding: 10px 18px; }
+/* высота подсказки одна на расстановке и в партии: поле не дёргается при старте партии */
+/* кнопки одной ширины: промежуток между «Отменить» и «Завершить ход» — ровно по центру поля */
+body .game .bb-actions { order: -1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; justify-content: center; gap: 12px; align-items: stretch; }
 body .game .bb-actions .btn-big { padding: 14px 24px 12px; }
 body .game .bb-main { min-width: 230px; }
 
@@ -77,6 +79,10 @@ body .game .log-count { flex: none; font-family: var(--f-pix); font-size: 12px; 
 body .game .log-last { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 body .game .log[open] .log-last { display: none; }
 body .game .log .log-list { margin-top: 8px; max-height: 34vh; }
+/* раскрытая Хроника занимает только остаток колонки (карта в руке соперника не выталкивает её за край), список прокручивается */
+body .game .side-right > .log[open] { flex: 0 1 auto; min-height: 120px; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; }
+body .game .side-right > .log[open]::details-content { display: contents; }
+body .game .side-right > .log[open] .log-list { flex: 1 1 auto; min-height: 0; }
 
 /* ── анимации партии ────────────────────────────────────────────────────── */
 /* плашка «ходит» в полёте между панелями (game.ts, flyTurnBadge); на месте посадки — невидима до приземления */
@@ -94,7 +100,7 @@ body .game .prompt-spawn .muted { font-size: 14px; }
   body .game .bb-actions { gap: 8px; }
   body .game .bb-actions .btn-big { font-size: 18px; padding: 11px 14px 9px; }
   body .game .bottombar { gap: 8px; }
-  body .game .bottombar .prompt { flex-basis: 120px; font-size: 14px; padding: 8px 12px; }
+  body .game .bottombar .prompt { --prompt-h: 120px; font-size: 14px; padding: 8px 12px; }
   body .game .topbar .tb-ap .h-label { display: none; }
   body .game .topbar .pip { width: 13px; }
 }
@@ -106,7 +112,7 @@ body .game .prompt-spawn .muted { font-size: 14px; }
   body .game .topbar { gap: 8px; padding: 10px 12px; }
   body .game .rank-pick { padding: 8px 14px; }
   body .game .rank-pick .rp-left { font-size: 32px; }
-  body .game .bottombar .prompt, body .game .controls .btn { min-height: 54px; }
+  body .game .controls .btn { min-height: 54px; }
   body .game .bb-actions .btn-big { font-size: 20px; padding: 11px 18px 9px; }
 }
 
@@ -121,19 +127,19 @@ body .game .presets-sub { font-size: 14px; opacity: 0.9; margin-left: 8px; }
 body .game .presets-panel.fresh { animation: presetsCall 1.6s ease-in-out infinite; }
 @keyframes presetsCall { 50% { border-color: var(--amber-500); } }
 
-/* прогресс расстановки под полем: крупный счётчик, что ставим сейчас, полоса */
-body .game .place-progress { gap: 16px; }
+/* прогресс расстановки под полем одной строкой: счётчик, что ставим сейчас, полоса — в высоту подсказки партии */
+body .game .bottombar .place-progress { gap: 16px; padding-block: 8px; justify-content: flex-start; text-align: left; }
 body .game .pp-count { flex: none; font-family: var(--f-pix); line-height: 1; }
 body .game .pp-count b { font-size: 40px; }
 body .game .pp-count span { font-size: 18px; opacity: 0.85; }
-body .game .pp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 body .game .pp-text { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 18px; }
 body .game .pp-text .spawn-rank { font-size: 16px; }
 /* все варианты в одной ячейке, невидимые задают размер под самый длинный */
-body .game .pp-stack { display: grid; }
+body .game .pp-stack { display: grid; flex: 0 1 auto; min-width: 0; }
+body .game .pp-stack.pp-count { flex: none; }
 body .game .pp-stack > * { grid-area: 1 / 1; }
 body .game .pp-sizer { visibility: hidden; }
-body .game .place-progress .meter { height: 12px; margin: 0; }
+body .game .place-progress .meter { flex: 1; min-width: 48px; height: 12px; margin: 0; }
 body .game .place-progress.done .meter-fill { background: repeating-linear-gradient(90deg, var(--amber-500) 0 6px, var(--amber-300) 6px 8px); }
 
 /* переход расстановка → партия: старое уходит, новое въезжает по очереди (задержки — из game.ts) */
