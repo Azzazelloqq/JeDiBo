@@ -1,0 +1,16 @@
+/* Текст описаний — моноширинный --f-text (обе темы): у Tiny5 строчные высотой 4 px сетки, и фразы на кириллице сливаются.
+   Пиксельный --f-pix остаётся для заголовков, кнопок, меток, имён и чисел. Тема подключается позже этого файла — отсюда body. */
+body .rule-block p, body .rule-piece > div > div, body .cd-quote, body .cd-rule, body .cd-en,
+body .page-sub, body .set-note, body .dialog p, body .lobby-card p, body .lobby-fail, body p.muted,
+body .kr-text, body .tut-hint, body .tut-karma-note .muted, body .hint, body .presets-sub,
+body .emb-desc, body .small, body .log-last, body .net-strip {
+  font-family: var(--f-text);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+}
+body .small, body .emb-desc, body .log-last, body .tut-karma-note .muted { font-size: 14px; line-height: 1.4; }
+body .cd-quote, body .kr-text, body .tut-hint { font-size: 16px; font-weight: 600; }
+body .tut-hint { line-height: 1.35; }
+body .rule-piece b { font-family: var(--f-pix); font-size: 16px; }

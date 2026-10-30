@@ -45,7 +45,7 @@ body .game .stage-clock.sc-reserve { visibility: hidden; }
 body .game .stage-clock .sc-left { flex: none; display: flex; align-items: baseline; gap: 10px; }
 body .game .stage-clock .tb-clock { font-size: 28px; line-height: 1; }
 body .game .stage-clock .clock-bar { flex: 1; width: auto; height: 10px; }
-body .game .stage-clock .tb-totals { flex: none; display: flex; gap: 12px; font-family: var(--f-pix); font-size: 14px; }
+body .game .stage-clock .tb-totals { flex: none; display: flex; gap: 12px; font-family: var(--f-pix); font-size: 16px; }
 body .game .sc-total { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ── панель действий под полем ──────────────────────────────────────────── */
@@ -76,7 +76,7 @@ body .game .log-head::-webkit-details-marker { display: none; }
 body .game .log-head .h-label { margin: 0; flex: none; }
 body .game .log-head::after { content: '▸'; margin-left: auto; font-family: var(--f-pix); transition: transform 0.15s var(--snap); }
 body .game .log[open] .log-head::after { transform: rotate(90deg); }
-body .game .log-count { flex: none; font-family: var(--f-pix); font-size: 12px; padding: 0 5px; border: 2px solid currentColor; opacity: 0.9; }
+body .game .log-count { flex: none; font-family: var(--f-pix); font-size: 16px; padding: 0 5px; border: 2px solid currentColor; opacity: 0.9; }
 body .game .log-last { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 body .game .log[open] .log-last { display: none; }
 body .game .log .log-list { margin-top: 8px; max-height: 34vh; }
@@ -92,7 +92,7 @@ body .game .pl-turn.landing { visibility: hidden; }
 /* подсказка выбора клетки для новой фигуры: какую фигуру ставим */
 body .game .prompt-spawn { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body .game .spawn-rank { display: inline-flex; align-items: center; gap: 8px; padding: 2px 8px 2px 4px; background: var(--void); color: var(--amber-300); font-size: 20px; text-transform: uppercase; border: 2px solid var(--amber-500); }
-body .game .prompt-spawn .muted { font-size: 14px; }
+body .game .prompt-spawn .muted { font-size: 16px; }
 
 /* ── адаптив ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
@@ -101,7 +101,7 @@ body .game .prompt-spawn .muted { font-size: 14px; }
   body .game .bb-actions { gap: 8px; }
   body .game .bb-actions .btn-big { font-size: 18px; padding: 11px 14px 9px; }
   body .game .bottombar { gap: 8px; }
-  body .game .bottombar .prompt { --prompt-h: 120px; font-size: 14px; padding: 8px 12px; }
+  body .game .bottombar .prompt { --prompt-h: 120px; font-size: 16px; padding: 8px 12px; }
   body .game .topbar .tb-ap .h-label { display: none; }
   body .game .topbar .pip { width: 13px; }
 }
@@ -118,7 +118,7 @@ body .game .prompt-spawn .muted { font-size: 14px; }
 }
 
 /* ── профили на расстановке (на месте панелей партии) ───────────────────── */
-body .game .seat-note { margin-top: 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.95; }
+body .game .seat-note { margin-top: 10px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.95; }
 
 /* быстрая расстановка — главный путь для новичка: выделена рамкой акцента, пока поле пустое — мягко пульсирует */
 body .game .presets-panel { border-color: var(--brand-500); }
@@ -150,7 +150,7 @@ body .game .panel-in { animation: panelIn 0.4s var(--bounce) backwards; }
 
 /* читаемость партии: мелкий служебный текст крупнее */
 body .game .small { font-size: 14px; }
-body .game .h-label { font-size: 14px; }
+body .game .h-label { font-size: 16px; white-space: nowrap; }
 body .game .kt-label { font-size: 16px; }
 body .game .effect { font-size: 16px; }
 body .game .log-list { font-size: 14px; }
