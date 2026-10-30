@@ -41,6 +41,7 @@ body .game .karma-panel .kt { height: 16px; }
 
 /* ── часы хода над полем ─────────────────────────────────────────────────── */
 body .game .stage-clock { flex: none; align-self: center; width: min(100%, 680px); display: flex; align-items: center; gap: 16px; padding: 8px 16px; margin-top: 6px; }
+body .game .stage-clock.sc-reserve { visibility: hidden; }
 body .game .stage-clock .sc-left { flex: none; display: flex; align-items: baseline; gap: 10px; }
 body .game .stage-clock .tb-clock { font-size: 28px; line-height: 1; }
 body .game .stage-clock .clock-bar { flex: 1; width: auto; height: 10px; }

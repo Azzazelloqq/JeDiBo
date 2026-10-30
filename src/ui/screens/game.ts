@@ -109,9 +109,9 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const right = h('aside', { class: 'side side-right' });
   const bottom = h('div', { class: 'bottombar' });
   const boardSlot = h('div', { class: 'board-slot' }, board.el);
-  // часы хода — над полем; появляются вместе с партией (на расстановке их нет)
-  const clockPanel = h('div', { class: 'stage-clock slab' });
-  const center = h('main', { class: 'center' }, boardSlot, bottom);
+  // часы хода — над полем; на расстановке место под ними уже занято (невидимо), чтобы поле не сдвигалось при старте партии
+  const clockPanel = h('div', { class: 'stage-clock slab sc-reserve' });
+  const center = h('main', { class: 'center' }, clockPanel, boardSlot, bottom);
   const layout = h('div', { class: 'game' }, leftCol, center, right);
   root.append(layout);
 
@@ -621,7 +621,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     // своя панель всегда слева, соперник — справа
     const mine = viewer();
     // «На поле» — только когда что-то действует: пустая плита с «пока ничего» лишь занимала колонку
-    if (!clockPanel.isConnected) center.prepend(clockPanel);
+    clockPanel.classList.remove('sc-reserve');
     left.replaceChildren(...[playerPanel(mine), karmaPanel(), top, effectsPanel(), controls()].filter((n): n is HTMLElement => !!n));
     right.replaceChildren(playerPanel(other(mine)), deckPanel(), logPanel());
     if (!hudShown) {
@@ -684,6 +684,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   const turnBar = h('div', { class: 'clock-bar' }, h('div', { class: 'clock-fill' }));
   const totals = h('div', { class: 'tb-totals' });
   const choiceLabel = h('div', { class: 'tb-choice' });
+  clockPanel.append(h('div', { class: 'sc-left' }, choiceLabel, turnClock), turnBar, totals);
 
   function updatePips() {
     apPips.replaceChildren(...Array.from({ length: s.mode.ap }, (_, i) => h('div', { class: `pip ${i < s.ap ? 'on' : ''}` })));
