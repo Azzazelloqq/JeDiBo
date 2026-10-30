@@ -1,5 +1,6 @@
 // Лобби сетевой игры: создать комнату / войти по коду, ожидание соперника, возврат после перезагрузки.
 // Минимальный экран на текущих компонентах (этап 4 сети); финальный вид — после редизайна.
+import { setMusic } from '../../audio/music';
 import type { GuestFailure, HostStatus } from '../../net/peer';
 import type { TransportStatus } from '../../net/transport';
 import { setMood } from '../../render/background';
@@ -33,6 +34,8 @@ export function bootScreen(): Screen | null {
 
 export function lobbyScreen(root: HTMLElement) {
   setMood('menu');
+  // лобби открывается и в обход nav.screen (ссылка-приглашение) — музыку меню включаем сами
+  setMusic('menu');
   let session: NetSession | null = netSession();
   let unlisten: (() => void) | null = null;
   let codeInput = '';

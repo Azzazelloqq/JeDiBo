@@ -39,6 +39,8 @@ export interface Profile {
 
 export interface Settings {
   volume: number;
+  /** громкость фоновой музыки меню, 0..1 */
+  musicVolume: number;
   crt: boolean;
   /** Тема применяется при загрузке (render/palette.ts); смена — перезагрузка страницы. */
   theme?: 'dark' | 'light';
@@ -75,7 +77,7 @@ export function defaultProfile(): Profile {
 const stored = read<Profile>(PKEY);
 let profile: Profile = { ...defaultProfile(), ...(stored ?? {}) };
 if (!stored) write(PKEY, profile);
-let settings: Settings = { volume: 0.5, crt: true, shake: true, animSpeed: 1, ...(read<Settings>(SKEY) ?? {}) };
+let settings: Settings = { volume: 0.5, musicVolume: 0.5, crt: true, shake: true, animSpeed: 1, ...(read<Settings>(SKEY) ?? {}) };
 
 export const getProfile = () => profile;
 export const getSettings = () => settings;

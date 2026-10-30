@@ -1,5 +1,6 @@
 // Навигация по экранам: screen(id) — фабрика экрана по имени, open(id) — переход, initialScreen() — стартовый экран.
 import type { LevelId } from '../ai/levels';
+import { setMusic } from '../audio/music';
 import { getProfile } from '../profile/profile';
 import type { NetSession } from '../session/netSession';
 import { go, type Screen } from './app';
@@ -37,6 +38,8 @@ export function screen(id: ScreenId, arg?: unknown): Screen {
       /* нет хранилища */
     }
     root.dataset.screen = id;
+    // у партии свой список музыки, у остальных экранов — список меню
+    setMusic(id === 'game' ? 'game' : 'menu');
     return SCREENS[id](root, arg);
   };
 }

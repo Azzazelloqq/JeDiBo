@@ -1,3 +1,4 @@
+import { setMusicVolume } from '../../audio/music';
 import { setVolume } from '../../audio/sfx';
 import { getSettings, saveSettings, type Settings } from '../../profile/profile';
 import { setMood } from '../../render/background';
@@ -10,6 +11,7 @@ import { pixelSlider } from '../widgets';
 
 export function applySettings(s: Settings = getSettings()) {
   setVolume(s.volume);
+  setMusicVolume(s.musicVolume);
   setShakeEnabled(s.shake);
   setAnimSpeed(s.animSpeed);
   document.body.classList.toggle('no-crt', !s.crt);
@@ -39,6 +41,14 @@ export function settingsPanel(opts: SettingsOpts = {}): HTMLElement {
       h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
     const choiceStr = (label: string, opts: [string, string][], v: string, on: (x: string) => void) =>
       h('div', { class: 'set-row' }, h('span', {}, label), h('div', { class: 'seg' }, ...opts.map(([l, x]) => btn(l, () => x !== v && on(x), x === v ? 'btn-amber btn-small' : 'btn-dark btn-small'))));
+    // громкость меняется сразу, сохраняется — когда ползунок отпустили (без перерисовки панели)
+    const volumeRow = (label: string, v: number, live: (x: number) => void, save: (x: number) => void) =>
+      h(
+        'div',
+        { class: 'set-row' },
+        h('span', {}, label),
+        pixelSlider({ value: Math.round(v * 100), min: 0, max: 100, step: 5, label, format: (x) => `${x}%`, onInput: (x) => live(x / 100), onChange: (x) => save(x / 100) }),
+      );
     // тема собирается при загрузке (палитра, спрайты, стили, кэши картинок) — сохраняем и перезагружаем без параметров в адресе
     const reloadWith = (p: Partial<Settings>) => {
       saveSettings({ theme: THEME.scheme, ...p });
@@ -46,22 +56,8 @@ export function settingsPanel(opts: SettingsOpts = {}): HTMLElement {
       location.href = location.pathname;
     };
     el.replaceChildren(
-      h(
-        'div',
-        { class: 'set-row' },
-        h('span', {}, 'Громкость'),
-        pixelSlider({
-          value: Math.round(s.volume * 100),
-          min: 0,
-          max: 100,
-          step: 5,
-          label: 'Громкость',
-          format: (v) => `${v}%`,
-          // громкость меняется сразу, сохраняется — когда ползунок отпустили (без перерисовки панели)
-          onInput: (v) => setVolume(v / 100),
-          onChange: (v) => saveSettings({ volume: v / 100 }),
-        }),
-      ),
+      volumeRow('Звуки', s.volume, setVolume, (v) => saveSettings({ volume: v })),
+      volumeRow('Музыка', s.musicVolume, setMusicVolume, (v) => saveSettings({ musicVolume: v })),
       opts.themeLocked
         ? h('div', { class: 'set-row' }, h('span', {}, 'Тема'), h('span', { class: 'set-note' }, opts.themeLocked))
         : choiceStr('Тема', [['Тёмная', 'dark'], ['Светлая', 'light']], THEME.scheme, (x) => reloadWith({ theme: x as Settings['theme'] })),
