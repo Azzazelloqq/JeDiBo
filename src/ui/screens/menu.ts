@@ -5,6 +5,7 @@ import { btn, canvasEl, h } from '../dom';
 import { go } from '../app';
 import { logoEl, profileChip, tileArt } from '../widgets';
 import { open } from '../nav';
+import { stage } from '../stage';
 import { lobbyScreen } from './lobby';
 
 export const VERSION = '0.1.0-PROTO';
@@ -38,7 +39,7 @@ export function chooseLevel() {
       h('div', { class: 'row' }, btn('Отмена', close, 'btn-dark')),
     ),
   );
-  document.body.appendChild(ov);
+  stage().appendChild(ov);
 }
 
 export function menuScreen(root: HTMLElement) {

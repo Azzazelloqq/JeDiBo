@@ -19,7 +19,7 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--void);
+  background: var(--letterbox); /* поля вокруг сцены */
   color: var(--bone);
   font-family: var(--f-pix); /* пиксельный — заголовки, кнопки, метки, числа; описания и Хроника — моноширинный (styles/text.css) */
   font-size: 16px;
@@ -33,9 +33,16 @@ button { font: inherit; color: inherit; }
 .small { font-size: 12px; }
 .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-#bg { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; }
-#shake { position: fixed; inset: 0; z-index: 1; will-change: transform; }
+#bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+#shake { position: absolute; inset: 0; z-index: 1; will-change: transform; }
 #app { position: absolute; inset: 0; }
+/* сцена: игра свёрстана под высоту 900 px и масштабируется под окно, ширина — от 4:3 до 21:9 (ui/stage.ts).
+   Если окно уже или шире — по краям поля: фон #bg идёт на всё окно, поля притушены огромной тенью сцены,
+   по краю сцены — жёсткая рамка. У сцены transform, поэтому position: fixed внутри неё отсчитывается от сцены */
+#stage {
+  position: fixed; left: 0; top: 0; z-index: 1; width: 1600px; height: 900px; transform-origin: 0 0; overflow: hidden;
+  box-shadow: 0 0 0 4px var(--void), 0 0 0 8px color-mix(in srgb, var(--void) 70%, transparent), 0 0 0 6000px color-mix(in srgb, var(--letterbox) 55%, transparent);
+}
 
 /* ЭЛТ: сканлайны + виньетка + лёгкое мерцание */
 #crt {
@@ -143,9 +150,9 @@ body.no-crt #crt { display: none; }
 }
 .logo-wrap { display: flex; flex-direction: column; align-items: center; position: relative; }
 /* плита с логотипом поднята над плитками на 10% высоты колонки меню (плитки и меню остаются на месте);
-   на низких экранах места сверху нет — там не поднимаем */
-@media (min-height: 820px) { .logo-wrap { top: -10%; } }
-.logo-wrap .logo { animation: logoBob 4.5s ease-in-out infinite; max-width: 90vw; }
+   сцена 900 px в высоту (ui/stage.ts) — место сверху есть всегда */
+.logo-wrap { top: -10%; }
+.logo-wrap .logo { animation: logoBob 4.5s ease-in-out infinite; max-width: 1440px; }
 .logo-pix { line-height: 0; }
 @keyframes logoBob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
 
@@ -357,7 +364,7 @@ body.no-crt #crt { display: none; }
 .deck-n { font-family: var(--f-pix); font-size: 16px; }
 .deck-n b { font-size: 40px; line-height: 1; }
 .log { flex: 1; min-height: 140px; display: flex; flex-direction: column; }
-.log-list { font-family: var(--f-mono); flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 32vh; scrollbar-width: thin; scrollbar-color: var(--slab-600) transparent; }
+.log-list { font-family: var(--f-mono); flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 288px; scrollbar-width: thin; scrollbar-color: var(--slab-600) transparent; }
 .log-row { padding: 2px 6px; border-left: 3px solid transparent; color: var(--concrete-100); }
 .log-row:first-child { color: var(--bone); background: rgba(255, 255, 255, 0.04); }
 .lr-red { border-color: var(--granite-500); }
@@ -440,7 +447,7 @@ body.no-crt #crt { display: none; }
 .kr-who.who-red { background: var(--granite-600); }
 .kr-who.who-black { background: var(--slab-800); }
 .kr-card.fly-in { animation: flyIn 0.6s var(--bounce); }
-@keyframes flyIn { from { transform: translate(40vw, 30vh) rotate(40deg) scale(0.4); } }
+@keyframes flyIn { from { transform: translate(640px, 270px) rotate(40deg) scale(0.4); } }
 .kr-desc { min-height: 96px; text-align: center; max-width: 560px; }
 .stamp { animation: stamp 0.35s var(--bounce); }
 @keyframes stamp { from { transform: scale(2.4) rotate(-6deg); opacity: 0; } }
@@ -506,21 +513,6 @@ body.no-crt #crt { display: none; }
 .toast.out { opacity: 0; transform: translateY(-10px); }
 @keyframes toastIn { from { transform: translateY(-20px) scale(0.8); opacity: 0; } }
 
-/* ── адаптив ────────────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .game { grid-template-columns: 220px 1fr 230px; gap: 8px; padding: 8px; }
-  .mode-row { flex-direction: column; gap: 12px; }
-  .mode-tile { width: 290px; } /* при 260 px переносилась подпись «одно устройство · без рейтинга» */
-  .menu-bar { width: auto; gap: 12px; }
-  .menu-bar .btn { flex: none; }
-  .codex, .profile-grid { grid-template-columns: 1fr; }
-}
-@media (max-height: 780px) {
-  .menu-main { gap: 24px; inset: 70px 24px 18px; }
-  .logo-plate-slab { padding: 16px 24px; }
-  .mode-tile .tile-art { display: none; }
-}
-
 /* ── лобби сетевой игры (минимальное, до редизайна) ───────────────────────── */
 .lobby-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .lobby-card { display: flex; flex-direction: column; gap: 12px; align-items: stretch; min-width: 0; }
@@ -538,7 +530,6 @@ body.no-crt #crt { display: none; }
   background: var(--void); color: var(--amber-300); border: 3px solid var(--slab-600); padding: 8px 10px; outline: none;
 }
 .code-input:focus { border-color: var(--amber-500); }
-@media (max-width: 760px) { .lobby-grid { grid-template-columns: 1fr; } }
 .net-badge { font-family: var(--f-pix); font-size: 16px; }
 .net-badge.on { color: var(--amber-300); }
 .net-badge.off { color: var(--granite-400); }

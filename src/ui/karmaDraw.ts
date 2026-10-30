@@ -8,6 +8,7 @@ import { shake } from '../render/fx';
 import { animSpeed, wait } from '../render/tween';
 import type { CardEl } from './card';
 import { h } from './dom';
+import { localRect, STAGE_H, STAGE_W, stage, toStage } from './stage';
 
 /** Без лишнего движения — прежний показ карты (влёт сбоку и переворот). */
 export const calmMotion = () => (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false) || !getSettings().shake;
@@ -31,7 +32,7 @@ function burst(x: number, y: number, o: { n: number; colors: string[]; speed: nu
   for (let i = 0; i < o.n; i++) {
     const sz = o.size ? o.size[Math.floor(Math.random() * o.size.length)] : 4 + 4 * Math.floor(Math.random() * 2);
     const p = h('div', { class: 'kd-spark', style: `left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;background:${o.colors[i % o.colors.length]}` });
-    document.body.appendChild(p);
+    stage().appendChild(p);
     const a = (o.dir ?? 0) + (Math.random() - 0.5) * (o.spread ?? Math.PI * 2);
     const v = o.speed * (0.45 + Math.random() * 0.75);
     const life = (o.life ?? 650) * (0.7 + Math.random() * 0.5);
@@ -52,7 +53,7 @@ function burst(x: number, y: number, o: { n: number; colors: string[]; speed: nu
 /** Ударная волна ромбом: рамка расширяется ступеньками. */
 function ring(x: number, y: number, o: { size: number; color: string; dur?: number }) {
   const r = h('div', { class: 'kd-ring', style: `left:${x}px;top:${y}px;border-color:${o.color}` });
-  document.body.appendChild(r);
+  stage().appendChild(r);
   void play(
     r,
     [
@@ -105,13 +106,14 @@ const snd = {
 };
 
 // ── выход карты ───────────────────────────────────────────────────────────
-/** Карта вылетает из from (колода или рука) в оверлей и переворачивается лицом. host — обёртка .kr-card. */
-export async function entrance(host: HTMLElement, c: CardEl, card: CardId, from: DOMRect | null) {
+/** Карта вылетает из from (колода или рука; координаты окна) в оверлей и переворачивается лицом. host — обёртка .kr-card. */
+export async function entrance(host: HTMLElement, c: CardEl, card: CardId, fromClient: DOMRect | null) {
   const el = c.el;
-  const box = el.getBoundingClientRect();
+  const box = localRect(el);
+  const from = fromClient && toStage(fromClient);
   const mid = center(box);
   const colors = tierColors(card);
-  const src = from ? center(from) : { x: innerWidth + 120, y: innerHeight * 0.3 };
+  const src = from ? center(from) : { x: STAGE_W + 120, y: STAGE_H * 0.3 };
   const dx = src.x - mid.x, dy = src.y - mid.y;
   const s0 = from ? Math.max(0.18, from.width / box.width) : 0.4;
   snd.whoosh(0.42);
@@ -144,9 +146,9 @@ export async function entrance(host: HTMLElement, c: CardEl, card: CardId, from:
 // ── в руку ────────────────────────────────────────────────────────────────
 /** Вынимает карту из оверлея в отдельный слой поверх всего — оверлей можно убирать, карта остаётся на месте. */
 export function lift(c: CardEl) {
-  const r = c.el.getBoundingClientRect();
+  const r = localRect(c.el);
   const layer = h('div', { class: 'kd-fly', style: `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px` });
-  document.body.appendChild(layer);
+  stage().appendChild(layer);
   layer.appendChild(c.el);
   c.el.classList.remove('idle');
   return layer;
@@ -154,14 +156,14 @@ export function lift(c: CardEl) {
 
 /** Полёт поднятой карты в слот руки. target — уже отрисованная карта в панели игрока (её прячем до приземления). */
 export async function toHand(fly: HTMLElement, target: HTMLElement | null, card: CardId) {
-  const from = fly.getBoundingClientRect();
+  const from = localRect(fly);
   if (!target) {
     await play(fly, [{ opacity: 1 }, { opacity: 0, transform: 'scale(0.6)' }], 260);
     fly.remove();
     return;
   }
   target.style.visibility = 'hidden';
-  const to = target.getBoundingClientRect();
+  const to = localRect(target);
   const a = center(from), b = center(to);
   const dx = b.x - a.x, dy = b.y - a.y;
   const k = to.width / from.width;
@@ -190,14 +192,14 @@ function trail(fly: HTMLElement, from: DOMRect, anim: Animation, color: string) 
   const id = setInterval(() => {
     if (anim.playState !== 'running') return clearInterval(id);
     const g = h('div', { class: 'kd-ghost', style: `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;border-color:${color};transform:${getComputedStyle(fly).transform}` });
-    document.body.appendChild(g);
+    stage().appendChild(g);
     void play(g, [{ opacity: 0.8 }, { opacity: 0 }], 260, { easing: 'steps(4, end)' }).then(() => g.remove());
   }, ms(34));
 }
 
 /** Слот руки ловит карту: сплющивание, вспышка рамки, волна и искры. */
 function land(target: HTMLElement, colors: string[]) {
-  const r = target.getBoundingClientRect();
+  const r = localRect(target);
   const c = center(r);
   const slot = target.closest<HTMLElement>('.held');
   snd.catch_();
@@ -215,7 +217,7 @@ function land(target: HTMLElement, colors: string[]) {
 
 /** Карта, которая действует сразу (не в руку): рассыпается искрами и уходит. */
 export async function dissolve(fly: HTMLElement, card: CardId) {
-  const r = fly.getBoundingClientRect();
+  const r = localRect(fly);
   const c = center(r);
   const colors = tierColors(card);
   snd.dissolve();

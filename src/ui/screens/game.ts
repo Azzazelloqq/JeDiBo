@@ -20,6 +20,7 @@ import { Match } from '../../session/match';
 import { endNet, type NetSession } from '../../session/netSession';
 import { saveResume, type ChronicleEntry, type GameResume } from '../gameResume';
 import { open } from '../nav';
+import { localRect, pointToStage, stage } from '../stage';
 import { cardEl } from '../card';
 import { calmMotion, dissolve, entrance, lift, toHand } from '../karmaDraw';
 import { btn, h, toast } from '../dom';
@@ -117,26 +118,20 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   root.append(layout);
 
   const fit = () => {
-    const r = boardSlot.getBoundingClientRect();
+    const r = localRect(boardSlot);
     board.fit(r.width - 8, r.height - 8);
     centerSides(r);
   };
   /** боковые колонки — посередине пустого места между краем экрана и полем (а не прижаты к краю) */
-  const narrow = window.matchMedia('(max-width: 860px)');
   const centerSides = (slot: DOMRect) => {
-    if (narrow.matches) {
-      layout.style.removeProperty('--side-shift-l');
-      layout.style.removeProperty('--side-shift-r');
-      return;
-    }
     // край поля — по раскладке, без transform-анимации появления доски
     const half = board.el.offsetWidth / 2;
     const boardL = slot.left + slot.width / 2 - half;
     const boardR = slot.left + slot.width / 2 + half;
-    const lay = layout.getBoundingClientRect();
+    const lay = localRect(layout);
     const pad = parseFloat(getComputedStyle(layout).paddingLeft) || 0;
-    const l = leftCol.getBoundingClientRect();
-    const rr = right.getBoundingClientRect();
+    const l = localRect(leftCol);
+    const rr = localRect(right);
     const shiftL = Math.max(0, Math.round((boardL - (lay.left + pad) - l.width) / 2));
     const shiftR = Math.max(0, Math.round((lay.right - pad - boardR - rr.width) / 2));
     layout.style.setProperty('--side-shift-l', `${shiftL}px`);
@@ -475,7 +470,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
           break;
         case 'capture': {
           await board.playEvent(e);
-          const at = board.cellToClient(e.to);
+          const at = pointToStage(board.cellToClient(e.to));
           floatText(`−${GLYPH[e.victim.rank]}`, at.x, at.y, 'ft-brand');
           break;
         }
@@ -634,7 +629,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     renderBottom();
     // плашка «ходит» до перерисовки: если ход сменился, она перелетит к другой панели
     const oldBadge = layout.querySelector<HTMLElement>('.pl-turn');
-    const from = oldBadge?.getBoundingClientRect();
+    const from = oldBadge && localRect(oldBadge);
     const fromOwner = oldBadge?.closest('.player')?.getAttribute('data-player');
     // своя панель всегда слева, соперник — справа
     const mine = viewer();
@@ -662,11 +657,11 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
   function flyTurnBadge(from: DOMRect) {
     const to = layout.querySelector<HTMLElement>('.pl-turn');
     if (!to || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const r = to.getBoundingClientRect();
+    const r = localRect(to);
     const dx = Math.round(r.left - from.left);
     const dy = Math.round(r.top - from.top);
     const fly = h('div', { class: 'pl-turn turn-fly', style: `left:${from.left}px;top:${from.top}px` }, 'ходит');
-    document.body.appendChild(fly);
+    stage().appendChild(fly);
     badgeFlying = true;
     to.classList.add('landing');
     const tilt = dx > 0 ? 14 : -14;
@@ -975,7 +970,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       desc,
       btnHost,
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
     if (juicy) {
       // взятая карта вылетает из колоды, разыгранная — из руки
       const src = mode === 'drawn' ? layout.querySelector('.deck-stack') : layout.querySelector(`.player[data-player="${p}"] .held .kcard`);
@@ -1093,7 +1088,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ),
       ),
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
   }
 
   async function gravePicker() {
@@ -1131,7 +1126,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         ),
       ),
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
   }
 
   /** Подтверждение: кнопки подписаны действием («Сдаться» / «Играть дальше»), а не «Да» / «Нет». */
@@ -1148,7 +1143,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       { class: 'overlay in' },
       h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn(yesLabel, () => (close(), yes()), 'btn-brand'), btn(noLabel, close, 'btn-dark'))),
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -1188,7 +1183,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         h('div', { class: 'row' }, btn('К партии', close, 'btn-amber')),
       ),
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
   }
 
   function saveSnapshot(k: 'bot' | 'hotseat') {
@@ -1210,7 +1205,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         { class: 'overlay curtain in' },
         h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, sub), btn('Готов', () => (ov.remove(), res()), 'btn-amber btn-big')),
       );
-      document.body.appendChild(ov);
+      stage().appendChild(ov);
     });
   }
 
@@ -1280,7 +1275,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         h('div', { class: 'row' }, rematchBtn(), btn('В меню', () => (ov.remove(), endNet(true), open('menu')), 'btn-dark btn-big')),
       ),
     );
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
     // счётчик рейтинга «накручивается»
     const steps = Math.abs(delta);
     for (let i = 1; i <= steps; i++) {
@@ -1347,7 +1342,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       net!.role === 'guest'
         ? `Связь с хостом потеряна — переподключаемся… ${left} с`
         : `Соперник отключился${actorIsOpp || s.phase !== 'play' ? ` — ${left} с на возвращение` : ', ждём'}`;
-    if (!strip.isConnected) document.body.appendChild(strip);
+    if (!strip.isConnected) stage().appendChild(strip);
   }
 
   /** На экране итога соперник пропал — реванша не будет. */
@@ -1361,7 +1356,7 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     stopNetWatch();
     overlayOpen = true;
     const ov = h('div', { class: 'overlay in' }, h('div', { class: 'slab dialog' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row' }, btn('В меню', () => (ov.remove(), endNet(false), open('menu')), 'btn-dark'))));
-    document.body.appendChild(ov);
+    stage().appendChild(ov);
   }
 
   if (client && net) {

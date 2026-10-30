@@ -15,6 +15,7 @@ import './styles/karma-draw.css';
 import './styles/text.css';
 import { applySettings } from './ui/screens/settings';
 import { trackTextPixel } from './ui/textPixel';
+import { initStage } from './ui/stage';
 
 /** Favicon — пиксельный знак логотипа (модуль 2 px → 14×14, ×2 для чёткости). */
 function setFavicon() {
@@ -45,6 +46,7 @@ function applyTheme() {
 
 async function boot() {
   applyTheme();
+  initStage();
   setFavicon();
   startBackground(document.getElementById('bg') as HTMLCanvasElement);
   applySettings();

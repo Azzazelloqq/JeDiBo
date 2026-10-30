@@ -79,7 +79,7 @@ body .game .log[open] .log-head::after { transform: rotate(90deg); }
 body .game .log-count { flex: none; font-family: var(--f-pix); font-size: 16px; padding: 0 5px; border: 2px solid currentColor; opacity: 0.9; }
 body .game .log-last { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 body .game .log[open] .log-last { display: none; }
-body .game .log .log-list { margin-top: 8px; max-height: 34vh; }
+body .game .log .log-list { margin-top: 8px; max-height: 306px; }
 /* раскрытая Хроника занимает только остаток колонки (карта в руке соперника не выталкивает её за край), список прокручивается */
 body .game .side-right > .log[open] { flex: 0 1 auto; min-height: 120px; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; }
 body .game .side-right > .log[open]::details-content { display: contents; }
@@ -93,29 +93,6 @@ body .game .pl-turn.landing { visibility: hidden; }
 body .game .prompt-spawn { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body .game .spawn-rank { display: inline-flex; align-items: center; gap: 8px; padding: 2px 8px 2px 4px; background: var(--void); color: var(--amber-300); font-size: 20px; text-transform: uppercase; border: 2px solid var(--amber-500); }
 body .game .prompt-spawn .muted { font-size: 16px; }
-
-/* ── адаптив ────────────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  body .game { grid-template-columns: 230px minmax(0, 1fr) 210px; }
-  body .game .bb-main { min-width: 0; }
-  body .game .bb-actions { gap: 8px; }
-  body .game .bb-actions .btn-big { font-size: 18px; padding: 11px 14px 9px; }
-  body .game .bottombar { gap: 8px; }
-  body .game .bottombar .prompt { --prompt-h: 120px; font-size: 16px; padding: 8px 12px; }
-  body .game .topbar .tb-ap .h-label { display: none; }
-  body .game .topbar .pip { width: 13px; }
-}
-/* узко: правая колонка уходит под левую, поле — на всю высоту */
-@media (max-width: 860px) {
-  body .game { grid-template-columns: 230px minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); grid-template-areas: 'rail stage' 'aux stage'; }
-}
-@media (max-height: 800px) {
-  body .game .topbar { gap: 8px; padding: 10px 12px; }
-  body .game .rank-pick { padding: 8px 14px; }
-  body .game .rank-pick .rp-left { font-size: 32px; }
-  body .game .controls .btn { min-height: 54px; }
-  body .game .bb-actions .btn-big { font-size: 20px; padding: 11px 18px 9px; }
-}
 
 /* ── профили на расстановке (на месте панелей партии) ───────────────────── */
 body .game .seat-note { margin-top: 10px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.95; }

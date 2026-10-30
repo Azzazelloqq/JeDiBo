@@ -1,5 +1,6 @@
 // Мини-хелперы DOM без фреймворка.
 import { sfx } from '../audio/sfx';
+import { stage } from './stage';
 
 type Child = Node | string | null | undefined | false;
 type Props = Record<string, unknown> & { class?: string; style?: string };
@@ -46,7 +47,7 @@ export function toast(text: string, tone: 'stone' | 'brand' | 'amber' = 'stone')
   let host = document.querySelector('.toasts');
   if (!host) {
     host = h('div', { class: 'toasts' });
-    document.body.appendChild(host);
+    stage().appendChild(host);
   }
   const t = h('div', { class: `toast toast-${tone}` }, text);
   host.appendChild(t);

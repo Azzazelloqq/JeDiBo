@@ -1,4 +1,5 @@
 // «Сок»: тряска экрана, всплывающий текст, баннеры, поп чисел.
+import { stage } from '../ui/stage';
 import { onFrame, wait } from './tween';
 
 let trauma = 0;
@@ -26,13 +27,14 @@ onFrame((now) => {
   trauma *= 0.88;
 });
 
+/** x, y — в координатах сцены (ui/stage.ts). */
 export function floatText(text: string, x: number, y: number, cls = '') {
   const el = document.createElement('div');
   el.className = `float-text ${cls}`;
   el.textContent = text;
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
-  document.body.appendChild(el);
+  stage().appendChild(el);
   setTimeout(() => el.remove(), 1300);
 }
 
@@ -41,7 +43,7 @@ export async function banner(text: string, sub = '', tone: 'brand' | 'amber' | '
   const el = document.createElement('div');
   el.className = `banner banner-${tone}`;
   el.innerHTML = `<div class="banner-strip"><div class="banner-text">${text}</div>${sub ? `<div class="banner-sub">${sub}</div>` : ''}</div>`;
-  document.body.appendChild(el);
+  stage().appendChild(el);
   await wait(hold + 300);
   el.classList.add('out');
   await wait(320);

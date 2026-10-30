@@ -43,11 +43,6 @@
 .tut-karma-note { text-align: center; font-family: var(--f-pix); font-size: 20px; letter-spacing: 0.06em; }
 .tut-karma-note .muted { font-size: 14px; margin-top: 4px; }
 
-@media (max-width: 760px) {
-  .tut-hint { font-size: 16px; padding: 7px 10px 6px; }
-  .tut-cap-text { font-size: 24px; white-space: normal; }
-  .tut-cap { width: calc(100% - 40px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .tut-hint-mark, .btn.tut-pulse { animation: none; }
 }

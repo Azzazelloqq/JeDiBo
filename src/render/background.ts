@@ -1,6 +1,7 @@
 // Фон: закрученный «дым над бетоном» во фрагментном шейдере, рендер в низком разрешении.
 // Обе темы — один и тот же спокойный дым ступенями, отличаются только цвета (тёмная — зеркало светлой).
 import { THEME } from './palette';
+import { onStageScale, stageScale } from '../ui/stage';
 import { onFrame } from './tween';
 
 const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
@@ -184,11 +185,13 @@ export function startBackground(canvas: HTMLCanvasElement) {
   const cur = { a: hex(MOODS.menu.a), b: hex(MOODS.menu.b), c: hex(MOODS.menu.c), heat: MOODS.menu.heat, spin: MOODS.menu.spin };
   // размер «пикселя» фона — pix (5, у вихря «б» — 8)
   const resize = () => {
-    canvas.width = Math.ceil(window.innerWidth / pix);
-    canvas.height = Math.ceil(window.innerHeight / pix);
+    // фон на всё окно (и под полями сцены), а пиксель — в пикселях сцены (ui/stage.ts): масштабируется вместе с игрой
+    const px = pix * stageScale();
+    canvas.width = Math.ceil(canvas.clientWidth / px);
+    canvas.height = Math.ceil(canvas.clientHeight / px);
     gl.viewport(0, 0, canvas.width, canvas.height);
   };
-  window.addEventListener('resize', resize);
+  onStageScale(resize);
   onPixChange = resize;
   resize();
 
