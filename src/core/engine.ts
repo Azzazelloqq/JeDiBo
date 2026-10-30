@@ -3,8 +3,9 @@
 import { CARDS, fullDeck } from './karma/cards';
 import { RANK_NAME, checkPromotion, destroy, log, spawn, startPromotion, type Ctx } from './ops';
 import { randInt, shuffle } from './rng';
-import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells, victimCell } from './rules';
+import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, inBoard, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells, victimCell } from './rules';
 import { START_ARMY } from './modes';
+import { shrinkTick } from './shrink';
 import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type Pending, type PlayerId } from './types';
 
 export interface Result {
@@ -48,6 +49,7 @@ export function createGame(mode: ModeConfig, seed: number, names: [string, strin
     winner: null,
     endReason: null,
     draw: null,
+    ...(mode.shrink ? { shrink: { level: 0, warn: 0 } } : {}),
   };
   // цвета — случайно; колода матча — 21 случайная карта из 34
   const redFirst = randInt(s, 2);
@@ -115,7 +117,7 @@ function validate(s: GameState, a: Action): string | null {
     const cnt = [0, 0, 0];
     const seen = new Set<string>();
     for (const l of a.layout) {
-      if (!rows.includes(l.y) || l.x < 0 || l.x >= s.mode.size) return 'Фигура вне стартовой зоны';
+      if (!rows.includes(l.y) || !inBoard(s, l)) return 'Фигура вне стартовой зоны';
       if (seen.has(key(l))) return 'Две фигуры в одной клетке';
       seen.add(key(l));
       cnt[l.rank]++;
@@ -234,6 +236,9 @@ function endTurn(c: Ctx) {
 
   if (checkWin(c)) return;
   if (checkDraw(c)) return;
+  // сжатие поля — строго между ходами: после конца этого хода и до начала следующего (и его повышений)
+  shrinkTick(c);
+  if (checkWin(c)) return;
   startTurn(c, other(p));
 }
 

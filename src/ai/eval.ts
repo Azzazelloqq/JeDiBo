@@ -98,7 +98,8 @@ export function bestCapture(b: FastBoard, by: PlayerId, w: Weights): number {
  * Оценка с точки зрения `me`. toMove — чей ход следующий: от этого зависит, чья угроза реализуется первой.
  */
 export function evaluate(b: FastBoard, me: PlayerId, toMove: PlayerId, w: Weights): number {
-  const n = b.n;
+  // путь до последнего ряда — по живому полю: при сжатии край ближе
+  const span = b.hi - b.lo;
   let score = 0;
   const mat = [0, 0];
   let alive0 = 0;
@@ -110,8 +111,8 @@ export function evaluate(b: FastBoard, me: PlayerId, toMove: PlayerId, w: Weight
     let v = w.val[r];
     mat[p] += v;
     if (r !== Rank.Circle) {
-      const d = b.fwd[p] < 0 ? b.py[i] : n - 1 - b.py[i];
-      const progress = 1 - d / (n - 1);
+      const d = b.fwd[p] < 0 ? b.py[i] - b.lo : b.hi - b.py[i];
+      const progress = 1 - d / span;
       v += (w.val[r + 1] - w.val[r]) * w.advance * progress * progress;
     }
     if (p === 0) alive0++;

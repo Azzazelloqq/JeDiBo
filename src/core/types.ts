@@ -101,6 +101,35 @@ export interface ModeConfig {
   totalMs: number;
   /** время соперника на выбор по карте в чужой ход (целиком на весь выбор); часы ходящего в это время стоят */
   choiceMs: number;
+  /** сжатие поля; нет — поле не сжимается (обучение, партии, начатые до появления правила) */
+  shrink?: ShrinkConfig;
+}
+
+export interface ShrinkConfig {
+  /** сжатие начинается, когда на поле суммарно осталось столько фигур или меньше… */
+  total: number;
+  /** …или у одного из игроков осталось столько фигур или меньше */
+  perPlayer: number;
+  /** до какого размера сжимается поле; на нём все фигуры атакуют в любом направлении */
+  minSize: number;
+}
+
+/**
+ * Сжатие поля. Живое поле — квадрат [level, size − 1 − level] по обеим осям, снаружи — пропасть.
+ * Этап: предупреждение (warn = 2) → ход одного игрока (warn = 1) → ход другого → кольцо исчезает.
+ */
+export interface Shrink {
+  /** сколько внешних колец уже исчезло */
+  level: number;
+  /** ходов до исчезновения выделенного кольца; 0 — кольцо не выделено */
+  warn: number;
+}
+
+/** Фигура, которую сжатие сдвинуло к центру. */
+export interface ShrinkMove {
+  pieceId: number;
+  from: Pos;
+  to: Pos;
 }
 
 export interface GameState {
@@ -129,6 +158,8 @@ export interface GameState {
   winner: PlayerId | 'draw' | null;
   endReason: string | null;
   draw: { signature: string; turns: number } | null;
+  /** сжатие поля; нет — режим без сжатия */
+  shrink?: Shrink;
   /** режиссированная партия (обучение): заранее известные карты Кармы по игрокам и столбцы Линии смерти */
   rig?: Rig;
 }
@@ -171,6 +202,12 @@ export type GameEvent =
   | { type: 'barrier'; cells: Pos[] }
   | { type: 'effectEnd'; kind: Effect['kind']; owner: PlayerId }
   | { type: 'skipTurn'; player: PlayerId }
+  /** кольцо level выделено и исчезнет через turns ходов (2 — только что выделено, 1 — последний ход перед сжатием) */
+  | { type: 'shrinkWarn'; level: number; turns: number }
+  /** кольцо исчезло: level — новое число снятых колец, moves — фигуры, сдвинутые к центру */
+  | { type: 'shrink'; level: number; moves: ShrinkMove[] }
+  /** поле сжато до предела: дальше все фигуры атакуют в любом направлении */
+  | { type: 'shrinkFinal'; size: number }
   | { type: 'log'; text: string; player?: PlayerId }
   | { type: 'gameOver'; winner: PlayerId | 'draw'; reason: string };
 

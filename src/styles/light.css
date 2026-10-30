@@ -406,6 +406,7 @@ body.no-crt #crt { display: none; }
 .bottombar { justify-content: space-between; }
 .prompt { font-family: var(--f-pix); font-size: 18px; }
 .prompt-hot { color: var(--brand-700); animation: promptPulse 1.1s ease-in-out infinite; }
+.prompt-shrink { color: var(--brand-700); font-weight: 700; }
 @keyframes promptPulse { 50% { transform: translateX(4px); } }
 .bb-actions { display: flex; gap: 12px; }
 .presets { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -2,7 +2,7 @@
 // Чтобы добавить карту: id в CardId (types.ts), запись здесь, иконку в render/cardArt.ts.
 import { RANK_NAME_ACC, ask, askSpawn, cellOptions, checkPromotion, destroy, log, setRank, type Ctx } from '../ops';
 import { randInt } from '../rng';
-import { forward, inBoard, isFree, periodEnd, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
+import { bounds, forward, inBoard, isFree, periodEnd, pieceAt, piecesOf, sideOf, spawnCells, targetsOf } from '../rules';
 import { Rank, other, unkey, type CardId, type GameState, type Pending, type PlayerId, type Pos } from '../types';
 
 export type Timing = 'onReceive' | 'period';
@@ -314,7 +314,8 @@ const defs: CardDef[] = [
     text: 'Случайно выбирается столбец, в котором будут уничтожены все фигуры.',
     rule: 'Случайным образом выбирается столбец. Все фигуры в нём уничтожаются. Клетки Защитного барьера сохраняются. Занимает ход.',
     play(c) {
-      const x = c.s.rig?.columns.shift() ?? randInt(c.s, c.s.mode.size);
+      const { lo, hi } = bounds(c.s);
+      const x = c.s.rig?.columns.shift() ?? lo + randInt(c.s, hi - lo + 1);
       c.ev.push({ type: 'column', x });
       for (const pc of c.s.pieces.filter((q) => q.x === x)) destroy(c, pc, 'deathLine');
       return true;
@@ -542,8 +543,9 @@ function takeFromGrave(c: Ctx, pend: Pending, opt: string | null) {
 
 function barrierFirstCells(s: GameState): Pos[] {
   const out: Pos[] = [];
-  for (let y = 0; y < s.mode.size; y++)
-    for (let x = 0; x < s.mode.size; x++) {
+  const { lo, hi } = bounds(s);
+  for (let y = lo; y <= hi; y++)
+    for (let x = lo; x <= hi; x++) {
       const p = { x, y };
       if (isFree(s, p) && (isFree(s, { x: x - 1, y }) || isFree(s, { x: x + 1, y }))) out.push(p);
     }

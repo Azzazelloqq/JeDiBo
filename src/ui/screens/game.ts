@@ -456,6 +456,23 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
         case 'skipTurn':
           await Promise.all([banner('Пропуск хода', st.players[e.player].name, 'stone', 500), board.snooze(e.player)]);
           break;
+        case 'shrinkWarn': {
+          const n = st.mode.size - 2 * (e.level + 1);
+          await Promise.all([
+            board.playEvent(e),
+            e.turns >= 2
+              ? banner('Поле сжимается', `край исчезнет после хода каждого · останется ${n}×${n}`, 'brand', 1000)
+              : banner('Последний ход', 'перед сжатием поля', 'brand', 520),
+          ]);
+          break;
+        }
+        case 'shrink':
+          await board.playEvent(e);
+          refresh();
+          break;
+        case 'shrinkFinal':
+          await Promise.all([board.playEvent(e), banner(`Поле ${e.size}×${e.size}`, 'все фигуры бьют в любую сторону', 'amber', 1100)]);
+          break;
         case 'capture': {
           await board.playEvent(e);
           const at = board.cellToClient(e.to);
@@ -749,6 +766,10 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
     } else if (human) {
       prompt = selected !== null ? 'Выберите клетку: точка — ход, рамка — атака' : s.actedThisTurn ? 'Ещё действие или завершите ход' : 'Выберите фигуру';
     } else prompt = `${s.players[p].name} думает…`;
+    // сжатие: край выделен — когда он исчезнет
+    const warn = s.phase === 'play' && !s.pending && !tut ? (s.shrink?.warn ?? 0) : 0;
+    if (warn && typeof prompt === 'string')
+      prompt = h('span', {}, prompt, h('span', { class: 'prompt-shrink' }, warn === 1 ? ' · край поля исчезнет после этого хода' : ' · край поля исчезнет через 2 хода'));
     const canEnd = human && !s.pending && s.current === p && (s.actedThisTurn || !anyLegalAction(s)) && s.phase === 'play' && (!tut || !!tut.step?.endTurn);
     if (human && !s.pending && s.phase === 'play' && !tut) actions.push(btn('Отменить', () => ((selected = null), refreshBoard(), renderBottom()), 'btn-stone btn-big', { disabled: selected === null }));
     actions.push(btn('Завершить ход', () => match.submit({ type: 'endTurn', by: s.current }), `btn-amber btn-big bb-main ${tut && canEnd ? 'tut-pulse' : ''}`, { disabled: !canEnd }));

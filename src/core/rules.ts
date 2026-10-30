@@ -3,14 +3,36 @@ import { Rank, key, other, type Effect, type GameState, type Piece, type PlayerI
 
 export const forward = (side: Side) => (side === 0 ? -1 : 1);
 
-export const inBoard = (s: GameState, p: Pos) => p.x >= 0 && p.y >= 0 && p.x < s.mode.size && p.y < s.mode.size;
+/** Сколько внешних колец поля уже исчезло при сжатии. */
+export const ringOf = (s: GameState) => s.shrink?.level ?? 0;
 
-/** Ряды стартовой зоны (1-3 ряд со стороны игрока). */
-export function homeRows(s: GameState, side: Side): number[] {
-  const n = s.mode.size;
-  return side === 0 ? [n - 1, n - 2, n - 3] : [0, 1, 2];
+/** Живое поле: клетки с координатами lo…hi по обеим осям (при сжатии внешние кольца исчезают). */
+export function bounds(s: GameState): { lo: number; hi: number } {
+  const lo = ringOf(s);
+  return { lo, hi: s.mode.size - 1 - lo };
 }
-export const lastRow = (s: GameState, side: Side) => (side === 0 ? 0 : s.mode.size - 1);
+
+export const inBoard = (s: GameState, p: Pos) => {
+  const lo = ringOf(s);
+  const hi = s.mode.size - 1 - lo;
+  return p.x >= lo && p.y >= lo && p.x <= hi && p.y <= hi;
+};
+
+/** Ряды стартовой зоны: три крайних ряда живого поля со стороны игрока (при сжатии зона сдвигается вместе с краем). */
+export function homeRows(s: GameState, side: Side): number[] {
+  const { lo, hi } = bounds(s);
+  return side === 0 ? [hi, hi - 1, hi - 2] : [lo, lo + 1, lo + 2];
+}
+export const lastRow = (s: GameState, side: Side) => (side === 0 ? bounds(s).lo : bounds(s).hi);
+
+/** Можно ли ещё сжать поле: живое поле больше минимального. */
+export function canShrink(s: GameState): boolean {
+  const cfg = s.mode.shrink;
+  return !!cfg && !!s.shrink && s.mode.size - 2 * ringOf(s) > cfg.minSize;
+}
+
+/** Поле сжато до предела: все фигуры атакуют в любом направлении (дальность прежняя). */
+export const fullyShrunk = (s: GameState) => ringOf(s) > 0 && !canShrink(s);
 
 export const sideOf = (s: GameState, p: PlayerId) => s.players[p].side;
 export const pieceAt = (s: GameState, p: Pos) => s.pieces.find((q) => q.x === p.x && q.y === p.y);
@@ -61,6 +83,8 @@ export function patternOf(s: GameState, pc: Piece, opts: PatternOpts = {}): Patt
     default:
       pat = { move: ALL8, attack: ALL8, moveRange: 5, attackRange: 5 };
   }
+  // поле сжато до предела — атака во все стороны; это правило поля, а не Карма, поэтому и для plain
+  if (fullyShrunk(s)) pat.attack = ALL8;
   if (opts.plain) return pat;
   if (pc.rank !== Rank.Circle && hasEffect(s, 'roundProtection', pc.owner)) pat.attack = ALL8;
   if (pc.rank !== Rank.Triangle && (hasEffect(s, 'depression', pc.owner) || hasEffect(s, 'snail', pc.owner))) {
@@ -154,15 +178,16 @@ export function anyLegalAction(s: GameState): boolean {
  */
 export function spawnCells(s: GameState, owner: PlayerId): Pos[] {
   const side = sideOf(s, owner);
+  const { lo, hi } = bounds(s);
   const rowsFree = (rows: number[]) => {
     const out: Pos[] = [];
-    for (const y of rows) for (let x = 0; x < s.mode.size; x++) if (isFree(s, { x, y })) out.push({ x, y });
+    for (const y of rows) for (let x = lo; x <= hi; x++) if (isFree(s, { x, y })) out.push({ x, y });
     return out;
   };
   const cells = rowsFree(homeRows(s, side));
   if (cells.length) return cells;
-  for (let i = 3; i < s.mode.size; i++) {
-    const row = rowsFree([side === 0 ? s.mode.size - 1 - i : i]);
+  for (let i = 3; i <= hi - lo; i++) {
+    const row = rowsFree([side === 0 ? hi - i : lo + i]);
     if (row.length) return row;
   }
   return [];

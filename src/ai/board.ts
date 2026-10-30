@@ -2,6 +2,7 @@
 // но без аллокаций: клетки — Int16Array, фигуры — типизированные массивы, ход делается и откатывается на месте.
 // Повышение, карты и прочие «вопросы» движка здесь не моделируются: это решается на настоящем движке.
 // Совпадение с движком проверяет scripts/aicheck.ts.
+import { bounds, fullyShrunk } from '../core/rules';
 import { Rank, type GameState, type PlayerId } from '../core/types';
 
 /** Ход фигуры: клетка назначения + флаги. JUMP — прыжок Прыгуна: клетка приземления, жертва — посередине. */
@@ -10,6 +11,8 @@ export const JUMP = 1 << 13;
 export const CELL_MASK = ATTACK - 1;
 
 const BARRIER = -1;
+/** клетка исчезнувшего при сжатии кольца: непроходима, как край поля (снаружи — только такие же) */
+const WALL = -2;
 const reachCand = new Int16Array(128);
 const CAP = 128;
 
@@ -59,9 +62,15 @@ export class FastBoard {
   readonly blitz = new Uint8Array(2);
   readonly blitzPiece = new Int16Array(2);
   readonly blitzDone = new Uint8Array(2);
+  /** живое поле при сжатии: координаты lo…hi по обеим осям */
+  lo = 0;
+  hi = 0;
+  /** поле сжато до предела: все фигуры атакуют в любом направлении */
+  omni = 0;
 
   constructor(n: number) {
     this.n = n;
+    this.hi = n - 1;
     this.cell = new Int16Array(n * n);
   }
 
@@ -76,6 +85,11 @@ export class FastBoard {
     this.cell.fill(0);
     this.alive.fill(0);
     this.count = 0;
+    ({ lo: this.lo, hi: this.hi } = bounds(s));
+    this.omni = fullyShrunk(s) ? 1 : 0;
+    if (this.lo > 0)
+      for (let y = 0; y < n; y++)
+        for (let x = 0; x < n; x++) if (x < this.lo || y < this.lo || x > this.hi || y > this.hi) this.cell[y * n + x] = WALL;
     for (const pc of s.pieces) {
       const i = this.count++;
       this.px[i] = pc.x;
@@ -162,7 +176,7 @@ export class FastBoard {
     } else for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], moveRange, false, p, out, len);
 
     // атаки
-    if (r === Rank.Circle || this.roundProtection[p])
+    if (r === Rank.Circle || this.roundProtection[p] || this.omni)
       for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], attackRange, true, p, out, len);
     else {
       len = this.walk(x0, y0, 0, f, attackRange, true, p, out, len);
@@ -298,7 +312,7 @@ export class FastBoard {
     // дальше хода плюс удара фигура не дотянется
     const lim = arange + mrange;
     if (Math.abs(px - x) > lim || Math.abs(py - y) > lim) return false;
-    const allAttack = r === Rank.Circle || this.roundProtection[p] === 1;
+    const allAttack = r === Rank.Circle || this.roundProtection[p] === 1 || this.omni === 1;
     for (let d = 0; d < 8; d++) {
       const dx = DX[d];
       const dy = DY[d];
@@ -362,7 +376,7 @@ export class FastBoard {
     if (r !== Rank.Triangle && this.shortRange[p]) range = 1;
     if (dist > range) return false;
     if (r === Rank.Triangle && this.jumpLanding(i, x, y) >= 0) return true;
-    if (r !== Rank.Circle && !this.roundProtection[p]) {
+    if (r !== Rank.Circle && !this.roundProtection[p] && !this.omni) {
       const f = this.fwd[p];
       const forwardish = sy === f; // вперёд или по диагонали вперёд
       const sideways = r === Rank.Square && sy === 0;
@@ -384,8 +398,8 @@ export class FastBoard {
     const c = y * this.n + x;
     if (this.rank[i] !== Rank.Triangle) return c | ATTACK;
     const p = this.owner[i];
-    // прямой удар треугольника — вперёд или по диагонали вперёд (с Круговой защитой — во все стороны)
-    if (y - this.py[i] === this.fwd[p] || this.roundProtection[p]) return c | ATTACK;
+    // прямой удар треугольника — вперёд или по диагонали вперёд (с Круговой защитой и на поле 6×6 — во все стороны)
+    if (y - this.py[i] === this.fwd[p] || this.roundProtection[p] || this.omni) return c | ATTACK;
     const to = this.jumpLanding(i, x, y);
     return to >= 0 ? to | ATTACK | JUMP : c | ATTACK;
   }
@@ -453,7 +467,7 @@ export class FastBoard {
     this.cell[to] = i + 1;
     this.px[i] = to % n;
     this.py[i] = (to / n) | 0;
-    if (this.blitz[p] && this.py[i] === (this.fwd[p] < 0 ? 0 : n - 1)) this.blitzDone[p] = 1;
+    if (this.blitz[p] && this.py[i] === (this.fwd[p] < 0 ? this.lo : this.hi)) this.blitzDone[p] = 1;
   }
 
   unmake(u: Undo): void {

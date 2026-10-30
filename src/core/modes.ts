@@ -10,6 +10,7 @@ export const CLASSIC: ModeConfig = {
   turnMs: 5 * 60_000,
   totalMs: 60 * 60_000,
   choiceMs: 15_000,
+  shrink: { total: 10, perPlayer: 4, minSize: 6 },
 };
 
 export const START_ARMY = { triangles: 12, squares: 6, circles: 3 } as const;

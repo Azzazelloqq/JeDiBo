@@ -5,7 +5,7 @@ import { sfx } from '../audio/sfx';
 import { canAct, forward, homeRows, isBarrier } from '../core/rules';
 import { Rank, type CardId, type GameEvent, type GameState, type Piece, type PlayerId, type PlayerState, type Pos, type Side } from '../core/types';
 import { PAL, STONE } from './palette';
-import { makeCanvas, px, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
+import { makeCanvas, px, seeded, tinyText, tinyWidth, withAlpha, type Canvas } from './pixel';
 import { CELL, cellTile, pieceSprite } from './sprites';
 import { animSpeed, ease, onFrame, tween, wait } from './tween';
 import { shake } from './fx';
@@ -13,6 +13,27 @@ import { shake } from './fx';
 const M = 10; // поля под координаты
 const N = 12;
 export const BOARD_PX = N * CELL + M * 2;
+
+/** Трещина плиты при сжатии: ломаная от верхней кромки вниз с ответвлением. Детерминирована по клетке. */
+const crackCache = new Map<number, [number, number][]>();
+function crackOf(x: number, y: number): [number, number][] {
+  const k = y * N + x;
+  const hit = crackCache.get(k);
+  if (hit) return hit;
+  const rnd = seeded(k * 131 + 17);
+  const out: [number, number][] = [];
+  let cx = 4 + Math.floor(rnd() * 8);
+  const branchAt = 4 + Math.floor(rnd() * 5);
+  let bx = -1;
+  for (let cy = 0; cy < CELL; cy++) {
+    out.push([cx, cy]);
+    if (cy === branchAt) bx = cx;
+    if (bx >= 0 && cy > branchAt && cy < branchAt + 5) out.push([(bx += cx > 8 ? -1 : 1), cy]);
+    cx = Math.max(1, Math.min(CELL - 2, cx + Math.floor(rnd() * 3) - 1));
+  }
+  crackCache.set(k, out);
+  return out;
+}
 
 interface Vis {
   id: number;
@@ -86,6 +107,12 @@ export class BoardView {
   /** Линия смерти «прочёсывает» поле: pos — экранный столбец (дробный), lock — вспышки на выбранном столбце */
   private scan: { pos: number; lock: number } | null = null;
   private barrierDrop = new Map<string, number>();
+  /** Сжатие поля, каким его видит зритель: сколько колец исчезло и какое кольцо выделено. Как seats — меняется
+   *  в своей анимации, а не из живого `s`: иначе край исчез бы раньше, чем доиграются ходы из той же пачки событий. */
+  private ring = 0;
+  private warnRing: { level: number; turns: number; reveal: number } | null = null;
+  /** кольцо, которое сейчас проваливается: jolt — дрожь плит, fall — провал каждой плиты 0..1 */
+  private crumbling: { level: number; jolt: number; fall: Map<string, number> } | null = null;
   private layers: Layer[] = [];
   /** Карта, чьи события сейчас проигрываются: от неё зависит «почерк» появления, смерти, смены ранга.
    *  game.ts ставит её на розыгрыш карты и на ответы на её вопросы. */
@@ -224,6 +251,10 @@ export class BoardView {
   sync(s: GameState) {
     this.s = s;
     this.seats = s.players.map((p) => ({ color: p.color, side: p.side }));
+    this.ring = s.shrink?.level ?? 0;
+    const w = s.shrink?.warn ?? 0;
+    this.warnRing = w > 0 ? { level: this.ring, turns: w, reveal: this.warnRing?.reveal ?? 1 } : null;
+    this.crumbling = null;
     const alive = new Set<number>();
     for (const pc of s.pieces) {
       alive.add(pc.id);
@@ -472,9 +503,309 @@ export class BoardView {
         });
         return;
       }
+      case 'shrinkWarn':
+        return this.warnShrink(e.level, e.turns);
+      case 'shrink':
+        return this.collapse(e.level - 1, e.moves);
+      case 'shrinkFinal':
+        return this.shrinkFinale();
       default:
         return;
     }
+  }
+
+  // ── сжатие поля ─────────────────────────────────────────────────────────
+  /** Номер кольца клетки: 0 — внешний край, 5 — центр (поле симметрично, при повороте номер тот же). */
+  private ringIndex(x: number, y: number) {
+    return Math.min(x, y, N - 1 - x, N - 1 - y);
+  }
+
+  /** Клетки кольца по часовой стрелке от левого верхнего угла экрана (экранные координаты). */
+  private ringCells(level: number): Pos[] {
+    const a = level;
+    const b = N - 1 - level;
+    const out: Pos[] = [];
+    for (let x = a; x < b; x++) out.push({ x, y: a });
+    for (let y = a; y < b; y++) out.push({ x: b, y });
+    for (let x = b; x > a; x--) out.push({ x, y: b });
+    for (let y = b; y > a; y--) out.push({ x: a, y });
+    return out;
+  }
+
+  /** Левый-верхний и правый-нижний (не включая) пиксели квадрата колец level…центр. */
+  private ringBox(level: number): [number, number] {
+    return [M + level * CELL, M + (N - level) * CELL];
+  }
+
+  /** Край выделяется: полоса опасности обегает кольцо; на последнем ходу перед сжатием — частая тревога. */
+  private async warnShrink(level: number, turns: number) {
+    if (turns >= 2 || !this.warnRing) {
+      this.warnRing = { level, turns, reveal: 0 };
+      sfx.shrinkWarn();
+      shake(2);
+      const cells = this.ringCells(level);
+      let shown = 0;
+      await tween(700, (t) => {
+        if (!this.warnRing) return;
+        this.warnRing.reveal = t;
+        const n = Math.floor(t * cells.length);
+        for (; shown < n; shown++) if (shown % 3 === 0) this.sparkleScreen(cells[shown], PAL.brand500, 2);
+      });
+      if (this.warnRing) this.warnRing.reveal = 1;
+      return;
+    }
+    this.warnRing.turns = turns;
+    sfx.shrinkLast();
+    shake(3);
+    const [a, b] = this.ringBox(level);
+    await this.layer(560, (t) => {
+      // по кольцу пробегает яркая рамка — «последний ход»
+      const k = Math.floor(t * 7) % 2 === 0 ? PAL.amber100 : PAL.brand500;
+      this.rectRing(a - 1, a - 1, b + 1, b + 1, withAlpha(k, 1 - t * 0.5));
+      this.rectRing(a + CELL, a + CELL, b - CELL, b - CELL, withAlpha(k, 0.9 - t * 0.5));
+    });
+  }
+
+  /** Кольцо исчезает: плиты дрожат, фигуры спрыгивают к центру, плиты волной проваливаются в пропасть. */
+  private async collapse(level: number, moves: { pieceId: number; to: Pos }[]) {
+    this.warnRing = null;
+    const cells = this.ringCells(level);
+    const fall = new Map<string, number>();
+    const cr = { level, jolt: 1, fall };
+    this.crumbling = cr;
+    sfx.rumble();
+    shake(4);
+    // 1. дрожь: плиты «ходят», из щелей сыплется пыль
+    await tween(480, (t) => {
+      cr.jolt = 1 - t * 0.4;
+      if (Math.random() < 0.6) this.dustScreen(cells[Math.floor(Math.random() * cells.length)], 2);
+    });
+    // 2. фигуры с края спрыгивают на клетку к центру — пока плиты под ними ещё держатся
+    await Promise.all(
+      moves.map(async (m, i) => {
+        const v = this.vis.get(m.pieceId);
+        if (!v) return;
+        await wait(i * 45);
+        await this.hop(v, m.to, 0.9);
+      }),
+    );
+    // 3. провал: волна по кругу от левого верхнего угла, каждая плита уходит вниз за 280 мс
+    this.ring = level + 1;
+    cr.jolt = 0.4;
+    sfx.collapse();
+    const wave = 760;
+    const drop = 280;
+    const started = new Set<number>();
+    await tween(wave + drop, (t) => {
+      const ms = t * (wave + drop);
+      cells.forEach((c, i) => {
+        const f = Math.max(0, Math.min(1, (ms - (i / cells.length) * wave) / drop));
+        fall.set(`${c.x},${c.y}`, f);
+        if (f > 0 && !started.has(i)) {
+          started.add(i);
+          this.chips(c);
+          if (i % 5 === 0) sfx.tileDrop();
+        }
+      });
+    });
+    this.crumbling = null;
+    shake(7);
+    sfx.thud();
+    // по новому краю пробегает пыльная волна
+    const [a, b] = this.ringBox(level + 1);
+    await this.layer(380, (t) => {
+      const r = Math.round(t * 5);
+      this.rectRing(a - r, a - r, b + r, b + r, withAlpha(PAL.concrete100, 0.7 * (1 - t)));
+    });
+  }
+
+  /** Поле сжато до предела: фигуры вспыхивают, от центра расходятся волны — теперь все бьют во все стороны. */
+  private async shrinkFinale() {
+    sfx.shrinkFinal();
+    for (const v of this.vis.values()) {
+      v.flash = 1;
+      this.sparkle(v.x, v.y, PAL.amber300, 5);
+    }
+    shake(5);
+    const c = M + (N * CELL) / 2;
+    const lim = ((N - 2 * this.ring) * CELL) / 2;
+    await this.layer(950, (t) => {
+      for (const d of [0, 0.22, 0.44]) {
+        const k = (t - d) / 0.56;
+        if (k <= 0 || k >= 1) continue;
+        const r = Math.round(4 + k * lim);
+        this.rectRing(c - r, c - r, c + r, c + r, withAlpha(k < 0.5 ? PAL.amber100 : PAL.amber300, 1 - k));
+      }
+    });
+  }
+
+  /** Обломки проваливающейся плиты: подпрыгивают и сыплются вниз. */
+  private chips(c: Pos) {
+    const cols = [PAL.concrete300, PAL.concrete400, PAL.concrete500, PAL.slab600];
+    for (let i = 0; i < 3; i++)
+      this.parts.push({
+        x: M + c.x * CELL + 3 + Math.random() * 10,
+        y: M + c.y * CELL + 4 + Math.random() * 8,
+        z: 1,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: 0.15 + Math.random() * 0.25,
+        vz: 0.6 + Math.random() * 0.8,
+        life: 0,
+        max: 280 + Math.random() * 200,
+        color: cols[Math.floor(Math.random() * cols.length)],
+        size: Math.random() < 0.3 ? 2 : 1,
+        ground: true,
+      });
+  }
+
+  /** Пыль из щели между плитами (клетка — экранная). */
+  private dustScreen(c: Pos, n: number) {
+    for (let i = 0; i < n; i++)
+      this.parts.push({
+        x: M + c.x * CELL + Math.random() * CELL,
+        y: M + c.y * CELL + CELL - 2,
+        z: 0,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -0.1,
+        vz: 0.2 + Math.random() * 0.4,
+        life: 0,
+        max: 350 + Math.random() * 250,
+        color: Math.random() < 0.5 ? PAL.concrete100 : PAL.concrete300,
+        size: 1,
+        ground: false,
+      });
+  }
+
+  private sparkleScreen(c: Pos, color: string, n: number) {
+    for (let i = 0; i < n; i++)
+      this.parts.push({
+        x: M + c.x * CELL + 2 + Math.random() * 12,
+        y: M + c.y * CELL + 2 + Math.random() * 12,
+        z: 0,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.3 - Math.random() * 0.5,
+        vz: 0,
+        life: 0,
+        max: 400 + Math.random() * 300,
+        color,
+        size: 1,
+        ground: false,
+      });
+  }
+
+  /** Пропасть за краем, проваливающиеся плиты и выделенное кольцо. Рисуется сразу после подложки, под всем. */
+  private drawShrink(now: number) {
+    const g = this.g;
+    const cr = this.crumbling;
+    const dead = this.ring;
+    if (dead > 0 || cr) {
+      for (let y = 0; y < N; y++)
+        for (let x = 0; x < N; x++) {
+          const r = this.ringIndex(x, y);
+          if (r < dead || (cr && r === cr.level)) this.drawPit(x, y);
+        }
+      // обрыв: у живого поля видна южная грань плит, на пропасть справа падает тень (свет слева-сверху)
+      const [a, b] = this.ringBox(cr ? cr.level + 1 : dead);
+      g.fillStyle = PAL.concrete500;
+      g.fillRect(a, b, b - a, 1);
+      g.fillStyle = PAL.concrete600;
+      g.fillRect(a, b + 1, b - a, 1);
+      g.fillStyle = PAL.slab700;
+      g.fillRect(a + 1, b + 2, b - a, 1);
+      g.fillStyle = withAlpha(PAL.void, 0.6);
+      g.fillRect(b, a + 2, 2, b - a);
+      // предел сжатия: янтарная кромка «удар во все стороны» тлеет вокруг поля до конца партии
+      const min = this.s?.mode.shrink?.minSize;
+      if (!cr && min && N - 2 * dead <= min) {
+        const glow = (Math.sin(now / 420) + 1) / 2;
+        this.rectRing(a - 2, a - 2, b + 2, b + 2, withAlpha(PAL.amber300, 0.35 + glow * 0.45));
+        this.rectRing(a - 3, a - 3, b + 3, b + 3, withAlpha(PAL.amber500, 0.15 + glow * 0.2));
+      }
+    }
+    if (cr) {
+      for (const c of this.ringCells(cr.level)) {
+        const f = cr.fall.get(`${c.x},${c.y}`) ?? 0;
+        if (f >= 1) continue;
+        const x = M + c.x * CELL;
+        const y = M + c.y * CELL;
+        const jx = Math.random() < cr.jolt * 0.5 ? (Math.random() < 0.5 ? -1 : 1) : 0;
+        const d = Math.round(f * f * CELL);
+        g.save();
+        g.beginPath();
+        g.rect(x, y, CELL, CELL);
+        g.clip();
+        // плита уходит вниз в свою дыру и темнеет; плиты подложки — в клетках движка
+        const tx = this.flipped ? N - 1 - c.x : c.x;
+        const ty = this.flipped ? N - 1 - c.y : c.y;
+        g.drawImage(cellTile(tx, ty), x + jx, y + d);
+        // рваная трещина (своя у каждой плиты) и красный отсвет, пока плита дрожит
+        g.fillStyle = PAL.slab700;
+        for (const [cx, cy] of crackOf(c.x, c.y)) g.fillRect(x + jx + cx, y + d + cy, 1, 1);
+        if (f === 0) {
+          g.fillStyle = withAlpha(PAL.brand500, 0.12 + 0.2 * cr.jolt * Math.random());
+          g.fillRect(x, y, CELL, CELL);
+        }
+        g.fillStyle = withAlpha(PAL.void, Math.min(0.85, f * 1.2));
+        g.fillRect(x, y, CELL, CELL);
+        g.restore();
+      }
+    }
+    const w = this.warnRing;
+    if (w && !cr) {
+      const fast = w.turns <= 1;
+      const pulse = (Math.sin(now / (fast ? 85 : 210)) + 1) / 2;
+      const cells = this.ringCells(w.level);
+      const shown = Math.ceil(w.reveal * cells.length);
+      const off = Math.floor(now / (fast ? 45 : 90)) % 8;
+      for (let i = 0; i < shown; i++) {
+        const c = cells[i];
+        const x = M + c.x * CELL;
+        const y = M + c.y * CELL;
+        g.fillStyle = withAlpha(PAL.brand500, (fast ? 0.2 : 0.12) + pulse * (fast ? 0.26 : 0.14));
+        g.fillRect(x, y, CELL, CELL);
+        // бегущие диагональные полосы — «опасная зона»
+        g.fillStyle = withAlpha(PAL.amber500, fast ? 0.34 : 0.22);
+        for (let r = 0; r < CELL; r++) for (let k = (r + off) % 8; k < CELL; k += 8) g.fillRect(x + k, y + r, Math.min(3, CELL - k), 1);
+        // внешняя кромка: жёлто-чёрная лента
+        const top = c.y === w.level;
+        const bottom = c.y === N - 1 - w.level;
+        const left = c.x === w.level;
+        const right = c.x === N - 1 - w.level;
+        for (let k = 0; k < CELL; k++) {
+          g.fillStyle = Math.floor((k + off) / 2) % 2 === 0 ? PAL.amber300 : PAL.void;
+          if (top) g.fillRect(x + k, y, 1, 2);
+          if (bottom) g.fillRect(x + k, y + CELL - 2, 1, 2);
+          if (left) g.fillRect(x, y + k, 2, 1);
+          if (right) g.fillRect(x + CELL - 2, y + k, 2, 1);
+        }
+      }
+      // будущий край поля — бегущий пунктир
+      if (w.reveal >= 1) {
+        const [a, b0] = this.ringBox(w.level + 1);
+        const b = b0 - 1;
+        g.fillStyle = withAlpha(fast && pulse > 0.5 ? PAL.amber100 : PAL.brand500, 0.95);
+        for (let k = a; k <= b; k++) {
+          if (Math.floor((k + off) / 3) % 2) continue;
+          g.fillRect(k, a, 1, 1);
+          g.fillRect(k, b, 1, 1);
+          g.fillRect(a, k, 1, 1);
+          g.fillRect(b, k, 1, 1);
+        }
+      }
+    }
+  }
+
+  /** Клетка пропасти (экранная): чёрная яма с редкими камушками на дне. */
+  private drawPit(x: number, y: number) {
+    const g = this.g;
+    const x0 = M + x * CELL;
+    const y0 = M + y * CELL;
+    g.fillStyle = PAL.void;
+    g.fillRect(x0, y0, CELL, CELL);
+    const h = (x * 73 + y * 151) % 97;
+    g.fillStyle = PAL.slab900;
+    g.fillRect(x0 + (h % 13) + 1, y0 + ((h * 7) % 13) + 1, 2, 1);
+    g.fillRect(x0 + ((h * 3) % 11) + 2, y0 + ((h * 5) % 11) + 3, 1, 1);
   }
 
   private async hop(v: Vis, to: Pos, k: number) {
@@ -1362,6 +1693,7 @@ export class BoardView {
     g.drawImage(this.base(this.flipped), 0, 0);
     if (!s) return;
     const pulse = (Math.sin(now / 180) + 1) / 2;
+    this.drawShrink(now);
 
     // зона расстановки
     if (this.ov.zone) {
@@ -1376,7 +1708,7 @@ export class BoardView {
     // последний ход
     for (const c of this.ov.lastMove) this.fillCell(c, withAlpha(PAL.amber300, 0.22));
     // ховер
-    if (this.hover && this.ov.hoverEnabled) this.fillCell(this.hover, 'rgba(255,255,255,0.16)');
+    if (this.hover && this.ov.hoverEnabled && this.ringIndex(this.hover.x, this.hover.y) >= this.ring) this.fillCell(this.hover, 'rgba(255,255,255,0.16)');
 
     // барьеры
     for (const e of s.effects)

@@ -11,13 +11,13 @@ import { ALL_CARDS, CARDS, fullDeck } from '../src/core/karma/cards';
 import { CLASSIC } from '../src/core/modes';
 import { PRESETS } from '../src/core/presets';
 import { tutorialEnemy, tutorialState, tutorialStep } from '../src/core/tutorial';
-import { heldExpiresThisTurn, homeRows, isAttacked, legalTargets, piecesOf, targetsOf } from '../src/core/rules';
-import { Rank, type Action, type GameState, type Piece, type PlayerId } from '../src/core/types';
+import { heldExpiresThisTurn, homeRows, inBoard, isAttacked, legalTargets, piecesOf, targetsOf } from '../src/core/rules';
+import { Rank, type Action, type GameEvent, type GameState, type Piece, type PlayerId } from '../src/core/types';
 import { botAction as greedy } from './greedy';
 import prepCapture from './fixtures/prep-capture.json';
 import tradeBlunders from './fixtures/trade-blunders.json';
 import { checkBoard, collectPositions, lcg } from './lib/boardcheck';
-import { fuzz } from './lib/fuzz';
+import { fuzz, invariantErrors } from './lib/fuzz';
 import { stateHash } from '../src/net/hash';
 
 // ── мини-раннер ─────────────────────────────────────────────────────────────
@@ -63,9 +63,10 @@ const REF: Weights = { ...DEFAULT_WEIGHTS, val: [1, 3, 5], xray: true };
 const cellName = (c: number) => `${'ABCDEFGHIJKL'[c % 12]}${12 - Math.floor(c / 12)}`;
 const at = (name: string) => ({ x: name.charCodeAt(0) - 65, y: 12 - Number(name.slice(1)) });
 
-/** Позиция в начале хода `current` из списка фигур [владелец, ранг, клетка «E5»]. Колода пуста. */
-function position(pieces: [PlayerId, Rank, string][], current: PlayerId): GameState {
-  const s = createGame(CLASSIC, 1, ['A', 'B']);
+/** Позиция в начале хода `current` из списка фигур [владелец, ранг, клетка «E5»]. Колода пуста.
+ *  shrink: false — поле не сжимается (долгие тесты других правил, где фигур мало с самого начала). */
+function position(pieces: [PlayerId, Rank, string][], current: PlayerId, opts: { shrink?: boolean } = {}): GameState {
+  const s = createGame(opts.shrink === false ? { ...CLASSIC, shrink: undefined } : CLASSIC, 1, ['A', 'B']);
   s.phase = 'play';
   s.players.forEach((p) => (p.placed = true));
   s.players[current].ownTurns = 1;
@@ -625,7 +626,7 @@ test('очки действий: перемещение — 1 очко, фигу
 });
 
 test('Карма: карта — в начале 7-го, 14-го… собственного хода, первым — у ходившего первым; колода кончилась — карт нет', () => {
-  const s = position([[0, Rank.Circle, 'A1'], [1, Rank.Square, 'K12']], 0);
+  const s = position([[0, Rank.Circle, 'A1'], [1, Rank.Square, 'K12']], 0, { shrink: false });
   s.deck = ['snail', 'snail', 'snail'];
   const drawn: string[] = [];
   let own = 0;
@@ -638,7 +639,7 @@ test('Карма: карта — в начале 7-го, 14-го… собств
 });
 
 test('Карма: Депрессия действует до конца Периода (ходы 7–13), Тихоход — только в ход получения', () => {
-  const s = position([[0, Rank.Circle, 'A1'], [1, Rank.Square, 'K12']], 0);
+  const s = position([[0, Rank.Circle, 'A1'], [1, Rank.Square, 'K12']], 0, { shrink: false });
   for (let i = 0; i < 2 * 15; i++) {
     const p = s.current;
     const own = s.players[p].ownTurns;
@@ -654,7 +655,7 @@ test('Карма: Депрессия действует до конца Пери
 
 test('ничья: 1×1 одного ранга или 2×2 одного набора — через три Периода без изменений; иначе игра идёт', () => {
   const run = (pieces: [PlayerId, Rank, string][], rounds: number) => {
-    const s = position(pieces, 0);
+    const s = position(pieces, 0, { shrink: false });
     for (let i = 0; i < 2 * rounds && s.phase === 'play'; i++) shuttle(s);
     return s;
   };
@@ -990,6 +991,176 @@ test('обучение: сценарий проходится от первог�
   }
   assert(s.winner === 0, `итог: ${s.winner} (${s.endReason})`);
   assert(steps.join(' ') === 'step end revenge circle stuck karma avenge finish', `такты: ${steps.join(' ')}`);
+});
+
+// ── сжатие поля ─────────────────────────────────────────────────────────────
+
+/** Ход «для галочки»: первая фигура с тихим ходом шагает (нет тихих — любым ходом), ход завершается. */
+function pass(s: GameState) {
+  const p = s.current;
+  const ev: GameEvent[] = [];
+  const all = piecesOf(s, p).flatMap((pc) => legalTargets(s, pc).map((t) => ({ pc, t })));
+  const m = all.find((x) => !x.t.attack) ?? all[0];
+  if (m) {
+    const r = dispatch(s, { type: 'move', by: p, pieceId: m.pc.id, to: m.t.to });
+    assert(r.ok, `игрок ${p}: ход отклонён: ${r.error}`);
+    ev.push(...r.events);
+  }
+  while (s.phase === 'play' && s.pending) {
+    const r = dispatch(s, { type: 'choose', by: s.pending.chooser, option: s.pending.options[0] });
+    assert(r.ok, `выбор отклонён: ${r.error}`);
+    ev.push(...r.events);
+  }
+  if (s.phase === 'play' && s.current === p) {
+    const r = dispatch(s, { type: 'endTurn', by: p });
+    assert(r.ok, `игрок ${p}: завершение хода отклонено: ${r.error}`);
+    ev.push(...r.events);
+  }
+  return ev;
+}
+const shrinkTypes = (ev: GameEvent[]) =>
+  ev.map((e) => e.type).filter((x) => x === 'shrinkWarn' || x === 'shrink' || x === 'shrinkFinal' || x === 'turnStart');
+
+test('сжатие: фигур мало — край выделяется, оба игрока ходят по разу, затем край исчезает; повторяется до 6×6', () => {
+  // 5 фигур на поле ≤ 10: предупреждение — сразу после первого хода
+  const s = position([[0, Rank.Circle, 'A1'], [0, Rank.Circle, 'F12'], [0, Rank.Circle, 'F6'], [1, Rank.Square, 'L6'], [1, Rank.Circle, 'H8']], 0);
+  const e1 = pass(s);
+  assert(shrinkTypes(e1).join() === 'shrinkWarn,turnStart', `после 1-го хода: ${shrinkTypes(e1)}`);
+  assert(s.shrink?.warn === 2 && s.shrink.level === 0, `предупреждение: ${JSON.stringify(s.shrink)}`);
+  const e2 = pass(s);
+  assert(shrinkTypes(e2).join() === 'shrinkWarn,turnStart' && s.shrink.warn === 1, `после 2-го хода: ${shrinkTypes(e2)} ${JSON.stringify(s.shrink)}`);
+  assert(inBoard(s, { x: 0, y: 0 }), 'край исчез раньше, чем походили оба игрока');
+  const e3 = pass(s);
+  // строгий порядок: край исчезает, сразу выделяется следующий — и только потом начинается ход
+  assert(shrinkTypes(e3).join() === 'shrink,shrinkWarn,turnStart', `после 3-го хода: ${shrinkTypes(e3)}`);
+  assert(s.shrink.level === 1 && s.shrink.warn === 2, `после сжатия: ${JSON.stringify(s.shrink)}`);
+  assert(!inBoard(s, { x: 0, y: 0 }) && !inBoard(s, { x: 11, y: 5 }) && inBoard(s, { x: 1, y: 1 }), 'границы поля не сдвинулись');
+  // угол — по диагонали, верхний ряд — вниз, правый столбец (квадрат успел шагнуть на L5) — влево; никто не погиб
+  const names = piecesNamed(s, 0).concat(piecesNamed(s, 1)).join(' ');
+  assert(names.includes('CB2') && names.includes('CF11') && names.includes('SK5'), `сдвиг к центру: ${names}`);
+  assert(s.pieces.length === 5 && s.players.every((p) => p.graveyard.length === 0), 'сжатие не уничтожает фигуры');
+  const shrink = e3.find((e) => e.type === 'shrink');
+  assert(shrink?.type === 'shrink' && shrink.moves.length === 3, `событие сжатия: ${JSON.stringify(shrink)}`);
+
+  // дальше — по той же схеме: 10×10 → 8×8 → 6×6, и всё
+  const seen: string[] = [];
+  for (let i = 0; i < 12 && s.phase === 'play'; i++) seen.push(...shrinkTypes(pass(s)).filter((x) => x !== 'turnStart'));
+  assert(seen.join() === 'shrinkWarn,shrink,shrinkWarn,shrinkWarn,shrink,shrinkFinal', `этапы: ${seen}`);
+  assert(s.shrink.level === 3 && s.shrink.warn === 0, `итог: ${JSON.stringify(s.shrink)}`);
+  for (const pc of s.pieces) assert(inBoard(s, pc), `фигура ${pc.id} вне поля 6×6`);
+  assert(invariantErrors(s).length === 0, invariantErrors(s).join('; '));
+});
+
+test('сжатие начинается, когда на поле не больше 10 фигур или у одного игрока не больше 4', () => {
+  const starts = (pieces: [PlayerId, Rank, string][]) => {
+    const s = position(pieces, 0);
+    pass(s);
+    return s.shrink?.warn === 2;
+  };
+  const circles = (owner: PlayerId, cells: string[]) => cells.map((c): [PlayerId, Rank, string] => [owner, Rank.Circle, c]);
+  const own = (n: number) => circles(0, ['A2', 'B2', 'C2', 'D2', 'E2', 'F2'].slice(0, n));
+  const foe = (n: number) => circles(1, ['A11', 'B11', 'C11', 'D11', 'E11', 'F11'].slice(0, n));
+  assert(!starts([...fillRows(0, [1, 2]), ...fillRows(1, [11, 12])]), 'сжатие началось при полном поле');
+  // суммарно: 11 — рано, 10 — пора (у обоих больше 4)
+  assert(!starts([...own(6), ...foe(5)]), '11 фигур на поле (6 и 5) — сжатие началось слишком рано');
+  assert(starts([...own(5), ...foe(5)]), '10 фигур на поле — сжатие должно начаться');
+  // у одного игрока: 5 — рано, 4 — пора, даже если всего фигур много
+  assert(!starts([...fillRows(0, [1, 2]), ...foe(5)]), 'у соперника 5 фигур — сжатие началось слишком рано');
+  assert(starts([...fillRows(0, [1, 2]), ...foe(4)]), 'у соперника 4 фигуры — сжатие должно начаться');
+});
+
+test('сжатие: клетка к центру занята — ближайшая свободная; из угла и с краёв в одну клетку — на разные клетки', () => {
+  const s = position([[0, Rank.Circle, 'A1'], [0, Rank.Circle, 'A2'], [0, Rank.Circle, 'B1'], [0, Rank.Circle, 'A6'], [1, Rank.Square, 'B6'], [1, Rank.Circle, 'G7']], 1);
+  s.shrink = { level: 0, warn: 1 };
+  pass(s);
+  assert(s.shrink.level === 1, 'сжатие не произошло');
+  assert(invariantErrors(s).length === 0, invariantErrors(s).join('; '));
+  assert(s.pieces.length === 6, `фигур ${s.pieces.length}: сжатие не уничтожает`);
+  for (const pc of s.pieces) assert(inBoard(s, pc), `фигура ${pc.id} осталась на исчезнувшей клетке`);
+  const corner = s.pieces.filter((q) => q.owner === 0 && q.x <= 2 && q.y >= 9);
+  assert(corner.length === 3, `фигуры из угла разлетелись: ${piecesNamed(s, 0)}`);
+});
+
+test('сжатие: сначала исчезает край, затем отложенное повышение; зона расстановки сдвигается вместе с краем', () => {
+  // треугольник дошёл до E12 под атакой квадрата H12 — повысится в начале своего хода; край исчезает в конце хода соперника
+  const s = position([[0, Rank.Triangle, 'E12'], [0, Rank.Triangle, 'C11'], [0, Rank.Circle, 'F6'], [1, Rank.Square, 'H12'], [1, Rank.Circle, 'J5']], 1);
+  s.pieces.find((q) => q.x === 4 && q.y === 0)!.promoteNextTurn = true;
+  s.shrink = { level: 0, warn: 1 };
+  // соперник ходит кругом — квадрат H12 остаётся на месте
+  const circle = s.pieces.find((q) => q.owner === 1 && q.rank === Rank.Circle)!;
+  assert(dispatch(s, { type: 'move', by: 1, pieceId: circle.id, to: { x: 9, y: 8 } }).ok, 'ход соперника отклонён');
+  const r = dispatch(s, { type: 'endTurn', by: 1 });
+  assert(r.ok, 'конец хода соперника отклонён');
+  const order = r.events.map((e) => e.type);
+  assert(order.indexOf('shrink') >= 0 && order.indexOf('shrink') < order.indexOf('turnStart'), `порядок: ${order}`);
+  assert(s.current === 0 && s.pending?.source === 'promotion', `ожидалось повышение после сжатия, вопрос: ${s.pending?.source}`);
+  const tri = s.pieces.find((q) => q.id === s.pending!.data.promoteId);
+  assert(tri && tri.y === 1, `повышается фигура, сдвинутая на новый край: ${JSON.stringify(tri)}`);
+  const home = homeRows(s, s.players[0].side);
+  assert(home.join() === '10,9,8', `стартовая зона после сжатия: ${home}`);
+  for (const o of s.pending.options) {
+    const [x, y] = o.split(',').map(Number);
+    assert(home.includes(y) && x >= 1 && x <= 10, `клетка повышения ${o} вне новой стартовой зоны`);
+  }
+  // C11: край «подошёл» сам — тоже повысится (вопрос — следом в очереди)
+  assert(dispatch(s, { type: 'choose', by: 0, option: s.pending.options[0] }).ok, 'выбор клетки отклонён');
+  assert(s.pending?.source === 'promotion', 'фигура, оказавшаяся на новом краю, тоже должна повыситься');
+});
+
+test('сжатие: барьер на исчезнувшем крае пропадает; поле 6×6 — все фигуры бьют в любую сторону, дальность прежняя', () => {
+  const s = position([[0, Rank.Circle, 'F6'], [1, Rank.Circle, 'H8']], 0);
+  s.effects.push({ kind: 'barrier', owner: 0, untilOwnTurn: 99, cells: [{ x: 0, y: 5 }, { x: 1, y: 5 }] });
+  s.shrink = { level: 0, warn: 1 };
+  pass(s);
+  const bar = s.effects.find((e) => e.kind === 'barrier');
+  assert(bar?.kind === 'barrier' && bar.cells.length === 1 && bar.cells[0].x === 1, `барьер: ${JSON.stringify(bar)}`);
+
+  // треугольник 0 бьёт назад (вниз) и вбок только на 6×6; квадрат — назад
+  const fin = position([[0, Rank.Triangle, 'F6'], [1, Rank.Triangle, 'F5'], [1, Rank.Triangle, 'G6'], [0, Rank.Square, 'E8'], [1, Rank.Triangle, 'E5']], 0);
+  const tri = fin.pieces[0];
+  const sq = fin.pieces[3];
+  const hits = (pc: Piece) => targetsOf(fin, pc).filter((t) => t.attack).map((t) => cellName(t.to.y * 12 + t.to.x)).sort().join();
+  assert(hits(tri) === '', `до сжатия треугольник бьёт назад/вбок: ${hits(tri)}`);
+  fin.shrink = { level: 3, warn: 0 };
+  assert(hits(tri) === 'E5,F5,G6', `на 6×6 треугольник бьёт: ${hits(tri)}`);
+  assert(hits(sq) === 'E5,G6', `на 6×6 квадрат бьёт: ${hits(sq)}`);
+  assert(Math.max(...legalTargets(fin, tri).filter((t) => !t.attack).map((t) => Math.abs(t.to.y - tri.y))) <= 1, 'ход треугольника не должен вырасти');
+  const { fails } = checkBoard([fin, s], lcg(5), 1);
+  assert(fails.length === 0, `быстрая доска бота на сжатом поле: ${fails[0]}`);
+});
+
+test('сжатие: боты доигрывают партии со сжатием, быстрая доска совпадает с движком на сжатом поле', () => {
+  const shrunk: GameState[] = [];
+  let reached = 0;
+  for (let g = 0; g < 6; g++) {
+    const seed = 4000 + g * 17;
+    const { s } = playGame([botOf('novice', seed), botOf('novice', seed + 1)], seed, {
+      after: (st) => {
+        if ((st.shrink?.level ?? 0) > 0 && st.phase === 'play' && !st.pending && shrunk.length < 400 && st.turn % 3 === 0) shrunk.push(clone(st));
+      },
+    });
+    assert(s.phase === 'over', `seed ${seed}: партия не закончилась`);
+    if ((s.shrink?.level ?? 0) > 0) reached++;
+  }
+  assert(reached >= 3, `сжатие случилось только в ${reached} партиях из 6`);
+  assert(shrunk.length >= 30, `мало позиций на сжатом поле: ${shrunk.length}`);
+  const { fails } = checkBoard(shrunk, lcg(11), 0.5);
+  assert(fails.length === 0, `расхождений ${fails.length}, первое: ${fails[0]}`);
+  // Прыгун у обоих: прыжок не приземляется в пропасть, на 6×6 треугольник бьёт и прыгает во все стороны
+  const jumpy = shrunk.map((st) => {
+    const c = clone(st);
+    for (const p of [0, 1] as PlayerId[]) c.effects.push({ kind: 'jumper', owner: p, untilOwnTurn: c.players[p].ownTurns + 3 });
+    return c;
+  });
+  const j = checkBoard(jumpy, lcg(12), 0.5);
+  assert(j.fails.length === 0, `с Прыгуном расхождений ${j.fails.length}, первое: ${j.fails[0]}`);
+  for (const st of jumpy)
+    for (const pc of st.pieces) for (const t of targetsOf(st, pc)) assert(inBoard(st, t.to), `цель ${JSON.stringify(t)} вне сжатого поля`);
+});
+
+test('обучение: поле не сжимается', () => {
+  const s = tutorialState(['Ты', 'Бот']);
+  assert(!s.shrink, 'в обучении у игрока 3 фигуры — сжатие сломало бы сценарий');
 });
 
 // ── запуск ──────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { createGame, dispatch } from '../../src/core/engine';
 import { CARDS } from '../../src/core/karma/cards';
 import { CLASSIC } from '../../src/core/modes';
 import { PRESETS } from '../../src/core/presets';
-import { anyLegalAction, choosingOpponent, isBarrier, legalTargets, piecesOf, sideOf } from '../../src/core/rules';
+import { anyLegalAction, choosingOpponent, inBoard, isBarrier, legalTargets, piecesOf, sideOf } from '../../src/core/rules';
 import { key, type Action, type GameState, type ModeConfig, type PlayerId } from '../../src/core/types';
 import { lcg } from './boardcheck';
 
@@ -42,7 +42,7 @@ export function invariantErrors(s: GameState): string[] {
   const ids = new Set<number>();
   for (const pc of s.pieces) {
     const k = key(pc);
-    if (pc.x < 0 || pc.y < 0 || pc.x >= s.mode.size || pc.y >= s.mode.size) errs.push(`фигура ${pc.id} вне поля (${k})`);
+    if (!inBoard(s, pc)) errs.push(`фигура ${pc.id} вне поля (${k})`);
     if (cells.has(k)) errs.push(`две фигуры на клетке ${k}`);
     if (ids.has(pc.id)) errs.push(`повтор id ${pc.id}`);
     if (isBarrier(s, pc)) errs.push(`фигура ${pc.id} на клетке барьера ${k}`);

@@ -8,7 +8,8 @@ import { Rank, key, type Action, type GameState, type ModeConfig, type PlayerId,
 
 /** Карма приходит на 5-м своём ходу у обоих. Партию «начал» соперник (у него на ход больше), поэтому его карта
  *  раньше: Линия смерти на ходу 8, Карьерный лифт игрока — на ходу 9. Как в настоящей партии, где первый ход случаен. */
-export const TUTORIAL_MODE: ModeConfig = { ...CLASSIC, id: 'tutorial', karmaEvery: 5, matchDeckSize: 2 };
+/** Поле не сжимается: у игрока с самого начала 3 фигуры, и сжатие сломало бы сценарий. */
+export const TUTORIAL_MODE: ModeConfig = { ...CLASSIC, id: 'tutorial', karmaEvery: 5, matchDeckSize: 2, shrink: undefined };
 
 const P = (x: number, y: number): Pos => ({ x, y });
 

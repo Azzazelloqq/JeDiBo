@@ -186,6 +186,49 @@ export const sfx = {
     tone(70, 0.14, 'sine', 0.4, -20);
     tone(62, 0.16, 'sine', 0.3, -20, 0.17);
   },
+  // ── сжатие поля ──
+  /** край выделен: двухтоновая сирена поверх низкого гула */
+  shrinkWarn: () => {
+    for (let i = 0; i < 3; i++) {
+      voice({ f: 660, to: 520, dur: 0.22, gain: 0.07, type: 'square', delay: i * 0.3 });
+      voice({ f: 440, to: 350, dur: 0.22, gain: 0.07, type: 'square', delay: i * 0.3 + 0.15 });
+    }
+    voice({ f: 55, to: 45, dur: 1.1, gain: 0.3, attack: 0.2 });
+    hiss({ dur: 1, gain: 0.25, f: 120, to: 70, q: 0.8, attack: 0.3 });
+  },
+  /** последний ход перед сжатием: частые писки и «тук-тук» */
+  shrinkLast: () => {
+    for (let i = 0; i < 4; i++) voice({ f: 990, dur: 0.07, gain: 0.07, type: 'square', delay: i * 0.11 });
+    voice({ f: 70, to: 50, dur: 0.14, gain: 0.4, delay: 0.5 });
+    voice({ f: 62, to: 45, dur: 0.16, gain: 0.3, delay: 0.67 });
+  },
+  /** плиты края дрожат: нарастающий подземный гул */
+  rumble: () => {
+    hiss({ dur: 1.4, gain: 0.55, f: 90, to: 60, q: 0.6, attack: 0.35 });
+    voice({ f: 42, to: 34, dur: 1.4, gain: 0.35, attack: 0.3, vib: [9, 0.08] });
+    for (let i = 0; i < 6; i++) noise(0.05, 0.18, 700 + i * 200, 2, 0.1 + i * 0.07);
+  },
+  /** край обрушивается: долгий шорох камня и падение тона в пропасть */
+  collapse: () => {
+    hiss({ dur: 1.2, gain: 0.5, f: 500, to: 120, q: 0.7, attack: 0.05 });
+    voice({ f: 120, to: 30, dur: 1.1, gain: 0.3, type: 'triangle' });
+  },
+  /** одна плита сорвалась */
+  tileDrop: () => {
+    noise(0.12, 0.35, 260 + Math.random() * 300, 1.2);
+    voice({ f: 180 + Math.random() * 60, to: 60, dur: 0.18, gain: 0.12, type: 'triangle' });
+  },
+  /** обломки легли на дно */
+  thud: () => {
+    noise(0.4, 0.9, 110, 0.7);
+    voice({ f: 60, to: 32, dur: 0.45, gain: 0.55 });
+  },
+  /** поле 6×6: аккорд «все бьют во все стороны» */
+  shrinkFinal: () => {
+    [262, 330, 392, 523].forEach((f, i) => voice({ f, dur: 0.9, gain: 0.05, type: 'sawtooth', attack: 0.02, delay: i * 0.05 }));
+    voice({ f: 65, to: 98, dur: 0.6, gain: 0.35, attack: 0.02 });
+    [1046, 1318, 1568].forEach((f, i) => tone(f, 0.25, 'square', 0.05, 0, 0.35 + i * 0.08));
+  },
   /** новая эмблема Летописи: удар чекана по камню и звонкий перелив */
   emblem: () => {
     noise(0.12, 0.6, 220, 0.8);
