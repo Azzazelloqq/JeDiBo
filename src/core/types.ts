@@ -156,8 +156,8 @@ export type GameEvent =
   | { type: 'placed'; player: PlayerId }
   | { type: 'start' }
   | { type: 'turnStart'; player: PlayerId; ownTurn: number }
-  | { type: 'move'; pieceId: number; from: Pos; to: Pos; jump?: boolean; forced?: boolean }
-  | { type: 'capture'; attackerId: number; victim: Piece; from: Pos; to: Pos }
+  | { type: 'move'; pieceId: number; from: Pos; to: Pos; forced?: boolean }
+  | { type: 'capture'; attackerId: number; victim: Piece; from: Pos; to: Pos; jump?: boolean }
   | { type: 'destroy'; victim: Piece; cause: string }
   | { type: 'spawn'; piece: Piece }
   | { type: 'rankChange'; pieceId: number; from: Rank; to: Rank }

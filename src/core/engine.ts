@@ -3,7 +3,7 @@
 import { CARDS, fullDeck } from './karma/cards';
 import { RANK_NAME, checkPromotion, destroy, log, spawn, startPromotion, type Ctx } from './ops';
 import { randInt, shuffle } from './rng';
-import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells } from './rules';
+import { anyLegalAction, canAct, choosingOpponent, hasEffect, homeRows, lastRow, legalTargets, pieceAt, piecesOf, sideOf, spawnCells, victimCell } from './rules';
 import { START_ARMY } from './modes';
 import { Rank, key, other, unkey, type Action, type GameEvent, type GameState, type ModeConfig, type Pending, type PlayerId } from './types';
 
@@ -335,23 +335,23 @@ function doMove(c: Ctx, id: number, to: { x: number; y: number }) {
   }
   if (t.jump) {
     s.effects = s.effects.filter((e) => !(e.kind === 'jumper' && e.owner === pc.owner));
-    log(c, 'Прыгун: прыжок через препятствие', pc.owner);
+    log(c, 'Прыгун: треугольник перепрыгнул фигуру соперника', pc.owner);
   }
 
   pc.acted = true;
   s.actedThisTurn = true;
   if (t.attack) {
-    const victim = pieceAt(s, to)!;
+    const victim = pieceAt(s, victimCell(from, t))!;
     destroy(c, victim, 'attack');
     c.ev.pop(); // заменяем generic destroy на capture
-    c.ev.push({ type: 'capture', attackerId: pc.id, victim: { ...victim }, from, to });
+    c.ev.push({ type: 'capture', attackerId: pc.id, victim: { ...victim }, from, to, jump: t.jump });
     pc.x = to.x;
     pc.y = to.y;
     s.ap = 0;
   } else {
     pc.x = to.x;
     pc.y = to.y;
-    c.ev.push({ type: 'move', pieceId: pc.id, from, to, jump: t.jump });
+    c.ev.push({ type: 'move', pieceId: pc.id, from, to });
     s.ap -= 1;
   }
   if (blitz && pc.y === lastRow(s, sideOf(s, pc.owner))) blitz.done = true;

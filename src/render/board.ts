@@ -265,7 +265,7 @@ export class BoardView {
         if (!v) return;
         if (e.forced && this.cardCtx === 'retreat') await this.retreat(v, e.to);
         else if (e.forced && this.cardCtx === 'betrayal') await this.puppet(v, e.to);
-        else await this.hop(v, e.to, e.forced ? 0.7 : 1, e.jump);
+        else await this.hop(v, e.to, e.forced ? 0.7 : 1);
         this.ov.lastMove = [e.from, e.to];
         return;
       }
@@ -273,6 +273,11 @@ export class BoardView {
         const a = this.vis.get(e.attackerId);
         const victim = this.vis.get(e.victim.id) ?? this.newVis(e.victim);
         this.vis.set(victim.id, victim);
+        if (a && e.jump) {
+          await this.vault(a, victim, e.victim, e.to);
+          this.ov.lastMove = [e.from, e.to];
+          return;
+        }
         if (a) {
           // замах назад и рывок
           const dx = Math.sign(e.to.x - e.from.x) * 0.15;
@@ -472,10 +477,10 @@ export class BoardView {
     }
   }
 
-  private async hop(v: Vis, to: Pos, k: number, jump?: boolean) {
+  private async hop(v: Vis, to: Pos, k: number) {
     const fx = v.x, fy = v.y;
     const dist = Math.max(Math.abs(to.x - fx), Math.abs(to.y - fy));
-    const h = (jump ? 14 : 4 + dist * 1.6) * k;
+    const h = (4 + dist * 1.6) * k;
     sfx.click();
     // Блицкриг: фигура-исполнитель оставляет за собой шлейф отражений
     const blitz = this.s?.effects.some((q) => q.kind === 'blitz' && !q.done && q.owner === v.owner && (q.pieceId === null || q.pieceId === v.id));
@@ -514,6 +519,83 @@ export class BoardView {
     if (blitz) this.sparkle(to.x, to.y, PAL.amber300, 6);
     await this.squash(v);
     stopTrail?.();
+  }
+
+  /**
+   * Прыгун: треугольник сжимается пружиной, высоко перелетает соседнюю фигуру соперника, в верхней точке
+   * вбивает её в пол ударом сверху и приземляется на клетку за ней. За ним тянется дуга отражений.
+   */
+  private async vault(a: Vis, victim: Vis, pc: Piece, to: Pos) {
+    const fx = a.x, fy = a.y;
+    const H = 26;
+    ksfx.vaultCoil();
+    // пружина сжимается; жертва замечает угрозу и вздрагивает
+    await tween(150, (t) => {
+      const k = ease.outCubic(t);
+      a.sy = 1 - 0.34 * k;
+      a.sx = 1 + 0.22 * k;
+      victim.sx = 1 + 0.06 * Math.sin(t * Math.PI * 6);
+    });
+    victim.sx = 1;
+    ksfx.vaultLaunch();
+    this.dust(fx, fy, 8);
+    const sprite = pieceSprite(a.rank, this.seat(a.owner)?.color ?? 'red', this.s ? this.faceUp(a.owner, this.s) : true);
+    const trail: { x: number; y: number; z: number }[] = [];
+    const stopTrail = this.persist(() => {
+      trail.forEach((q, i) => {
+        this.g.globalAlpha = 0.07 * (i + 1);
+        this.g.drawImage(sprite, Math.round(this.X(q.x)), Math.round(this.Y(q.y) - q.z + 1));
+      });
+      this.g.globalAlpha = 1;
+    });
+    let struck = false;
+    await tween(480, (t) => {
+      // по горизонтали — равномерно: над жертвой фигура ровно в середине пути, в верхней точке дуги
+      a.x = fx + (to.x - fx) * t;
+      a.y = fy + (to.y - fy) * t;
+      a.z = Math.sin(Math.PI * t) * H;
+      a.sy = 1 + 0.22 * Math.sin(Math.PI * t);
+      a.sx = 1 - 0.12 * Math.sin(Math.PI * t);
+      trail.push({ x: a.x, y: a.y, z: a.z });
+      if (trail.length > 6) trail.shift();
+      if (struck) return;
+      if (t < 0.5) {
+        // под тенью прыгуна жертва вжимается в пол
+        victim.sy = 1 - 0.24 * t;
+        victim.sx = 1 + 0.12 * t;
+        return;
+      }
+      struck = true;
+      this.stomp(victim.x, victim.y, a.z);
+      this.smash(victim, pc, 22);
+      ksfx.vaultStrike();
+      shake(8);
+    });
+    a.x = to.x;
+    a.y = to.y;
+    a.z = 0;
+    stopTrail();
+    ksfx.vaultLand();
+    this.dust(to.x, to.y, 10);
+    shake(3);
+    await this.squash(a);
+    await wait(100);
+  }
+
+  /** Удар сверху: вертикальная вспышка от прыгуна к клетке жертвы и расходящееся по полу кольцо. */
+  private stomp(cx: number, cy: number, z: number) {
+    void this.layer(260, (t) => {
+      const x = this.X(cx) + 8;
+      const top = this.Y(cy) + 8 - z;
+      const bottom = this.Y(cy) + 12;
+      const fade = 1 - t;
+      this.line(x, top, x, bottom, withAlpha(PAL.amber100, fade), 2);
+      this.line(x - 3, top + 4, x - 1, bottom - 2, withAlpha(PAL.amber300, 0.7 * fade));
+      this.line(x + 4, top + 4, x + 2, bottom - 2, withAlpha(PAL.amber300, 0.7 * fade));
+      const r = Math.round(2 + t * 9);
+      const x0 = this.X(cx), y0 = this.Y(cy);
+      this.rectRing(x0 - r, y0 - r, x0 + CELL + r, y0 + CELL + r, withAlpha(PAL.brand500, 0.85 * fade));
+    });
   }
 
   private squash(v: Vis) {
@@ -1005,7 +1087,7 @@ export class BoardView {
       case 'roundProtection':
         return this.castShield(mine.filter((v) => v.rank !== Rank.Circle));
       case 'jumper':
-        return this.castJumper(slowed);
+        return this.castJumper(mine.filter((v) => v.rank === Rank.Triangle));
       case 'freshBlood':
         // на поле ещё ничего не происходит — только тихий сигнал, что карта начала действовать
         return ksfx.bloodCue();
@@ -1130,7 +1212,7 @@ export class BoardView {
     for (const v of guards) v.flash = 0.7;
   }
 
-  /** Прыгун: фигуры игрока (кроме Треугольников) волной подпрыгивают, как на пружинах. */
+  /** Прыгун: Треугольники игрока волной подпрыгивают, как на пружинах. */
   private async castJumper(jumpers: Vis[]) {
     const order = [...jumpers].sort((a, b) => a.x - b.x || a.y - b.y);
     ksfx.boings(order.length);

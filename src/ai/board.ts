@@ -4,7 +4,7 @@
 // Совпадение с движком проверяет scripts/aicheck.ts.
 import { Rank, type GameState, type PlayerId } from '../core/types';
 
-/** Ход фигуры: клетка назначения + флаги. */
+/** Ход фигуры: клетка назначения + флаги. JUMP — прыжок Прыгуна: клетка приземления, жертва — посередине. */
 export const ATTACK = 1 << 12;
 export const JUMP = 1 << 13;
 export const CELL_MASK = ATTACK - 1;
@@ -22,6 +22,8 @@ export interface Undo {
   from: number;
   to: number;
   victim: number;
+  /** клетка жертвы (при прыжке — не клетка назначения) */
+  vcell: number;
   ap: number;
   acted: number;
   jumper: number;
@@ -145,39 +147,46 @@ export class FastBoard {
     else if (r === Rank.Square) moveRange = attackRange = 3;
     else moveRange = attackRange = 5;
     if (r !== Rank.Triangle && this.shortRange[p]) moveRange = attackRange = 1;
-    const canJump = r !== Rank.Triangle && this.jumper[p] === 1;
     const x0 = this.px[i];
     const y0 = this.py[i];
     let len = at;
 
     // перемещения
-    if (r === Rank.Triangle) len = this.walk(x0, y0, 0, f, moveRange, false, canJump, p, out, len);
+    if (r === Rank.Triangle) len = this.walk(x0, y0, 0, f, moveRange, false, p, out, len);
     else if (r === Rank.Square) {
-      len = this.walk(x0, y0, 0, f, moveRange, false, canJump, p, out, len);
-      len = this.walk(x0, y0, -1, f, moveRange, false, canJump, p, out, len);
-      len = this.walk(x0, y0, 1, f, moveRange, false, canJump, p, out, len);
-      len = this.walk(x0, y0, -1, 0, moveRange, false, canJump, p, out, len);
-      len = this.walk(x0, y0, 1, 0, moveRange, false, canJump, p, out, len);
-    } else for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], moveRange, false, canJump, p, out, len);
+      len = this.walk(x0, y0, 0, f, moveRange, false, p, out, len);
+      len = this.walk(x0, y0, -1, f, moveRange, false, p, out, len);
+      len = this.walk(x0, y0, 1, f, moveRange, false, p, out, len);
+      len = this.walk(x0, y0, -1, 0, moveRange, false, p, out, len);
+      len = this.walk(x0, y0, 1, 0, moveRange, false, p, out, len);
+    } else for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], moveRange, false, p, out, len);
 
     // атаки
     if (r === Rank.Circle || this.roundProtection[p])
-      for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], attackRange, true, canJump, p, out, len);
+      for (let d = 0; d < 8; d++) len = this.walk(x0, y0, DX[d], DY[d], attackRange, true, p, out, len);
     else {
-      len = this.walk(x0, y0, 0, f, attackRange, true, canJump, p, out, len);
-      len = this.walk(x0, y0, -1, f, attackRange, true, canJump, p, out, len);
-      len = this.walk(x0, y0, 1, f, attackRange, true, canJump, p, out, len);
+      len = this.walk(x0, y0, 0, f, attackRange, true, p, out, len);
+      len = this.walk(x0, y0, -1, f, attackRange, true, p, out, len);
+      len = this.walk(x0, y0, 1, f, attackRange, true, p, out, len);
       if (r === Rank.Square) {
-        len = this.walk(x0, y0, -1, 0, attackRange, true, canJump, p, out, len);
-        len = this.walk(x0, y0, 1, 0, attackRange, true, canJump, p, out, len);
+        len = this.walk(x0, y0, -1, 0, attackRange, true, p, out, len);
+        len = this.walk(x0, y0, 1, 0, attackRange, true, p, out, len);
       }
     }
+
+    // Прыгун: треугольник перепрыгивает соседнюю фигуру соперника на свободную клетку за ней
+    if (r === Rank.Triangle && this.jumper[p])
+      for (let d = 0; d < 8; d++) {
+        const x = x0 + DX[d];
+        const y = y0 + DY[d];
+        const to = this.jumpLanding(i, x, y);
+        if (to >= 0 && this.cell[y * this.n + x] > 0) out[len++] = to | ATTACK | JUMP;
+      }
     return len;
   }
 
-  private walk(x0: number, y0: number, dx: number, dy: number, range: number, attack: boolean, canJump: boolean, p: number, out: Int32Array, len: number): number {
+  private walk(x0: number, y0: number, dx: number, dy: number, range: number, attack: boolean, p: number, out: Int32Array, len: number): number {
     const n = this.n;
-    let jumped = 0;
     let x = x0;
     let y = y0;
     for (let step = 1; step <= range; step++) {
@@ -187,17 +196,32 @@ export class FastBoard {
       const c = y * n + x;
       const v = this.cell[c];
       if (v === 0) {
-        if (!attack) out[len++] = c | jumped;
+        if (!attack) out[len++] = c;
         continue;
       }
-      if (attack && v > 0 && this.owner[v - 1] !== p) out[len++] = c | ATTACK | jumped;
-      if (canJump && !jumped) {
-        jumped = JUMP;
-        continue;
-      }
+      if (attack && v > 0 && this.owner[v - 1] !== p) out[len++] = c | ATTACK;
       break;
     }
     return len;
+  }
+
+  /**
+   * Прыжок Прыгуна: клетка приземления, если треугольник i может перепрыгнуть соседнюю клетку (x, y), иначе -1.
+   * Занята ли (x, y) соперником, не проверяется: размен считает удар по клетке, куда фигура соперника встанет.
+   */
+  jumpLanding(i: number, x: number, y: number): number {
+    const p = this.owner[i];
+    if (this.rank[i] !== Rank.Triangle || !this.jumper[p]) return -1;
+    const dx = x - this.px[i];
+    const dy = y - this.py[i];
+    if (dx < -1 || dx > 1 || dy < -1 || dy > 1 || (dx === 0 && dy === 0)) return -1;
+    const n = this.n;
+    const v = this.cell[y * n + x];
+    if (v < 0 || (v > 0 && this.owner[v - 1] === p)) return -1;
+    const lx = x + dx;
+    const ly = y + dy;
+    if (lx < 0 || ly < 0 || lx >= n || ly >= n || this.cell[ly * n + lx] !== 0) return -1;
+    return ly * n + lx;
   }
 
   /** Все ходы текущего игрока: пары (фигура, цель) в pieces/out. Возвращает число ходов. */
@@ -337,26 +361,33 @@ export class FastBoard {
     let range = r === Rank.Triangle ? 1 : r === Rank.Square ? 3 : 5;
     if (r !== Rank.Triangle && this.shortRange[p]) range = 1;
     if (dist > range) return false;
+    if (r === Rank.Triangle && this.jumpLanding(i, x, y) >= 0) return true;
     if (r !== Rank.Circle && !this.roundProtection[p]) {
       const f = this.fwd[p];
       const forwardish = sy === f; // вперёд или по диагонали вперёд
       const sideways = r === Rank.Square && sy === 0;
       if (!forwardish && !sideways) return false;
     }
-    // путь: все клетки до цели свободны (или одно препятствие при Прыгуне)
-    let jumps = r !== Rank.Triangle && this.jumper[p] ? 1 : 0;
+    // путь: все клетки до цели свободны
     const n = this.n;
     for (let k = 1; k < dist; k++) {
       const v = this.cell[(this.py[i] + sy * k) * n + this.px[i] + sx * k];
       if (v === 0) continue;
       if (xray && v > 0 && this.owner[v - 1] === p && this.canVacate(v - 1, sx, sy)) continue;
-      if (jumps > 0) {
-        jumps--;
-        continue;
-      }
       return false;
     }
     return true;
+  }
+
+  /** Чем фигура i бьёт клетку (x, y) для make: прямой удар или, если иначе не достать, прыжок Прыгуна. */
+  strikeAt(i: number, x: number, y: number): number {
+    const c = y * this.n + x;
+    if (this.rank[i] !== Rank.Triangle) return c | ATTACK;
+    const p = this.owner[i];
+    // прямой удар треугольника — вперёд или по диагонали вперёд (с Круговой защитой — во все стороны)
+    if (y - this.py[i] === this.fwd[p] || this.roundProtection[p]) return c | ATTACK;
+    const to = this.jumpLanding(i, x, y);
+    return to >= 0 ? to | ATTACK | JUMP : c | ATTACK;
   }
 
   /**
@@ -399,6 +430,7 @@ export class FastBoard {
     u.blitzDone = this.blitzDone[p];
     u.actedThisTurn = this.actedThisTurn;
     u.victim = -1;
+    u.vcell = -1;
 
     if (this.blitz[p] && !this.blitzDone[p]) {
       if (this.blitzPiece[p] < 0) this.blitzPiece[p] = i;
@@ -408,9 +440,13 @@ export class FastBoard {
     this.acted[i] = 1;
     this.actedThisTurn = 1;
     if (t & ATTACK) {
-      const v = this.cell[to] - 1;
+      // при прыжке клетки отстоят на 2 по каждой оси — жертва ровно посередине
+      const vc = t & JUMP ? (from + to) >> 1 : to;
+      const v = this.cell[vc] - 1;
       u.victim = v;
+      u.vcell = vc;
       this.alive[v] = 0;
+      this.cell[vc] = 0;
       this.ap = 0;
     } else this.ap -= 1;
     this.cell[from] = 0;
@@ -427,7 +463,7 @@ export class FastBoard {
     this.cell[u.to] = 0;
     if (u.victim >= 0) {
       this.alive[u.victim] = 1;
-      this.cell[u.to] = u.victim + 1;
+      this.cell[u.vcell] = u.victim + 1;
     }
     this.cell[u.from] = i + 1;
     this.px[i] = u.from % n;
@@ -468,4 +504,4 @@ export function restoreTurn(b: FastBoard, save: TurnSave) {
   b.acted.set(save.acted);
 }
 
-export const newUndo = (): Undo => ({ pi: 0, from: 0, to: 0, victim: -1, ap: 0, acted: 0, jumper: 0, blitzPiece: -1, blitzDone: 0, actedThisTurn: 0 });
+export const newUndo = (): Undo => ({ pi: 0, from: 0, to: 0, victim: -1, vcell: -1, ap: 0, acted: 0, jumper: 0, blitzPiece: -1, blitzDone: 0, actedThisTurn: 0 });

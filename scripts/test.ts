@@ -514,24 +514,29 @@ test('отложенная карта: «сгорит» только на пос
 });
 
 test('Прыгун с руки: разыгрывается в свой ход, даёт прыжок и тратится на нём; когда нельзя — причина та же, что в UI', () => {
-  // квадрат A1 упирается в свой треугольник A2: без Прыгуна вверх ему не пройти
-  const s = position([[0, Rank.Square, 'A1'], [0, Rank.Triangle, 'A2'], [1, Rank.Circle, 'L12']], 0);
+  // круг соперника D3 стоит позади треугольника D4: назад треугольник не бьёт, пока нет Прыгуна
+  const s = position([[0, Rank.Triangle, 'D4'], [1, Rank.Circle, 'D3'], [1, Rank.Circle, 'L12']], 0);
   s.players[0].held = { card: 'jumper', untilOwnTurn: 7 };
-  const sq = pieceOn(s, 'A1')!;
-  assert(!targetsOf(s, sq).some((t) => t.jump), 'без эффекта прыжков быть не должно');
+  const tri = pieceOn(s, 'D4')!;
+  assert(!targetsOf(s, tri).some((t) => t.jump), 'без эффекта прыжков быть не должно');
   // кнопка «Разыграть» доступна ровно тогда, когда движок примет playCard
   assert(heldBlock(s, 1) !== null, 'чужую карту не разыграть');
   assert(heldBlock(s, 0) === null, `Прыгун должен разыгрываться в свой ход: ${heldBlock(s, 0)}`);
   const r = dispatch(s, { type: 'playCard', by: 0 });
   assert(r.ok, `playCard отклонён: ${r.error}`);
   assert(s.players[0].held === null && s.current === 0, 'карта ушла из руки, ход продолжается');
-  const jump = legalTargets(s, sq).find((t) => t.jump && t.to.x === at('A3').x && t.to.y === at('A3').y);
-  assert(jump, 'после Прыгуна квадрат перепрыгивает A2 на A3');
-  assert(dispatch(s, { type: 'move', by: 0, pieceId: sq.id, to: jump.to }).ok, 'прыжок отклонён');
+  const jump = legalTargets(s, tri).find((t) => t.jump && t.to.x === at('D2').x && t.to.y === at('D2').y);
+  assert(jump?.attack, 'после Прыгуна треугольник перепрыгивает круг D3 на D2');
+  const mv = dispatch(s, { type: 'move', by: 0, pieceId: tri.id, to: jump.to });
+  assert(mv.ok, 'прыжок отклонён');
+  assert(!pieceOn(s, 'D3') && pieceOn(s, 'D2')?.id === tri.id, 'круг D3 уничтожен, треугольник встал на D2');
+  const cap = mv.events.find((e) => e.type === 'capture');
+  assert(cap?.type === 'capture' && cap.jump && cap.victim.x === at('D3').x && cap.victim.y === at('D3').y, 'событие — взятие прыжком с жертвой на D3');
   assert(!s.effects.some((e) => e.kind === 'jumper'), 'Прыгун расходуется на первом прыжке');
+  assert(s.current === 1, 'прыжок — атака: ход переходит сопернику');
 
-  // одни треугольники: карта не играется, и UI получает ту же причину, что и движок
-  const t = position([[0, Rank.Triangle, 'A1'], [1, Rank.Circle, 'L12']], 0);
+  // нет треугольников: карта не играется, и UI получает ту же причину, что и движок
+  const t = position([[0, Rank.Square, 'A1'], [1, Rank.Circle, 'L12']], 0);
   t.players[0].held = { card: 'jumper', untilOwnTurn: 7 };
   const why = heldBlock(t, 0);
   assert(why === CARDS.jumper.whyNot, `ожидалась причина «${CARDS.jumper.whyNot}», а не «${why}»`);
@@ -700,20 +705,29 @@ test('Блицкриг: первая фигура — до 5 действий п
   assert(edge.current === 0 && reach(edge, 'A12').length === 0, 'выход на последний ряд завершает действия круга');
 });
 
-test('Прыгун: одно препятствие в клетку, дальность не растёт, один прыжок за Период', () => {
+test('Прыгун: треугольник бьёт прыжком в любую сторону, клетка за жертвой должна быть свободна, один прыжок за Период', () => {
   const s = receive('jumper', [
-    [0, Rank.Circle, 'A1'], [0, Rank.Triangle, 'A2'],
-    [0, Rank.Circle, 'E1'], [0, Rank.Triangle, 'E2'],
-    [0, Rank.Square, 'H1'], [0, Rank.Triangle, 'H2'], [0, Rank.Triangle, 'H3'],
+    [0, Rank.Triangle, 'E5'],
+    [1, Rank.Square, 'E4'], // сзади, за ним E3 свободна
+    [1, Rank.Triangle, 'D4'], // по диагонали назад, за ним C3 свободна
+    [1, Rank.Circle, 'D6'], // по диагонали вперёд, за ним C7 свободна
+    [1, Rank.Circle, 'F6'], [1, Rank.Triangle, 'G7'], // за F6 стоит фигура — прыжка нет
+    [1, Rank.Square, 'F5'], [0, Rank.Square, 'G5'], // за F5 своя фигура — прыжка нет
+    [0, Rank.Triangle, 'B2'], [1, Rank.Square, 'B3'],
+    [0, Rank.Circle, 'H1'], [1, Rank.Triangle, 'H2'],
   ]);
   assert(s.players[0].held?.card === 'jumper', 'Прыгун должен остаться на руках');
-  assert(!reach(s, 'A1').includes('A3'), 'до розыгрыша карты прыгать нельзя');
+  const sorted = (name: string) => reach(s, name).sort().join();
+  assert(sorted('E5') === 'D6,E6,F6', `до розыгрыша — только обычные ход и удары, есть: ${sorted('E5')}`);
   assert(dispatch(s, { type: 'playCard', by: 0 }).ok, 'Прыгун не разыгрывается');
-  const up = reach(s, 'A1').filter((c) => c[0] === 'A').sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-  assert(up.join() === 'A3,A4,A5,A6', `круг через A2 — до A6 (дальность 5 с учётом препятствия), есть: ${up.join(' ')}`);
-  assert(!reach(s, 'H1').includes('H4'), 'два препятствия подряд не перепрыгнуть');
-  assert(moveFrom(s, 'A1', 'A4').ok, 'прыжок отклонён');
-  assert(!reach(s, 'E1').includes('E3'), 'карта расходуется при первом прыжке — второй фигуре прыгать нельзя');
+  assert(sorted('E5') === 'C3,C7,D6,E3,E6,F6', `прыжки через E4, D4, D6 плюс обычные цели, есть: ${sorted('E5')}`);
+  assert(!reach(s, 'H1').includes('H3'), 'круг не прыгает — карта только для треугольника');
+  assert(!reach(s, 'G5').some((c) => c === 'E5'), 'квадрат не прыгает');
+  assert(isAttacked(s, at('E4'), 0) && isAttacked(s, at('D4'), 0), 'фигуры, которые можно перепрыгнуть, под атакой');
+  assert(moveFrom(s, 'E5', 'E3').ok, 'прыжок назад отклонён');
+  assert(!pieceOn(s, 'E4') && pieceOn(s, 'E3')?.rank === Rank.Triangle, 'квадрат E4 уничтожен, треугольник на E3');
+  const b2 = pieceOn(s, 'B2')!;
+  assert(!targetsOf(s, b2).some((t) => t.jump), 'карта расходуется при первом прыжке — второму треугольнику прыгать нельзя');
 });
 
 test('Девальвация и Карьерный лифт: до двух фигур разных рангов; треугольник не понижается, круг не повышается', () => {

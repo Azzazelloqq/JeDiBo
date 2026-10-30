@@ -908,12 +908,14 @@ export function gameScreen(root: HTMLElement, kind: Kind, net?: NetSession, botL
       case 'move': {
         const r = rankOf(e.pieceId);
         const owner = st.pieces.find((q) => q.id === e.pieceId)?.owner;
-        push(`${r !== undefined ? GLYPH[r] : '·'} ${coord(e.from)}→${coord(e.to)}${e.jump ? ' прыжок' : ''}`, owner);
+        push(`${r !== undefined ? GLYPH[r] : '·'} ${coord(e.from)}→${coord(e.to)}`, owner);
         break;
       }
       case 'capture': {
         const att = st.pieces.find((q) => q.id === e.attackerId);
-        push(`${att ? GLYPH[att.rank] : '·'} ${coord(e.from)}×${coord(e.to)} ${GLYPH[e.victim.rank]}`, att?.owner);
+        // прыжок Прыгуна: через жертву на клетку за ней
+        const hit = e.jump ? `↷${coord(e.victim)}→${coord(e.to)}` : `×${coord(e.to)}`;
+        push(`${att ? GLYPH[att.rank] : '·'} ${coord(e.from)}${hit} ${GLYPH[e.victim.rank]}`, att?.owner);
         break;
       }
       case 'destroy':

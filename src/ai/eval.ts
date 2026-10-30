@@ -2,7 +2,7 @@
 // За ход возможно только одно взятие (взятие обнуляет очки действия), поэтому угроза соперника —
 // это его лучшее одно взятие с учётом размена, а не перебор его цепочек действий.
 import { Rank, type PlayerId } from '../core/types';
-import { ATTACK, newUndo, type FastBoard } from './board';
+import { JUMP, newUndo, type FastBoard } from './board';
 
 export interface Weights {
   /** ценность фигур по рангу */
@@ -56,7 +56,6 @@ const gain = new Float64Array(16);
 function exchange(b: FastBoard, v: number, a: number, by: PlayerId, w: Weights): number {
   const x = b.px[v];
   const y = b.py[v];
-  const cell = y * b.n + x;
   const depth = Math.min(w.see, seeUndo.length);
   gain[0] = w.val[b.rank[v]];
   let d = 0;
@@ -64,9 +63,11 @@ function exchange(b: FastBoard, v: number, a: number, by: PlayerId, w: Weights):
   let attacker = a;
   let side = by;
   for (;;) {
-    b.make(attacker, cell | ATTACK, seeUndo[made++]);
+    const t = b.strikeAt(attacker, x, y);
+    b.make(attacker, t, seeUndo[made++]);
     side = (1 - side) as PlayerId;
-    if (d + 1 >= depth) break;
+    // прыжок Прыгуна уводит бьющего с клетки: ответный удар — уже по другой клетке, размен здесь обрывается
+    if (t & JUMP || d + 1 >= depth) break;
     const next = w.reach && d >= 1 ? b.reachAttackerOf(x, y, side, w.xray) : b.attackerOf(x, y, side, w.xray);
     if (next < 0) break;
     d++;

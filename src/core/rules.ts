@@ -73,53 +73,64 @@ export function patternOf(s: GameState, pc: Piece, opts: PatternOpts = {}): Patt
 export interface Target {
   to: Pos;
   attack: boolean;
+  /** прыжок Прыгуна: треугольник перелетает соседнюю фигуру соперника и бьёт её; to — клетка приземления */
   jump: boolean;
 }
+
+/** Кого бьёт цель: обычная атака — фигуру на клетке to, прыжок — фигуру между фигурой и клеткой приземления. */
+export const victimCell = (from: Pos, t: Target): Pos => (t.jump ? { x: (from.x + t.to.x) / 2, y: (from.y + t.to.y) / 2 } : t.to);
 
 /** Все цели фигуры: перемещения и атаки с учётом препятствий и Прыгуна. */
 export function targetsOf(s: GameState, pc: Piece, opts: PatternOpts = {}): Target[] {
   const pat = patternOf(s, pc, opts);
-  const canJump = !opts.plain && pc.rank !== Rank.Triangle && !!hasEffect(s, 'jumper', pc.owner);
   const out: Target[] = [];
   const seen = new Set<string>();
 
   const walk = (dirs: Dir[], range: number, attack: boolean) => {
     for (const [dx, dy] of dirs) {
-      let jumped = false;
       for (let step = 1; step <= range; step++) {
         const c = { x: pc.x + dx * step, y: pc.y + dy * step };
         if (!inBoard(s, c)) break;
         const occ = pieceAt(s, c);
         const blocked = !!occ || isBarrier(s, c);
         if (!blocked) {
-          if (!attack) push({ to: c, attack: false, jump: jumped });
+          if (!attack) push({ to: c, attack: false, jump: false });
           continue;
         }
-        if (attack && occ && occ.owner !== pc.owner) push({ to: c, attack: true, jump: jumped });
-        // одно препятствие шириной в клетку можно перепрыгнуть
-        if (canJump && !jumped) {
-          jumped = true;
-          continue;
-        }
+        if (attack && occ && occ.owner !== pc.owner) push({ to: c, attack: true, jump: false });
         break;
       }
+    }
+  };
+  // Прыгун: треугольник в любую сторону перепрыгивает соседнюю фигуру соперника на свободную клетку за ней
+  const jumps = () => {
+    for (const [dx, dy] of ALL8) {
+      const over = pieceAt(s, { x: pc.x + dx, y: pc.y + dy });
+      const to = { x: pc.x + dx * 2, y: pc.y + dy * 2 };
+      if (over && over.owner !== pc.owner && isFree(s, to)) push({ to, attack: true, jump: true });
     }
   };
   const push = (t: Target) => {
     const k = key(t.to) + (t.attack ? 'a' : 'm');
     if (seen.has(k)) return;
-    // предпочитаем вариант без прыжка
     seen.add(k);
     out.push(t);
   };
   walk(pat.move, pat.moveRange, false);
   walk(pat.attack, pat.attackRange, true);
+  if (!opts.plain && pc.rank === Rank.Triangle && hasEffect(s, 'jumper', pc.owner)) jumps();
   return out;
 }
 
 /** Атакует ли игрок `by` клетку `cell` (для правила повышения). */
 export function isAttacked(s: GameState, cell: Pos, by: PlayerId): boolean {
-  return piecesOf(s, by).some((pc) => targetsOf(s, pc).some((t) => t.attack && t.to.x === cell.x && t.to.y === cell.y));
+  return piecesOf(s, by).some((pc) =>
+    targetsOf(s, pc).some((t) => {
+      if (!t.attack) return false;
+      const v = victimCell(pc, t);
+      return v.x === cell.x && v.y === cell.y;
+    }),
+  );
 }
 
 export function canAct(s: GameState, pc: Piece): boolean {
