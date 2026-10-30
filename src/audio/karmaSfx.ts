@@ -33,21 +33,15 @@ export const ksfx = {
     for (let i = 0; i < 7; i++) voice({ f: rnd(2600, 4200), dur: 0.05, gain: 0.025, delay: rnd(0.1, 0.6) });
   },
 
-  // ── Свежая кровь: капля летит, шлепок с брызгами, фигура вырастает ──
-  dropFall() {
-    voice({ f: 1900, to: 520, dur: s(0.26), gain: 0.035, attack: s(0.22) });
+  // ── Свежая кровь: тихий низкий выдох, когда карта начала действовать; густая вязкая капля в момент удара ──
+  bloodCue() {
+    hiss({ f: 600, to: 240, dur: 0.7, gain: 0.32, q: 2, attack: 0.45 });
+    voice({ f: 65, dur: 0.7, gain: 0.14, type: 'triangle', attack: 0.4 });
   },
   splat() {
-    hiss({ f: 520, dur: 0.26, gain: 0.85, q: 0.8 });
-    voice({ f: 130, to: 52, dur: 0.28, gain: 0.45 });
-    for (let i = 0; i < 6; i++) {
-      const f = rnd(1300, 2400);
-      voice({ f, to: f * 0.55, dur: 0.05, gain: 0.05, delay: rnd(0.05, 0.32) });
-    }
-  },
-  bloodGrow() {
-    voice({ f: 85, to: 230, dur: s(0.34), gain: 0.2, type: 'triangle', vib: [18, 0.05] });
-    hiss({ f: 280, to: 950, dur: s(0.3), gain: 0.2, q: 1.2, attack: s(0.08) });
+    voice({ f: 150, to: 48, dur: 0.2, gain: 0.55 });
+    hiss({ f: 260, dur: 0.18, gain: 0.5, q: 2.5 });
+    hiss({ f: 1800, dur: 0.03, gain: 0.12, q: 1.5 });
   },
 
   // ── Воскрешение: столп света с хором, фигура опускается, колокол ──

@@ -710,7 +710,6 @@ export class BoardView {
       px(g, cx - 1, y + 3, PAL.granite600, 1, 1);
       px(g, cx - 2, y, PAL.brand100, 1, 1);
     });
-    ksfx.dropFall();
     await tween(260, (t) => (z = 90 * (1 - ease.inCubic(t))));
     off();
     ksfx.splat();
@@ -729,7 +728,6 @@ export class BoardView {
     }, true);
     v.alpha = 1;
     v.flash = 1;
-    ksfx.bloodGrow();
     await tween(340, (t) => {
       v.sy = 0.05 + 0.95 * ease.outBack(t);
       v.sx = 1.35 - 0.35 * ease.outCubic(t);
@@ -1008,6 +1006,9 @@ export class BoardView {
         return this.castShield(mine.filter((v) => v.rank !== Rank.Circle));
       case 'jumper':
         return this.castJumper(slowed);
+      case 'freshBlood':
+        // на поле ещё ничего не происходит — только тихий сигнал, что карта начала действовать
+        return ksfx.bloodCue();
     }
   }
 
@@ -1191,17 +1192,17 @@ export class BoardView {
           px(g, x + 2, y + 2, PAL.patina300, 1, 1);
           px(g, x + 1, y + 3, PAL.patina500, 4, 1);
         } else if (e.kind === 'roundProtection' && v.rank !== Rank.Circle) {
-          // две «кометы» бегут по краю клетки: щит смотрит во все стороны
-          const at = (p: number) => {
-            const q = ((p % 56) + 56) % 56;
-            return q < 14 ? [q, 0] : q < 28 ? [14, q - 14] : q < 42 ? [42 - q, 14] : [0, 56 - q];
-          };
-          for (const k of [0, 28]) {
-            const head = Math.floor(now / 55) + k;
-            const tail = [3, 2, 1, 0].map((i) => ({ i, p: at(head - i * 2) }));
-            for (const { p } of tail) px(g, x0 + p[0] - 1, this.Y(v.y) + p[1] - 1, withAlpha(PAL.void, 0.35), 4, 4);
-            for (const { i, p } of tail) px(g, x0 + p[0], this.Y(v.y) + p[1], i ? withAlpha(PAL.amber500, 1 - i * 0.25) : PAL.amber100, 2, 2);
-          }
+          // неподвижный щиток 5×6 в правом нижнем углу: на многих фигурах сразу движение отвлекало
+          const x = x0 + 11, y = this.Y(v.y) + 9;
+          px(g, x - 1, y - 1, PAL.void, 7, 6);
+          px(g, x, y + 5, PAL.void, 5, 1);
+          px(g, x + 1, y + 6, PAL.void, 3, 1);
+          px(g, x, y, PAL.amber500, 5, 4);
+          px(g, x + 1, y + 4, PAL.amber500, 3, 1);
+          px(g, x + 2, y + 5, PAL.amber500, 1, 1);
+          px(g, x, y, PAL.amber300, 5, 1);
+          px(g, x, y, PAL.amber300, 1, 3);
+          px(g, x + 2, y + 1, PAL.amber100, 1, 3);
         } else if (e.kind === 'blitz' && !e.done && e.pieceId === v.id && Math.random() < 0.12) {
           this.emit(1, () => ({ x: x0 + 2 + Math.random() * 12, y: y0 + 4 + Math.random() * 8, vy: -0.8, vx: (Math.random() - 0.5) * 0.6, max: 300, color: Math.random() < 0.5 ? PAL.amber300 : PAL.bone }));
         }
